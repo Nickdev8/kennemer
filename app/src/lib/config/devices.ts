@@ -10,7 +10,8 @@ export const devices: ShellyDevice[] = [
 			cloud: {
 				endpoint: 'https://shelly-115-eu.shelly.cloud/device/status',
 				method: 'GET',
-				payload: { id: '8cbfea9bc6d0' }
+				payload: { id: '8cbfea9bc6d0' },
+				requiresAuthKey: true
 			},
 			lan: {
 				endpoint: 'http://shelly-relay.local/rpc/Switch.GetStatus',
@@ -25,7 +26,8 @@ export const devices: ShellyDevice[] = [
 				label: 'Scene On',
 				cloud: {
 					endpoint: 'https://shelly-115-eu.shelly.cloud/scene/manual_run',
-					payload: { id: '1727329580882' }
+					payload: { id: '1727329580882' },
+					requiresAuthKey: true
 				},
 				lan: {
 					endpoint: 'http://shelly-scene-device.local/rpc/Group.On',
@@ -39,7 +41,8 @@ export const devices: ShellyDevice[] = [
 				label: 'Scene Off',
 				cloud: {
 					endpoint: 'https://shelly-115-eu.shelly.cloud/scene/manual_run',
-					payload: { id: '1730105330475' }
+					payload: { id: '1730105330475' },
+					requiresAuthKey: true
 				},
 				lan: {
 					endpoint: 'http://shelly-scene-device.local/rpc/Group.Off',
@@ -53,17 +56,18 @@ export const devices: ShellyDevice[] = [
 	},
 	{
 		id: 'relay',
-		label: 'Lights',
+		label: 'Wall Display Relay',
 		group: 'Relay',
 		status: {
 			parser: 'relay',
 			cloud: {
 				endpoint: 'https://shelly-115-eu.shelly.cloud/device/status',
 				method: 'GET',
-				payload: { id: '8cbfea9bc6d0' }
+				payload: { id: '000822f8a245' },
+				requiresAuthKey: true
 			},
 			lan: {
-				endpoint: 'http://shelly-relay.local/rpc/Switch.GetStatus',
+				endpoint: 'http://10.10.80.133/rpc/Switch.GetStatus',
 				encoding: 'json',
 				requiresAuthKey: false,
 				method: 'POST',
@@ -74,31 +78,33 @@ export const devices: ShellyDevice[] = [
 			on: {
 				label: 'Relay On',
 				cloud: {
-					endpoint: 'http://10.10.80.133/rpc/Switch.Toggle',
-					encoding: 'json',
-					requiresAuthKey: false,
-					payload: { id: 0 }
+					endpoint: 'https://shelly-115-eu.shelly.cloud/device/relay/control',
+					method: 'POST',
+					payload: { id: '000822f8a245', channel: 0, turn: 'on' },
+					requiresAuthKey: true
 				},
 				lan: {
-					endpoint: 'http://10.10.80.133/rpc/Switch.Toggle',
+					endpoint: 'http://10.10.80.133/rpc/Switch.Set',
 					encoding: 'json',
 					requiresAuthKey: false,
-					payload: { id: 0 }
+					method: 'POST',
+					payload: { id: 0, on: true }
 				}
 			},
 			off: {
 				label: 'Relay Off',
 				cloud: {
-					endpoint: 'http://10.10.80.133/rpc/Switch.Toggle',
-					encoding: 'json',
-					requiresAuthKey: false,
-					payload: { id: 0 }
+					endpoint: 'https://shelly-115-eu.shelly.cloud/device/relay/control',
+					method: 'POST',
+					payload: { id: '000822f8a245', channel: 0, turn: 'off' },
+					requiresAuthKey: true
 				},
 				lan: {
-					endpoint: 'http://10.10.80.133/rpc/Switch.Toggle',
+					endpoint: 'http://10.10.80.133/rpc/Switch.Set',
 					encoding: 'json',
 					requiresAuthKey: false,
-					payload: { id: 0 }
+					method: 'POST',
+					payload: { id: 0, on: false }
 				}
 			}
 		}

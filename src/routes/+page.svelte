@@ -1,9 +1,10 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import { actions } from '$lib/config/devices';
-  import { fetchStatuses, triggerAction, type StatusMap } from '$lib/api';
+  import { devices } from '$lib/config/devices';
+  import type { DeviceCommandKey, ShellyDevice } from '$lib/config/schema';
+  import { fetchStatuses, triggerDeviceCommand, type StatusMap } from '$lib/api';
 
-  let loadingId: string | null = null;
+  let loadingCommandKey: string | null = null;
   let errorMsg = '';
   let cooldown = new Set<string>();
   let buttonMessages: Record<string, string> = {};
@@ -19,44 +20,47 @@
   let polling = false;
   let shouldPollAgain = false;
 
-  const statusKeys = Array.from(
-    new Set(actions.map((action) => action.statusKey).filter(Boolean) as string[])
-  );
+  const statusKeys = devices.filter((device) => device.status).map((device) => device.id);
 
-  const groupedActions = Array.from(
-    actions.reduce((acc, action) => {
-      const groupName = action.group ?? 'Other';
-      if (!acc.has(groupName)) acc.set(groupName, []);
-      acc.get(groupName)!.push(action);
-      return acc;
-    }, new Map<string, typeof actions[number][]>())
-  ).map(([name, items]) => ({
-    name,
-    items,
-    statusKey: items.find((item) => item.statusKey)?.statusKey
-  }));
+  const commandOrder: DeviceCommandKey[] = ['on', 'off'];
 
-  function startCooldown(id: string, durationMs = 1000) {
-    const existingTimer = cooldownTimers.get(id);
+  const commandKey = (deviceId: string, command: DeviceCommandKey) => `${deviceId}:${command}`;
+
+  const deviceStatusKey = (device: ShellyDevice) => (device.status ? device.id : undefined);
+
+  function getStatusEntry(key?: string) {
+    if (!key) return null;
+    return statuses[key] ?? null;
+  }
+
+  function statusHasIssue(key?: string) {
+    const entry = getStatusEntry(key);
+    if (!entry) return false;
+    const value = typeof entry.value === 'string' ? entry.value.toLowerCase() : '';
+    return Boolean(entry.error) || value === 'offline' || value === 'niet beschikbaar';
+  }
+
+  function startCooldown(key: string, durationMs = 1000) {
+    const existingTimer = cooldownTimers.get(key);
     if (existingTimer) clearTimeout(existingTimer);
 
     const next = new Set(cooldown);
-    next.add(id);
+    next.add(key);
     cooldown = next;
-    buttonMessages = { ...buttonMessages, [id]: 'wacht 1 seconden' };
+    buttonMessages = { ...buttonMessages, [key]: 'wacht 1 seconden' };
 
     const timer = setTimeout(() => {
-      cooldownTimers.delete(id);
+      cooldownTimers.delete(key);
       const updatedSet = new Set(cooldown);
-      updatedSet.delete(id);
+      updatedSet.delete(key);
       cooldown = updatedSet;
 
       const nextMessages = { ...buttonMessages };
-      delete nextMessages[id];
+      delete nextMessages[key];
       buttonMessages = nextMessages;
     }, durationMs);
 
-    cooldownTimers.set(id, timer);
+    cooldownTimers.set(key, timer);
   }
 
   function scheduleNextPoll() {
@@ -85,6 +89,7 @@
     polling = true;
     try {
       const response = await fetchStatuses(statusKeys);
+      console.debug('[status] fetched', response);
       statuses = response;
     } catch (err) {
       console.error('Kon status niet ophalen', err);
@@ -105,41 +110,59 @@
     pollStatuses(true);
   }
 
-  async function handlePress(id: string) {
-    loadingId = id;
+  function commandLabel(device: ShellyDevice, command: DeviceCommandKey) {
+    const config = device.commands[command];
+    if (!config) return command === 'on' ? 'On' : 'Off';
+    return config.label ?? (command === 'on' ? 'On' : 'Off');
+  }
+
+  async function handlePress(deviceId: string, command: DeviceCommandKey) {
+    const key = commandKey(deviceId, command);
+    loadingCommandKey = key;
     errorMsg = '';
     try {
-      await triggerAction(id);
+      await triggerDeviceCommand(deviceId, command);
       handleSuccessfulAction();
     } catch (err) {
       const error = err as Error & { code?: string };
       if (error?.code === 'RATE_LIMIT') {
-        startCooldown(id);
+        startCooldown(key);
         handleSuccessfulAction();
       } else {
         errorMsg = error instanceof Error ? error.message : 'Unknown error';
       }
     } finally {
-      loadingId = null;
+      loadingCommandKey = null;
     }
   }
 
   const baseButtonClass =
     'relative flex min-h-[4.75rem] items-center justify-center rounded-xl border border-slate-300 bg-slate-100 px-5 py-6 text-xl font-semibold text-slate-800 transition-transform duration-150 ease-out enabled:hover:-translate-y-0.5 enabled:hover:bg-slate-200 enabled:hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-60';
 
-  function buttonClass(id: string) {
+  function buttonClass(key: string) {
     const classes = [baseButtonClass];
-    if (loadingId === id) classes.push('ring-2 ring-blue-200 ring-offset-2 ring-offset-slate-100');
-    if (cooldown.has(id)) classes.push('opacity-50');
+    if (loadingCommandKey === key)
+      classes.push('ring-2 ring-blue-200 ring-offset-2 ring-offset-slate-100');
+    if (cooldown.has(key)) classes.push('opacity-50');
     return classes.join(' ');
   }
 
-  function statusText(key?: string) {
-    if (!key) return '—';
-    const entry = statuses[key];
+  function statusClass(key?: string) {
+    if (!key) return 'text-slate-500';
+    return statusHasIssue(key) ? 'text-red-600 font-semibold' : 'text-slate-600';
+  }
+
+  function statusLabel(key?: string) {
+   if (!key) return '—';
+    const entry = getStatusEntry(key);
     if (!entry) return '...';
-    if (entry.error) return 'Niet beschikbaar';
+    console.debug('[status] entry', key, entry);
     return entry.value;
+  }
+
+  function statusErrorMessage(key?: string) {
+    const entry = getStatusEntry(key);
+    return entry?.error ?? '';
   }
 
   onMount(() => {
@@ -161,42 +184,50 @@
     </p>
   {/if}
 
-  <div class="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-    {#each groupedActions as group}
-      <section class="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm">
-        <header class="flex items-center justify-between">
-          <h2 class="text-xl font-semibold tracking-tight text-slate-800">{group.name}</h2>
-          {#if group.statusKey}
-            <span class="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
-              {statusText(group.statusKey)}
+  <div class="grid grid-cols-1 gap-6 pb-16 md:grid-cols-2 xl:grid-cols-3">
+    {#each devices as device}
+      <section class="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm">
+        <div class="flex items-center justify-between gap-4">
+          <h2 class="text-xl font-semibold tracking-tight text-slate-800">{device.label}</h2>
+          {#if device.status}
+            <span class={`text-sm uppercase tracking-wide ${statusClass(deviceStatusKey(device))}`}>
+              {statusLabel(deviceStatusKey(device))}
             </span>
           {/if}
-        </header>
-        <div class="flex flex-col gap-2">
-          {#each group.items as action}
-            <button
-              type="button"
-              class={buttonClass(action.id)}
-              on:click={() => handlePress(action.id)}
-              disabled={cooldown.has(action.id)}
-            >
-              <span class="pointer-events-none text-center">{action.label}</span>
-              {#if buttonMessages[action.id]}
-                <span class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-xl bg-slate-900/60 text-sm font-semibold uppercase tracking-wide text-white">
-                  {buttonMessages[action.id]}
-                </span>
-              {/if}
-            </button>
+        </div>
+        {#if device.status && statusHasIssue(deviceStatusKey(device))}
+          <p class="text-xs font-semibold text-red-600">
+            {statusErrorMessage(deviceStatusKey(device)) || 'Apparaat offline'}
+          </p>
+        {/if}
+        <div class="grid grid-cols-2 gap-2">
+          {#each commandOrder as cmd}
+            {#if device.commands[cmd]}
+              {@const key = commandKey(device.id, cmd)}
+              <button
+                type="button"
+                class={buttonClass(key)}
+                on:click={() => handlePress(device.id, cmd)}
+                disabled={cooldown.has(key)}
+              >
+                <span class="pointer-events-none text-center">{commandLabel(device, cmd)}</span>
+                {#if buttonMessages[key]}
+                  <span class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-xl bg-slate-900/60 text-sm font-semibold uppercase tracking-wide text-white">
+                    {buttonMessages[key]}
+                  </span>
+                {/if}
+              </button>
+            {/if}
           {/each}
         </div>
       </section>
     {/each}
   </div>
 
-  <div class="flex justify-end">
+  <div class="pointer-events-none fixed bottom-6 right-6 flex justify-end">
     <button
       type="button"
-      class="rounded-full border border-slate-300 px-6 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-600 transition-colors duration-150 ease-out hover:bg-slate-200"
+      class="pointer-events-auto rounded-full border border-slate-300 px-6 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-600 transition-colors duration-150 ease-out hover:bg-slate-200"
     >
       Advanced Users
     </button>

@@ -1,8 +1,10 @@
-export async function triggerAction(id: string) {
+import type { DeviceCommandKey } from '$lib/config/schema';
+
+export async function triggerDeviceCommand(deviceId: string, command: DeviceCommandKey) {
   const res = await fetch('/actions', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ id })
+    body: JSON.stringify({ deviceId, command })
   });
 
   if (!res.ok) {

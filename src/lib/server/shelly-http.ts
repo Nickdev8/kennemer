@@ -1,10 +1,12 @@
 import { env } from '$env/dynamic/private';
-import { actions, statusTargets } from '$lib/config/devices';
+import { devices } from '$lib/config/devices';
 import type {
-	ShellyHttpAction,
+	DeviceCommandKey,
+	ShellyDevice,
+	ShellyDeviceCommand,
+	ShellyDeviceStatus,
 	ShellyHttpTarget,
-	ShellyHttpTargetConfig,
-	ShellyStatusTarget
+	ShellyTargetConfig
 } from '$lib/config/schema';
 import { parseShellyStatus, type ParsedStatus } from '$lib/status/parsers';
 
@@ -28,32 +30,32 @@ const RATE_LIMIT_DELAY_MS = 500;
 const MAX_RATE_LIMIT_RETRIES = 3;
 
 export interface ShellyStatusResult extends ParsedStatus {
-  key: string;
+  deviceId: string;
   label: string;
   timestamp: number;
 }
 
-function toTargetArray(config?: ShellyHttpTargetConfig): ShellyHttpTarget[] {
+function toTargetArray(config?: ShellyTargetConfig): ShellyHttpTarget[] {
 	if (!config) return [];
 	return Array.isArray(config) ? config : [config];
 }
 
-function resolveActionTargets(action: ShellyHttpAction): ShellyHttpTarget[] {
+function resolveCommandTargets(command: ShellyDeviceCommand): ShellyHttpTarget[] {
 	const useLan = (env.USE_LAN ?? '').toLowerCase() === 'true';
-	const config = useLan && action.lan ? action.lan : action.cloud;
-	const targets = toTargetArray(config);
+	const lanTargets = useLan ? toTargetArray(command.lan) : [];
+	const selected = lanTargets.length > 0 ? lanTargets : toTargetArray(command.cloud);
 
-	if (targets.length === 0) {
-		throw new ShellyHttpError(`No targets configured for action ${action.id}`, 500, 'HTTP_ERROR');
+	if (selected.length === 0) {
+		throw new ShellyHttpError('No targets configured for command', 500, 'HTTP_ERROR');
 	}
 
-	return targets;
+	return selected;
 }
 
-function resolveStatusTarget(target: ShellyStatusTarget): ShellyHttpTarget {
+function resolveStatusTarget(target: ShellyDeviceStatus): ShellyHttpTarget {
 	const useLan = (env.USE_LAN ?? '').toLowerCase() === 'true';
 	if (useLan && target.lan) {
-		return { ...target.cloud, ...target.lan };
+		return target.lan;
 	}
 	return target.cloud;
 }
@@ -215,11 +217,21 @@ async function withRateLimitRetry<T>(fn: () => Promise<T>): Promise<T> {
       }
       throw error;
     }
-  }
+	}
 }
 
-export async function sendHttpAction(action: ShellyHttpAction) {
-	const targets = resolveActionTargets(action);
+export async function sendDeviceCommand(device: ShellyDevice, commandKey: DeviceCommandKey) {
+	const command = device.commands[commandKey];
+
+	if (!command) {
+		throw new ShellyHttpError(
+			`Unknown command ${commandKey} for device ${device.id}`,
+			400,
+			'HTTP_ERROR'
+		);
+	}
+
+	const targets = resolveCommandTargets(command);
 
 	for (const target of targets) {
 		const requiresAuth = target.requiresAuthKey ?? true;
@@ -227,34 +239,33 @@ export async function sendHttpAction(action: ShellyHttpAction) {
 	}
 }
 
-export async function fetchShellyStatus(key: string): Promise<ShellyStatusResult> {
-  const definition = statusTargets[key];
-  if (!definition) {
-    throw new ShellyHttpError(`Unknown status target: ${key}`, 404, 'HTTP_ERROR');
+export async function fetchDeviceStatus(device: ShellyDevice): Promise<ShellyStatusResult> {
+  if (!device.status) {
+    throw new ShellyHttpError(`Device ${device.id} has no status configuration`, 400, 'HTTP_ERROR');
   }
 
-  const target = resolveStatusTarget(definition);
+  const target = resolveStatusTarget(device.status);
   const requiresAuth = target.requiresAuthKey ?? true;
 
   const payload = await withRateLimitRetry(() =>
     executeRequest(target, requiresAuth, { expectJson: true })
   );
 
-  const parsed = parseShellyStatus(definition.parser, payload);
+  const parsed = parseShellyStatus(device.status.parser, payload);
 
   return {
-    key: definition.key,
-    label: definition.label,
+    deviceId: device.id,
+    label: device.label,
     value: parsed.value,
     raw: parsed.raw,
     timestamp: Date.now()
   };
 }
 
-export function getStatusKeys(): string[] {
-  const keys = new Set<string>();
-  actions.forEach((action) => {
-    if (action.statusKey) keys.add(action.statusKey);
-  });
-  return Array.from(keys);
+export function getDevicesWithStatus(): ShellyDevice[] {
+  return devices.filter((device) => Boolean(device.status));
+}
+
+export function getStatusDeviceIds(): string[] {
+  return getDevicesWithStatus().map((device) => device.id);
 }

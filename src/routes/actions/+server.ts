@@ -1,27 +1,40 @@
 import type { RequestHandler } from './$types';
-import { actions } from '$lib/config/devices';
-import { sendHttpAction, ShellyHttpError } from '$lib/server/shelly-http';
+import { devices } from '$lib/config/devices';
+import type { DeviceCommandKey } from '$lib/config/schema';
+import { sendDeviceCommand, ShellyHttpError } from '$lib/server/shelly-http';
+
+type ActionRequest = {
+	deviceId?: string;
+	command?: DeviceCommandKey;
+};
 
 export const POST: RequestHandler = async ({ request }) => {
-  const { id } = await request.json();
-  const action = actions.find((item) => item.id === id);
+	const { deviceId, command }: ActionRequest = await request.json();
 
-  if (!action) {
-    return new Response(JSON.stringify({ error: 'Unknown action' }), { status: 404 });
-  }
+	if (!deviceId || !command || !['on', 'off'].includes(command)) {
+		return new Response(JSON.stringify({ error: 'Invalid command payload' }), {
+			status: 400
+		});
+	}
 
-  try {
-    await sendHttpAction(action);
-    return new Response(JSON.stringify({ ok: true }));
-  } catch (err) {
-    if (err instanceof ShellyHttpError) {
-      return new Response(
-        JSON.stringify({ error: err.message, errorCode: err.code }),
-        { status: err.status || 502 }
-      );
-    }
+	const device = devices.find((item) => item.id === deviceId);
 
-    const msg = err instanceof Error ? err.message : 'Action failed';
-    return new Response(JSON.stringify({ error: msg }), { status: 502 });
-  }
+	if (!device) {
+		return new Response(JSON.stringify({ error: 'Unknown device' }), { status: 404 });
+	}
+
+	try {
+		await sendDeviceCommand(device, command);
+		return new Response(JSON.stringify({ ok: true }));
+	} catch (err) {
+		if (err instanceof ShellyHttpError) {
+			return new Response(
+				JSON.stringify({ error: err.message, errorCode: err.code }),
+				{ status: err.status || 502 }
+			);
+		}
+
+		const msg = err instanceof Error ? err.message : 'Action failed';
+		return new Response(JSON.stringify({ error: msg }), { status: 502 });
+	}
 };

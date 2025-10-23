@@ -1,5 +1,5 @@
 import type { RequestHandler } from './$types';
-import { fetchShellyStatus, ShellyHttpError } from '$lib/server/shelly-http';
+import { fetchDeviceStatus, getDevicesWithStatus, ShellyHttpError } from '$lib/server/shelly-http';
 
 export const GET: RequestHandler = async ({ url }) => {
   const keysParam = url.searchParams.get('keys') ?? '';
@@ -15,24 +15,37 @@ export const GET: RequestHandler = async ({ url }) => {
   }
 
   const uniqueKeys = Array.from(new Set(keys));
+  const devicesWithStatus = getDevicesWithStatus();
+  const lookup = new Map(devicesWithStatus.map((device) => [device.id, device]));
   const statuses: Record<
     string,
     { value: string; label: string; timestamp: number; error?: string }
   > = {};
 
   for (const key of uniqueKeys) {
-    try {
-      const result = await fetchShellyStatus(key);
+    const device = lookup.get(key);
+    if (!device) {
       statuses[key] = {
+        value: 'Niet beschikbaar',
+        label: key,
+        timestamp: Date.now(),
+        error: 'Onbekend apparaat of geen statusconfiguratie'
+      };
+      continue;
+    }
+
+    try {
+      const result = await fetchDeviceStatus(device);
+      statuses[device.id] = {
         value: result.value,
         label: result.label,
         timestamp: result.timestamp
       };
     } catch (error) {
       if (error instanceof ShellyHttpError) {
-        statuses[key] = {
+        statuses[device.id] = {
           value: 'Niet beschikbaar',
-          label: key,
+          label: device.label,
           timestamp: Date.now(),
           error: error.message
         };
@@ -40,9 +53,9 @@ export const GET: RequestHandler = async ({ url }) => {
       }
 
       const message = error instanceof Error ? error.message : 'Onbekende fout';
-      statuses[key] = {
+      statuses[device.id] = {
         value: 'Niet beschikbaar',
-        label: key,
+        label: device.label,
         timestamp: Date.now(),
         error: message
       };

@@ -7,23 +7,28 @@ export interface ShellyHttpTarget {
 	requiresAuthKey?: boolean;
 }
 
-export type ShellyHttpTargetConfig = ShellyHttpTarget | ShellyHttpTarget[];
-
-export interface ShellyHttpAction {
-	id: string;
-	label: string;
-	group: string;
-	cloud: ShellyHttpTargetConfig;
-	lan?: ShellyHttpTargetConfig;
-	statusKey?: string;
-}
+export type ShellyTargetConfig = ShellyHttpTarget | ShellyHttpTarget[];
 
 export type ShellyStatusParser = 'relay';
 
-export interface ShellyStatusTarget {
-	key: string;
-	label: string;
+export interface ShellyDeviceStatus {
 	parser: ShellyStatusParser;
 	cloud: ShellyHttpTarget;
 	lan?: ShellyHttpTarget;
+}
+
+export type DeviceCommandKey = 'on' | 'off';
+
+export interface ShellyDeviceCommand {
+	label?: string;
+	cloud?: ShellyTargetConfig;
+	lan?: ShellyTargetConfig;
+}
+
+export interface ShellyDevice {
+	id: string;
+	label: string;
+	group: string;
+	status?: ShellyDeviceStatus;
+	commands: Record<DeviceCommandKey, ShellyDeviceCommand>;
 }

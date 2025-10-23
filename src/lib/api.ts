@@ -1,4 +1,3 @@
-// src/lib/api.ts
 export async function triggerAction(id: string) {
   const res = await fetch('/actions', {
     method: 'POST',
@@ -7,7 +6,14 @@ export async function triggerAction(id: string) {
   });
 
   if (!res.ok) {
-    const { error } = await res.json().catch(() => ({ error: 'Request failed' }));
-    throw new Error(error);
+    const payload = await res.json().catch(() => ({}));
+    const error = new Error(
+      typeof payload.error === 'string' ? payload.error : 'Request failed'
+    );
+    if (payload.errorCode) {
+      (error as Error & { code?: string }).code = payload.errorCode;
+    }
+    (error as Error & { status?: number }).status = res.status;
+    throw error;
   }
 }

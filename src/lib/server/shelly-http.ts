@@ -1,11 +1,11 @@
 import { env } from '$env/dynamic/private';
-import {
-  actions,
-  statusTargets,
-  type ShellyHttpAction,
-  type ShellyHttpTarget,
-  type ShellyStatusTarget
-} from '$lib/config/devices';
+import { actions, statusTargets } from '$lib/config/devices';
+import type {
+	ShellyHttpAction,
+	ShellyHttpTarget,
+	ShellyHttpTargetConfig,
+	ShellyStatusTarget
+} from '$lib/config/schema';
 import { parseShellyStatus, type ParsedStatus } from '$lib/status/parsers';
 
 export type ShellyErrorCode = 'RATE_LIMIT' | 'HTTP_ERROR';
@@ -22,6 +22,7 @@ export class ShellyHttpError extends Error {
   }
 }
 
+
 const REQUEST_TIMEOUT_MS = 4000;
 const RATE_LIMIT_DELAY_MS = 500;
 const MAX_RATE_LIMIT_RETRIES = 3;
@@ -32,20 +33,29 @@ export interface ShellyStatusResult extends ParsedStatus {
   timestamp: number;
 }
 
-function resolveActionTarget(action: ShellyHttpAction): ShellyHttpTarget {
-  const useLan = (env.USE_LAN ?? '').toLowerCase() === 'true';
-  if (useLan && action.lan) {
-    return { ...action.cloud, ...action.lan };
-  }
-  return action.cloud;
+function toTargetArray(config?: ShellyHttpTargetConfig): ShellyHttpTarget[] {
+	if (!config) return [];
+	return Array.isArray(config) ? config : [config];
+}
+
+function resolveActionTargets(action: ShellyHttpAction): ShellyHttpTarget[] {
+	const useLan = (env.USE_LAN ?? '').toLowerCase() === 'true';
+	const config = useLan && action.lan ? action.lan : action.cloud;
+	const targets = toTargetArray(config);
+
+	if (targets.length === 0) {
+		throw new ShellyHttpError(`No targets configured for action ${action.id}`, 500, 'HTTP_ERROR');
+	}
+
+	return targets;
 }
 
 function resolveStatusTarget(target: ShellyStatusTarget): ShellyHttpTarget {
-  const useLan = (env.USE_LAN ?? '').toLowerCase() === 'true';
-  if (useLan && target.lan) {
-    return { ...target.cloud, ...target.lan };
-  }
-  return target.cloud;
+	const useLan = (env.USE_LAN ?? '').toLowerCase() === 'true';
+	if (useLan && target.lan) {
+		return { ...target.cloud, ...target.lan };
+	}
+	return target.cloud;
 }
 
 type ExecuteOptions = {
@@ -209,10 +219,12 @@ async function withRateLimitRetry<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 export async function sendHttpAction(action: ShellyHttpAction) {
-  const target = resolveActionTarget(action);
-  const requiresAuth = target.requiresAuthKey ?? true;
+	const targets = resolveActionTargets(action);
 
-  await withRateLimitRetry(() => executeRequest(target, requiresAuth));
+	for (const target of targets) {
+		const requiresAuth = target.requiresAuthKey ?? true;
+		await withRateLimitRetry(() => executeRequest(target, requiresAuth));
+	}
 }
 
 export async function fetchShellyStatus(key: string): Promise<ShellyStatusResult> {

@@ -1,4 +1,4 @@
-import type { ShellyStatusParser } from '$lib/config/devices';
+import type { ShellyStatusParser } from '$lib/config/schema';
 
 export interface ParsedStatus {
   value: string;

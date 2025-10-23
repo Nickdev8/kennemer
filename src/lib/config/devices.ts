@@ -1,30 +1,8 @@
-export interface ShellyHttpTarget {
-  endpoint: string;
-  method?: 'GET' | 'POST';
-  payload?: Record<string, unknown>;
-  headers?: Record<string, string>;
-  encoding?: 'form' | 'json';
-  requiresAuthKey?: boolean;
-}
-
-export interface ShellyHttpAction {
-  id: string;
-  label: string;
-  group: string;
-  cloud: ShellyHttpTarget;
-  lan?: ShellyHttpTarget;
-  statusKey?: string;
-}
-
-export type ShellyStatusParser = 'relay';
-
-export interface ShellyStatusTarget {
-  key: string;
-  label: string;
-  parser: ShellyStatusParser;
-  cloud: ShellyHttpTarget;
-  lan?: ShellyHttpTarget;
-}
+import { rpcEndpoint } from './lan';
+import type {
+	ShellyHttpAction,
+	ShellyStatusTarget
+} from './schema';
 
 export const actions: ShellyHttpAction[] = [
   {
@@ -37,7 +15,8 @@ export const actions: ShellyHttpAction[] = [
       payload: { id: '1727329580882' }
     },
     lan: {
-      endpoint: 'http://shelly-scene-device.local/rpc/Scene.Activate',
+      endpoint: rpcEndpoint('sceneController', 'Group.On'),
+      method: 'POST',
       encoding: 'json',
       requiresAuthKey: false,
       payload: { id: 1 }
@@ -53,7 +32,8 @@ export const actions: ShellyHttpAction[] = [
       payload: { id: '1730105330475' }
     },
     lan: {
-      endpoint: 'http://shelly-scene-device.local/rpc/Scene.Activate',
+      endpoint: rpcEndpoint('sceneController', 'Group.Off'),
+      method: 'POST',
       encoding: 'json',
       requiresAuthKey: false,
       payload: { id: 2 }
@@ -69,7 +49,7 @@ export const actions: ShellyHttpAction[] = [
       payload: { id: '8cbfea9bc6d0', turn: 'on', channel: 0 }
     },
     lan: {
-      endpoint: 'http://shelly-relay.local/rpc/Switch.Set',
+      endpoint: rpcEndpoint('relayMain', 'Switch.Set'),
       encoding: 'json',
       requiresAuthKey: false,
       payload: { id: 0, on: true }
@@ -85,10 +65,27 @@ export const actions: ShellyHttpAction[] = [
       payload: { id: '8cbfea9bc6d0', turn: 'off', channel: 0 }
     },
     lan: {
-      endpoint: 'http://shelly-relay.local/rpc/Switch.Set',
+      endpoint: rpcEndpoint('relayMain', 'Switch.Set'),
       encoding: 'json',
       requiresAuthKey: false,
       payload: { id: 0, on: false }
+    }
+  },
+  {
+    id: 'test-toggle',
+    label: 'Test Toggle',
+    group: 'Test',
+    cloud: {
+      endpoint: 'https://example.com/fake/test',
+      method: 'POST',
+      encoding: 'json',
+      payload: { action: 'toggle' }
+    },
+    lan: {
+      endpoint: rpcEndpoint('test', 'Switch.Toggle'),
+      encoding: 'json',
+      requiresAuthKey: false,
+      payload: { id: 0 }
     }
   }
 ];
@@ -104,7 +101,7 @@ export const statusTargets: Record<string, ShellyStatusTarget> = {
       payload: { id: '8cbfea9bc6d0' }
     },
     lan: {
-      endpoint: 'http://shelly-relay.local/rpc/Switch.GetStatus',
+      endpoint: rpcEndpoint('relayMain', 'Switch.GetStatus'),
       encoding: 'json',
       requiresAuthKey: false,
       method: 'POST',

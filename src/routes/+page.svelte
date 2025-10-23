@@ -178,7 +178,7 @@
               type="button"
               class={buttonClass(action.id)}
               on:click={() => handlePress(action.id)}
-              disabled={loadingId !== null || cooldown.has(action.id)}
+              disabled={cooldown.has(action.id)}
             >
               <span class="pointer-events-none text-center">{action.label}</span>
               {#if buttonMessages[action.id]}

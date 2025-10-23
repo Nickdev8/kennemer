@@ -1,4 +1,3 @@
-import fetch from 'node-fetch';
 import { env } from '$env/dynamic/private';
 import {
   actions,
@@ -166,7 +165,6 @@ function buildShellyError(status: number, body: string): ShellyHttpError {
   try {
     payload = body ? JSON.parse(body) : undefined;
   } catch {
-    // keep raw text
   }
 
   let code: ShellyErrorCode = 'HTTP_ERROR';
@@ -186,6 +184,7 @@ function buildShellyError(status: number, body: string): ShellyHttpError {
 
   return new ShellyHttpError(message, status, code, payload);
 }
+
 
 async function withRateLimitRetry<T>(fn: () => Promise<T>): Promise<T> {
   let attempt = 0;

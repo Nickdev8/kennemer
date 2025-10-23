@@ -1,0 +1,8 @@
+app/node_modules
+app/.svelte-kit
+app/build
+app/.vite
+.git
+.gitignore
+Dockerfile
+docker-compose.yml

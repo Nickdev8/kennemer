@@ -1,14 +1,27 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { actions } from '$lib/config/devices';
-  import { triggerAction } from '$lib/api';
+  import { fetchStatuses, triggerAction, type StatusMap } from '$lib/api';
 
   let loadingId: string | null = null;
   let errorMsg = '';
   let cooldown = new Set<string>();
   let buttonMessages: Record<string, string> = {};
+  let statuses: StatusMap = {};
+
+  const BASE_POLL_INTERVAL = 5000;
+  const FAST_POLL_INTERVAL = 1000;
+  const FAST_POLL_DURATION = 6000;
 
   const cooldownTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  let pollTimeout: ReturnType<typeof setTimeout> | null = null;
+  let fastPollUntil = 0;
+  let polling = false;
+  let shouldPollAgain = false;
+
+  const statusKeys = Array.from(
+    new Set(actions.map((action) => action.statusKey).filter(Boolean) as string[])
+  );
 
   const groupedActions = Array.from(
     actions.reduce((acc, action) => {
@@ -17,7 +30,11 @@
       acc.get(groupName)!.push(action);
       return acc;
     }, new Map<string, typeof actions[number][]>())
-  ).map(([name, items]) => ({ name, items }));
+  ).map(([name, items]) => ({
+    name,
+    items,
+    statusKey: items.find((item) => item.statusKey)?.statusKey
+  }));
 
   function startCooldown(id: string, durationMs = 1000) {
     const existingTimer = cooldownTimers.get(id);
@@ -42,15 +59,63 @@
     cooldownTimers.set(id, timer);
   }
 
+  function scheduleNextPoll() {
+    if (statusKeys.length === 0) return;
+    if (pollTimeout) clearTimeout(pollTimeout);
+
+    const delay = Date.now() < fastPollUntil ? FAST_POLL_INTERVAL : BASE_POLL_INTERVAL;
+    pollTimeout = setTimeout(() => {
+      pollStatuses();
+    }, delay);
+  }
+
+  async function pollStatuses(immediate = false) {
+    if (statusKeys.length === 0) return;
+
+    if (polling) {
+      if (immediate) shouldPollAgain = true;
+      return;
+    }
+
+    if (immediate && pollTimeout) {
+      clearTimeout(pollTimeout);
+      pollTimeout = null;
+    }
+
+    polling = true;
+    try {
+      const response = await fetchStatuses(statusKeys);
+      statuses = response;
+    } catch (err) {
+      console.error('Kon status niet ophalen', err);
+    } finally {
+      polling = false;
+      if (shouldPollAgain) {
+        shouldPollAgain = false;
+        pollStatuses();
+        return;
+      }
+      scheduleNextPoll();
+    }
+  }
+
+  function handleSuccessfulAction() {
+    fastPollUntil = Date.now() + FAST_POLL_DURATION;
+    shouldPollAgain = true;
+    pollStatuses(true);
+  }
+
   async function handlePress(id: string) {
     loadingId = id;
     errorMsg = '';
     try {
       await triggerAction(id);
+      handleSuccessfulAction();
     } catch (err) {
       const error = err as Error & { code?: string };
       if (error?.code === 'RATE_LIMIT') {
         startCooldown(id);
+        handleSuccessfulAction();
       } else {
         errorMsg = error instanceof Error ? error.message : 'Unknown error';
       }
@@ -60,7 +125,7 @@
   }
 
   const baseButtonClass =
-    'relative flex min-h-[6rem] items-center justify-center rounded-xl border border-slate-300 bg-slate-100 px-6 py-8 text-2xl font-semibold text-slate-800 transition-transform duration-150 ease-out enabled:hover:-translate-y-0.5 enabled:hover:bg-slate-200 enabled:hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-60';
+    'relative flex min-h-[4.75rem] items-center justify-center rounded-xl border border-slate-300 bg-slate-100 px-5 py-6 text-xl font-semibold text-slate-800 transition-transform duration-150 ease-out enabled:hover:-translate-y-0.5 enabled:hover:bg-slate-200 enabled:hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-60';
 
   function buttonClass(id: string) {
     const classes = [baseButtonClass];
@@ -69,27 +134,45 @@
     return classes.join(' ');
   }
 
-  onMount(() => window.addEventListener('contextmenu', (evt) => evt.preventDefault()));
+  function statusText(key?: string) {
+    if (!key) return '—';
+    const entry = statuses[key];
+    if (!entry) return '...';
+    if (entry.error) return 'Niet beschikbaar';
+    return entry.value;
+  }
+
+  onMount(() => {
+    window.addEventListener('contextmenu', (evt) => evt.preventDefault());
+    pollStatuses(true);
+  });
+
   onDestroy(() => {
     cooldownTimers.forEach((timer) => clearTimeout(timer));
     cooldownTimers.clear();
+    if (pollTimeout) clearTimeout(pollTimeout);
   });
 </script>
 
-<main class="flex min-h-screen flex-col gap-8 bg-slate-100 p-6 sm:p-8">
+<main class="min-h-screen bg-slate-100 p-6 sm:p-8 space-y-8">
   {#if errorMsg}
     <p class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-base font-semibold text-red-700 shadow-sm">
       {errorMsg}
     </p>
   {/if}
 
-  <div class="grid flex-1 grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+  <div class="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
     {#each groupedActions as group}
-      <section class="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white/95 p-6 shadow-sm">
-        <header>
+      <section class="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm">
+        <header class="flex items-center justify-between">
           <h2 class="text-xl font-semibold tracking-tight text-slate-800">{group.name}</h2>
+          {#if group.statusKey}
+            <span class="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+              {statusText(group.statusKey)}
+            </span>
+          {/if}
         </header>
-        <div class="flex flex-col gap-3">
+        <div class="flex flex-col gap-2">
           {#each group.items as action}
             <button
               type="button"

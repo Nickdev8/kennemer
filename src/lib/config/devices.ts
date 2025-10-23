@@ -13,6 +13,17 @@ export interface ShellyHttpAction {
   group: string;
   cloud: ShellyHttpTarget;
   lan?: ShellyHttpTarget;
+  statusKey?: string;
+}
+
+export type ShellyStatusParser = 'relay';
+
+export interface ShellyStatusTarget {
+  key: string;
+  label: string;
+  parser: ShellyStatusParser;
+  cloud: ShellyHttpTarget;
+  lan?: ShellyHttpTarget;
 }
 
 export const actions: ShellyHttpAction[] = [
@@ -20,6 +31,7 @@ export const actions: ShellyHttpAction[] = [
     id: 'scene-on',
     label: 'Scene On',
     group: 'Scene',
+    statusKey: 'relay-main',
     cloud: {
       endpoint: 'https://shelly-115-eu.shelly.cloud/scene/manual_run',
       payload: { id: '1727329580882' }
@@ -35,6 +47,7 @@ export const actions: ShellyHttpAction[] = [
     id: 'scene-off',
     label: 'Scene Off',
     group: 'Scene',
+    statusKey: 'relay-main',
     cloud: {
       endpoint: 'https://shelly-115-eu.shelly.cloud/scene/manual_run',
       payload: { id: '1730105330475' }
@@ -50,6 +63,7 @@ export const actions: ShellyHttpAction[] = [
     id: 'relay-on',
     label: 'Relay On',
     group: 'Relay',
+    statusKey: 'relay-main',
     cloud: {
       endpoint: 'https://shelly-115-eu.shelly.cloud/device/relay/control',
       payload: { id: '8cbfea9bc6d0', turn: 'on', channel: 0 }
@@ -65,6 +79,7 @@ export const actions: ShellyHttpAction[] = [
     id: 'relay-off',
     label: 'Relay Off',
     group: 'Relay',
+    statusKey: 'relay-main',
     cloud: {
       endpoint: 'https://shelly-115-eu.shelly.cloud/device/relay/control',
       payload: { id: '8cbfea9bc6d0', turn: 'off', channel: 0 }
@@ -77,3 +92,23 @@ export const actions: ShellyHttpAction[] = [
     }
   }
 ];
+
+export const statusTargets: Record<string, ShellyStatusTarget> = {
+  'relay-main': {
+    key: 'relay-main',
+    label: 'Lights',
+    parser: 'relay',
+    cloud: {
+      endpoint: 'https://shelly-115-eu.shelly.cloud/device/status',
+      method: 'GET',
+      payload: { id: '8cbfea9bc6d0' }
+    },
+    lan: {
+      endpoint: 'http://shelly-relay.local/rpc/Switch.GetStatus',
+      encoding: 'json',
+      requiresAuthKey: false,
+      method: 'POST',
+      payload: { id: 0 }
+    }
+  }
+};

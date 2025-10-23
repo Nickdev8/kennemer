@@ -11,7 +11,7 @@ services:
       PORT: "80"
       HOST: "0.0.0.0"
     ports:
-      - "127.0.0.1:80:80"
+      - "80:80"
     working_dir: /app
     env_file:
       - ./app/.env

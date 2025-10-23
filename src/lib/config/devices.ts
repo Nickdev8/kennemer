@@ -74,27 +74,31 @@ export const devices: ShellyDevice[] = [
 			on: {
 				label: 'Relay On',
 				cloud: {
-					endpoint: 'https://shelly-115-eu.shelly.cloud/device/relay/control',
-					payload: { id: '8cbfea9bc6d0', turn: 'on', channel: 0 }
-				},
-				lan: {
-					endpoint: 'http://shelly-relay.local/rpc/Switch.Set',
+					endpoint: 'http://10.10.80.133/rpc/Switch.Toggle',
 					encoding: 'json',
 					requiresAuthKey: false,
-					payload: { id: 0, on: true }
+					payload: { id: 0 }
+				},
+				lan: {
+					endpoint: 'http://10.10.80.133/rpc/Switch.Toggle',
+					encoding: 'json',
+					requiresAuthKey: false,
+					payload: { id: 0 }
 				}
 			},
 			off: {
 				label: 'Relay Off',
 				cloud: {
-					endpoint: 'https://shelly-115-eu.shelly.cloud/device/relay/control',
-					payload: { id: '8cbfea9bc6d0', turn: 'off', channel: 0 }
-				},
-				lan: {
-					endpoint: 'http://shelly-relay.local/rpc/Switch.Set',
+					endpoint: 'http://10.10.80.133/rpc/Switch.Toggle',
 					encoding: 'json',
 					requiresAuthKey: false,
-					payload: { id: 0, on: false }
+					payload: { id: 0 }
+				},
+				lan: {
+					endpoint: 'http://10.10.80.133/rpc/Switch.Toggle',
+					encoding: 'json',
+					requiresAuthKey: false,
+					payload: { id: 0 }
 				}
 			}
 		}

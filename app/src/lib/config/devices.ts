@@ -68,9 +68,8 @@ export const devices: ShellyDevice[] = [
 			},
 			lan: {
 				endpoint: 'http://10.10.80.133/rpc/Switch.GetStatus',
-				encoding: 'json',
+				method: 'GET',
 				requiresAuthKey: false,
-				method: 'POST',
 				payload: { id: 0 }
 			}
 		},
@@ -85,10 +84,9 @@ export const devices: ShellyDevice[] = [
 				},
 				lan: {
 					endpoint: 'http://10.10.80.133/rpc/Switch.Set',
-					encoding: 'json',
+					method: 'GET',
 					requiresAuthKey: false,
-					method: 'POST',
-					payload: { id: 0, on: true }
+					payload: { id: 0, on: 1 }
 				}
 			},
 			off: {
@@ -101,10 +99,9 @@ export const devices: ShellyDevice[] = [
 				},
 				lan: {
 					endpoint: 'http://10.10.80.133/rpc/Switch.Set',
-					encoding: 'json',
+					method: 'GET',
 					requiresAuthKey: false,
-					method: 'POST',
-					payload: { id: 0, on: false }
+					payload: { id: 0, on: 0 }
 				}
 			}
 		}

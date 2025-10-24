@@ -1,5 +1,6 @@
 import { env } from '$env/dynamic/private';
 import { devices } from '$lib/config/devices';
+import { advancedDevices } from '$lib/config/advanced-devices';
 import type {
 	DeviceCommandKey,
 	ShellyDevice,
@@ -27,12 +28,111 @@ export class ShellyHttpError extends Error {
 
 const REQUEST_TIMEOUT_MS = 4000;
 const RATE_LIMIT_DELAY_MS = 500;
-const MAX_RATE_LIMIT_RETRIES = 3;
+const MAX_RATE_LIMIT_RETRIES = (() => {
+	const raw = env.SHELLY_MAX_API_CALLS ?? env.SHELLY_MAX_RATE_LIMIT_RETRIES ?? '';
+	const parsed = Number.parseInt(raw, 10);
+	return Number.isInteger(parsed) && parsed >= 0 ? parsed : 3;
+})();
+
+const STATUS_CACHE_TTL_MS = (() => {
+	const raw = env.SHELLY_STATUS_CACHE_TTL_MS ?? env.SHELLY_API_CACHE_TTL_MS ?? '';
+	const parsed = Number.parseInt(raw, 10);
+	return Number.isInteger(parsed) && parsed > 0 ? parsed : 0;
+})();
 
 export interface ShellyStatusResult extends ParsedStatus {
   deviceId: string;
   label: string;
   timestamp: number;
+}
+
+const simulateDevices = (() => {
+	const flag = (env.SHELLY_SIMULATE_DEVICES ?? '').toLowerCase();
+	return ['true', '1', 'yes'].includes(flag);
+})();
+
+type SimulatedDeviceState = {
+	state: 'on' | 'off';
+	lastChangedAt: number;
+};
+
+const simulatedStates = new Map<string, SimulatedDeviceState>();
+
+const allDevices: ShellyDevice[] = [...devices, ...advancedDevices];
+
+type StatusCacheEntry = {
+	result: ShellyStatusResult;
+	expiresAt: number;
+};
+
+const statusCache = new Map<string, StatusCacheEntry>();
+
+function getOrCreateSimulatedState(device: ShellyDevice): SimulatedDeviceState {
+	const existing = simulatedStates.get(device.id);
+	if (existing) {
+		return existing;
+	}
+
+	const initial = {
+		state: 'off' as const,
+		lastChangedAt: Date.now()
+	};
+	simulatedStates.set(device.id, initial);
+	return initial;
+}
+
+function setSimulatedState(device: ShellyDevice, state: 'on' | 'off') {
+	const next: SimulatedDeviceState = {
+		state,
+		lastChangedAt: Date.now()
+	};
+	simulatedStates.set(device.id, next);
+	invalidateStatusCache(device.id);
+	return next;
+}
+
+function toSimulatedStatusResult(
+	device: ShellyDevice,
+	state: 'on' | 'off',
+	lastChangedAt: number
+): ShellyStatusResult {
+	const value = state === 'on' ? 'Aan' : 'Uit';
+	return {
+		deviceId: device.id,
+		label: device.label,
+		value,
+		raw: {
+			simulated: true,
+			state,
+			value,
+			lastChangedAt
+		},
+		timestamp: Date.now()
+	};
+}
+
+function getCachedStatus(deviceId: string): ShellyStatusResult | null {
+	if (STATUS_CACHE_TTL_MS <= 0) return null;
+	const cached = statusCache.get(deviceId);
+	if (!cached) return null;
+	if (Date.now() > cached.expiresAt) {
+		statusCache.delete(deviceId);
+		return null;
+	}
+	return cached.result;
+}
+
+function setCachedStatus(deviceId: string, result: ShellyStatusResult) {
+	if (STATUS_CACHE_TTL_MS <= 0) return;
+	statusCache.set(deviceId, {
+		result,
+		expiresAt: Date.now() + STATUS_CACHE_TTL_MS
+	});
+}
+
+function invalidateStatusCache(deviceId: string) {
+	if (statusCache.size === 0) return;
+	statusCache.delete(deviceId);
 }
 
 function toTargetArray(config?: ShellyTargetConfig): ShellyHttpTarget[] {
@@ -221,6 +321,14 @@ async function withRateLimitRetry<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 export async function sendDeviceCommand(device: ShellyDevice, commandKey: DeviceCommandKey) {
+	if (simulateDevices) {
+		const state = commandKey === 'on' ? 'on' : 'off';
+		const nextState = setSimulatedState(device, state);
+		const simulated = toSimulatedStatusResult(device, nextState.state, nextState.lastChangedAt);
+		setCachedStatus(device.id, simulated);
+		return;
+	}
+
 	const command = device.commands[commandKey];
 
 	if (!command) {
@@ -237,9 +345,31 @@ export async function sendDeviceCommand(device: ShellyDevice, commandKey: Device
 		const requiresAuth = target.requiresAuthKey ?? true;
 		await withRateLimitRetry(() => executeRequest(target, requiresAuth));
 	}
+
+	invalidateStatusCache(device.id);
 }
 
 export async function fetchDeviceStatus(device: ShellyDevice): Promise<ShellyStatusResult> {
+	if (simulateDevices) {
+		if (!device.status) {
+			throw new ShellyHttpError(
+				`Device ${device.id} has no status configuration`,
+				400,
+				'HTTP_ERROR'
+			);
+		}
+
+		const { state, lastChangedAt } = getOrCreateSimulatedState(device);
+		const simulated = toSimulatedStatusResult(device, state, lastChangedAt);
+		setCachedStatus(device.id, simulated);
+		return simulated;
+	}
+
+	const cached = getCachedStatus(device.id);
+	if (cached) {
+		return cached;
+	}
+
   if (!device.status) {
     throw new ShellyHttpError(`Device ${device.id} has no status configuration`, 400, 'HTTP_ERROR');
   }
@@ -253,17 +383,20 @@ export async function fetchDeviceStatus(device: ShellyDevice): Promise<ShellySta
 
   const parsed = parseShellyStatus(device.status.parser, payload);
 
-  return {
+  const result: ShellyStatusResult = {
     deviceId: device.id,
     label: device.label,
     value: parsed.value,
     raw: parsed.raw,
     timestamp: Date.now()
   };
+
+  setCachedStatus(device.id, result);
+  return result;
 }
 
 export function getDevicesWithStatus(): ShellyDevice[] {
-  return devices.filter((device) => Boolean(device.status));
+  return allDevices.filter((device) => Boolean(device.status));
 }
 
 export function getStatusDeviceIds(): string[] {

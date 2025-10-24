@@ -1,5 +1,6 @@
 import type { RequestHandler } from './$types';
 import { devices } from '$lib/config/devices';
+import { advancedDevices } from '$lib/config/advanced-devices';
 import type { DeviceCommandKey } from '$lib/config/schema';
 import { sendDeviceCommand, ShellyHttpError } from '$lib/server/shelly-http';
 
@@ -17,7 +18,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		});
 	}
 
-	const device = devices.find((item) => item.id === deviceId);
+	const device = [...devices, ...advancedDevices].find((item) => item.id === deviceId);
 
 	if (!device) {
 		return new Response(JSON.stringify({ error: 'Unknown device' }), { status: 404 });

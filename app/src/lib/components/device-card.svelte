@@ -58,6 +58,7 @@
   const dispatch = createEventDispatcher<{
     command: { deviceId: string; command: DeviceCommandKey };
   }>();
+  
 
   $: statusKey = deviceStatusKey(device);
   $: statusEntry = getStatusEntry(statuses, statusKey);

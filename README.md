@@ -32,9 +32,8 @@ Kennemer is a SvelteKit control panel for the school's shared Shelly-powered dev
    ```env
    SHELLY_AUTH_KEY=your-cloud-api-key
    SHELLY_SIMULATE_DEVICES=1       # set to 0 to talk to the real hardware
-   USE_LAN=0                       # turn on to prefer LAN RPC endpoints
+   USE_LAN=0                       # turn on to prefer LAN; falls back to cloud if needed
    SHELLY_MAX_API_CALLS=3
-   SHELLY_STATUS_CACHE_TTL_MS=5000
    PUBLIC_ADVANCED_PIN=1234
    ```
    Keep this file out of source control if it contains live credentials.

@@ -5,29 +5,17 @@
   import { advancedDevices } from '$lib/config/advanced-devices';
   import { env as publicEnv } from '$env/dynamic/public';
   import type { DeviceCommandKey, ShellyDevice } from '$lib/config/schema';
-  import { fetchStatuses, triggerDeviceCommand, type StatusMap } from '$lib/api';
+  import { triggerDeviceCommand } from '$lib/api';
 
   const expectedAdvancedPin = (publicEnv.PUBLIC_ADVANCED_PIN ?? '').trim();
   const advancedPinConfigured = expectedAdvancedPin.length > 0;
-
-  const primaryStatusKeys = primaryDevices.filter((device) => device.status).map((device) => device.id);
-  const advancedStatusKeys = advancedDevices.filter((device) => device.status).map((device) => device.id);
 
   let loadingCommandKey: string | null = null;
   let errorMsg = '';
   let cooldown = new Set<string>();
   let buttonMessages: Record<string, string> = {};
-  let statuses: StatusMap = {};
-
-  const BASE_POLL_INTERVAL = 12000;
-  const FAST_POLL_INTERVAL = 3000;
-  const FAST_POLL_DURATION = 6000;
 
   const cooldownTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  let pollTimeout: ReturnType<typeof setTimeout> | null = null;
-  let fastPollUntil = 0;
-  let polling = false;
-  let shouldPollAgain = false;
 
   let showAdvancedPrompt = false;
   let showAdvancedPanel = false;
@@ -38,27 +26,6 @@
   const commandOrder: DeviceCommandKey[] = ['on', 'off'];
 
   const commandKey = (deviceId: string, command: DeviceCommandKey) => `${deviceId}:${command}`;
-
-  const deviceStatusKey = (device: ShellyDevice) => (device.status ? device.id : undefined);
-
-  function currentStatusKeys(): string[] {
-    if (showAdvancedPanel && advancedUnlocked) {
-      return Array.from(new Set([...primaryStatusKeys, ...advancedStatusKeys]));
-    }
-    return primaryStatusKeys;
-  }
-
-  function getStatusEntry(currentStatuses: StatusMap, key?: string) {
-    if (!key) return null;
-    return currentStatuses[key] ?? null;
-  }
-
-  function statusHasIssue(currentStatuses: StatusMap, key?: string) {
-    const entry = getStatusEntry(currentStatuses, key);
-    if (!entry) return false;
-    const value = typeof entry.value === 'string' ? entry.value.toLowerCase() : '';
-    return Boolean(entry.error) || value === 'offline' || value === 'niet beschikbaar';
-  }
 
   function startCooldown(key: string, durationMs = 2000) {
     const existingTimer = cooldownTimers.get(key);
@@ -83,54 +50,6 @@
     cooldownTimers.set(key, timer);
   }
 
-  function scheduleNextPoll() {
-    if (currentStatusKeys().length === 0) return;
-    if (pollTimeout) clearTimeout(pollTimeout);
-
-    const delay = Date.now() < fastPollUntil ? FAST_POLL_INTERVAL : BASE_POLL_INTERVAL;
-    pollTimeout = setTimeout(() => {
-      pollStatuses();
-    }, delay);
-  }
-
-  async function pollStatuses(immediate = false) {
-    const keys = currentStatusKeys();
-    if (keys.length === 0) return;
-
-    if (polling) {
-      if (immediate) shouldPollAgain = true;
-      return;
-    }
-
-    if (immediate && pollTimeout) {
-      clearTimeout(pollTimeout);
-      pollTimeout = null;
-    }
-
-    polling = true;
-    try {
-      const response = await fetchStatuses(keys);
-      console.debug('[status] fetched', response);
-      statuses = response;
-    } catch (err) {
-      console.error('Kon status niet ophalen', err);
-    } finally {
-      polling = false;
-      if (shouldPollAgain) {
-        shouldPollAgain = false;
-        pollStatuses();
-        return;
-      }
-      scheduleNextPoll();
-    }
-  }
-
-  function handleSuccessfulAction() {
-    fastPollUntil = Date.now() + FAST_POLL_DURATION;
-    shouldPollAgain = true;
-    pollStatuses(true);
-  }
-
   function commandLabel(device: ShellyDevice, command: DeviceCommandKey) {
     const config = device.commands[command];
     if (!config) return command === 'on' ? 'On' : 'Off';
@@ -143,12 +62,10 @@
     errorMsg = '';
     try {
       await triggerDeviceCommand(deviceId, command);
-      handleSuccessfulAction();
     } catch (err) {
       const error = err as Error & { code?: string };
       if (error?.code === 'RATE_LIMIT') {
         startCooldown(key);
-        handleSuccessfulAction();
       } else {
         errorMsg = error instanceof Error ? error.message : 'Unknown error';
       }
@@ -199,20 +116,22 @@
     submitAdvancedPin();
   }
 
+  const preventContextMenu = (evt: Event) => evt.preventDefault();
+
   onMount(() => {
-    window.addEventListener('contextmenu', (evt) => evt.preventDefault());
-    pollStatuses(true);
+    if (typeof window === 'undefined') {
+      return;
+    }
+    window.addEventListener('contextmenu', preventContextMenu);
   });
 
   onDestroy(() => {
     cooldownTimers.forEach((timer) => clearTimeout(timer));
     cooldownTimers.clear();
-    if (pollTimeout) clearTimeout(pollTimeout);
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('contextmenu', preventContextMenu);
+    }
   });
-
-  $: if (showAdvancedPanel && advancedUnlocked) {
-    pollStatuses(true);
-  }
 </script>
 
 <main class="space-y-8 min-h-screen bg-slate-100 p-6 sm:p-8">
@@ -226,16 +145,12 @@
     {#each primaryDevices as device}
       <DeviceCard
         {device}
-        {statuses}
         {commandOrder}
         {commandKey}
         {commandLabel}
         {loadingCommandKey}
         {cooldown}
         {buttonMessages}
-        {getStatusEntry}
-        {statusHasIssue}
-        {deviceStatusKey}
         on:command={({ detail }) => handlePress(detail.deviceId, detail.command)}
       />
     {/each}
@@ -326,16 +241,12 @@
             {#each advancedDevices as device}
               <DeviceCard
                 {device}
-                {statuses}
                 {commandOrder}
                 {commandKey}
                 {commandLabel}
                 {loadingCommandKey}
                 {cooldown}
                 {buttonMessages}
-                {getStatusEntry}
-                {statusHasIssue}
-                {deviceStatusKey}
                 showGroup
                 on:command={({ detail }) => handlePress(detail.deviceId, detail.command)}
               />

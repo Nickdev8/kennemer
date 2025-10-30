@@ -9,14 +9,6 @@ export interface ShellyHttpTarget {
 
 export type ShellyTargetConfig = ShellyHttpTarget | ShellyHttpTarget[];
 
-export type ShellyStatusParser = 'relay';
-
-export interface ShellyDeviceStatus {
-	parser: ShellyStatusParser;
-	cloud: ShellyHttpTarget;
-	lan?: ShellyHttpTarget;
-}
-
 export type DeviceCommandKey = 'on' | 'off';
 
 export interface ShellyDeviceCommand {
@@ -29,6 +21,5 @@ export interface ShellyDevice {
 	id: string;
 	label: string;
 	group: string;
-	status?: ShellyDeviceStatus;
 	commands: Record<DeviceCommandKey, ShellyDeviceCommand>;
 }

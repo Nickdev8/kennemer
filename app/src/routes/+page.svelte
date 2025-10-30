@@ -16,6 +16,15 @@
     output: boolean | null;
   };
 
+  function readBooleanFlag(value: string | undefined) {
+    if (!value) return false;
+    const normalised = value.trim().toLowerCase();
+    return ['1', 'true', 'yes', 'on'].includes(normalised);
+  }
+
+  const compactWattage = readBooleanFlag(publicEnv.PUBLIC_COMPACT_WATTAGE);
+  const wattageDisabled = readBooleanFlag(publicEnv.PUBLIC_DISABLE_WATTAGE);
+
   const expectedAdvancedPin = (publicEnv.PUBLIC_ADVANCED_PIN ?? '').trim();
   const advancedPinConfigured = expectedAdvancedPin.length > 0;
 
@@ -70,6 +79,14 @@
   }
 
   async function refreshWattage() {
+    if (wattageDisabled) {
+      wattageLabel = `Room ${wattageRoomId}`;
+      wattageTotal = 0;
+      wattageDevices = [];
+      wattageUpdatedAt = null;
+      wattageError = '';
+      return;
+    }
     if (wattageLoading) return;
     wattageLoading = true;
     wattageError = '';
@@ -187,10 +204,12 @@
   onMount(() => {
     if (typeof window !== 'undefined') {
       window.addEventListener('contextmenu', preventContextMenu);
-      refreshWattage();
-      wattageTimer = setInterval(() => {
+      if (!wattageDisabled) {
         refreshWattage();
-      }, WATTAGE_REFRESH_MS);
+        wattageTimer = setInterval(() => {
+          refreshWattage();
+        }, WATTAGE_REFRESH_MS);
+      }
     }
   });
 
@@ -207,55 +226,57 @@
   });
 </script>
 
-<main class="space-y-8 min-h-screen bg-slate-100 p-6 sm:p-8">
-  <section class="rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-sm">
-    <header class="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
-      <div>
-        <h2 class="text-lg font-semibold tracking-tight text-slate-800">{wattageLabel}</h2>
-        <p class="text-sm text-slate-500">
-          {#if wattageLoading}
-            Bezig met ophalen…
-          {:else}
-            Lokaal wattage via Shelly status endpoints.
-          {/if}
+<main class="space-y-8 min-h-screen bg-slate-100 p-6 pb-32 sm:p-8">
+  {#if !compactWattage && !wattageDisabled}
+    <section class="rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-sm">
+      <header class="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
+        <div>
+          <h2 class="text-lg font-semibold tracking-tight text-slate-800">{wattageLabel}</h2>
+          <p class="text-sm text-slate-500">
+            {#if wattageLoading}
+              Bezig met ophalen…
+            {:else}
+              Lokaal wattage via Shelly status endpoints.
+            {/if}
+          </p>
+        </div>
+        <div class="text-right">
+          <p class="text-2xl font-bold tracking-tight text-slate-900">{formatWatts(wattageTotal)}</p>
+          <p class="text-xs uppercase tracking-wide text-slate-400">
+            {#if wattageUpdatedAt}
+              Laatste update: {new Date(wattageUpdatedAt).toLocaleTimeString()}
+            {:else}
+              Nog geen data
+            {/if}
+          </p>
+        </div>
+      </header>
+
+      {#if wattageError}
+        <p class="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
+          {wattageError}
         </p>
-      </div>
-      <div class="text-right">
-        <p class="text-2xl font-bold tracking-tight text-slate-900">{formatWatts(wattageTotal)}</p>
-        <p class="text-xs uppercase tracking-wide text-slate-400">
-          {#if wattageUpdatedAt}
-            Laatste update: {new Date(wattageUpdatedAt).toLocaleTimeString()}
-          {:else}
-            Nog geen data
-          {/if}
-        </p>
-      </div>
-    </header>
+      {/if}
 
-    {#if wattageError}
-      <p class="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
-        {wattageError}
-      </p>
-    {/if}
+      {#if wattageDevices.length > 0}
+        <ul class="mt-4 divide-y divide-slate-200">
+          {#each wattageDevices as device}
+            <li class="flex items-center justify-between py-2 text-sm text-slate-700">
+              <div class="min-w-0">
+                <p class="truncate font-medium">{device.name}</p>
+                <p class="text-xs uppercase tracking-wide text-slate-400">{formatDeviceState(device)}</p>
+              </div>
+              <div class="text-right font-semibold text-slate-800">{formatWatts(device.watts ?? 0)}</div>
+            </li>
+          {/each}
+        </ul>
+      {:else}
+        <p class="mt-4 text-sm text-slate-500">Geen apparaten gevonden voor deze ruimte.</p>
+      {/if}
+    </section>
+  {/if}
 
-    {#if wattageDevices.length > 0}
-      <ul class="mt-4 divide-y divide-slate-200">
-        {#each wattageDevices as device}
-          <li class="flex items-center justify-between py-2 text-sm text-slate-700">
-            <div class="min-w-0">
-              <p class="truncate font-medium">{device.name}</p>
-              <p class="text-xs uppercase tracking-wide text-slate-400">{formatDeviceState(device)}</p>
-            </div>
-            <div class="text-right font-semibold text-slate-800">{formatWatts(device.watts ?? 0)}</div>
-          </li>
-        {/each}
-      </ul>
-    {:else}
-      <p class="mt-4 text-sm text-slate-500">Geen apparaten gevonden voor deze ruimte.</p>
-    {/if}
-  </section>
-
-  {#if errorMsg}
+  {#if errorMsg && !compactWattage && !wattageDisabled}
     <p class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-base font-semibold text-red-700 shadow-sm">
       {errorMsg}
     </p>
@@ -276,7 +297,7 @@
     {/each}
   </div>
 
-  <div class="pointer-events-none fixed bottom-6 right-6 flex justify-end">
+  <div class={`pointer-events-none fixed ${compactWattage && !wattageDisabled ? 'bottom-24' : 'bottom-6'} right-6 flex justify-end`}>
     <button
       type="button"
       class="pointer-events-auto rounded-full border border-slate-300 px-6 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-600 transition-colors duration-150 ease-out hover:bg-slate-200"
@@ -285,6 +306,30 @@
       Advanced Users
     </button>
   </div>
+
+  {#if compactWattage && !wattageDisabled}
+    <div class="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-800 bg-slate-900/95 px-6 py-4 text-white shadow-xl sm:px-10">
+      <div class="flex items-center justify-between gap-6">
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">{wattageLabel}</p>
+          {#if wattageUpdatedAt}
+            <p class="text-[10px] uppercase tracking-wide text-slate-500">
+              Laatste update: {new Date(wattageUpdatedAt).toLocaleTimeString()}
+            </p>
+          {/if}
+        </div>
+        <div class="text-right">
+          {#if wattageError}
+            <p class="text-sm font-semibold text-amber-300">{wattageError}</p>
+          {:else if wattageLoading}
+            <p class="text-sm font-semibold text-slate-300">Bezig met ophalen…</p>
+          {:else}
+            <p class="text-3xl font-bold tracking-tight">{formatWatts(wattageTotal)}</p>
+          {/if}
+        </div>
+      </div>
+    </div>
+  {/if}
 </main>
 
 {#if showAdvancedPrompt}

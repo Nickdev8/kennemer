@@ -41,6 +41,8 @@ type ErrorResponse = {
 };
 
 const DEVICE_LIST_ENDPOINT = 'https://shelly-115-eu.shelly.cloud/interface/device/list';
+const DEVICE_STATUS_ENDPOINT = 'https://shelly-115-eu.shelly.cloud/interface/device/status';
+const ipOverrides = new Map<string, string>();
 
 const HTTP_TIMEOUT_MS = 4000;
 
@@ -117,10 +119,11 @@ async function resolveRoomDevices(roomId: number): Promise<ShellyDeviceTarget[]>
 		const deviceId = typeof entry.id === 'string' && entry.id ? entry.id : key;
 		const name = typeof entry.name === 'string' && entry.name ? entry.name : deviceId;
 		const channel = parseNumber(entry.channel);
+		const overrideIp = ipOverrides.get(deviceId);
 		results.push({
 			deviceId,
 			roomId,
-			ip,
+			ip: overrideIp ?? ip,
 			name,
 			channel: Number.isFinite(channel) ? channel : null
 		});
@@ -130,43 +133,43 @@ async function resolveRoomDevices(roomId: number): Promise<ShellyDeviceTarget[]>
 }
 
 async function fetchDeviceWattage(target: ShellyDeviceTarget): Promise<WattageDeviceSummary> {
-	const controller = new AbortController();
-	const timeout = setTimeout(() => controller.abort(), HTTP_TIMEOUT_MS);
+	const initial = await requestShellyStatus(target.ip);
 
-	try {
-		const res = await fetch(`http://${target.ip}/status`, {
-			method: 'GET',
-			signal: controller.signal,
-			headers: { accept: 'application/json' }
-		});
+	let payload = initial.payload;
+	let effectiveIp = target.ip;
 
-		if (!res.ok) {
-			throw new Error(`HTTP ${res.status}`);
+	if (payload && !matchesDeviceIdentity(payload, target.deviceId)) {
+		const refreshedIp = await resolveDeviceIpFromCloud(target.deviceId);
+		if (refreshedIp && refreshedIp !== target.ip) {
+			ipOverrides.set(target.deviceId, refreshedIp);
+			target.ip = refreshedIp;
+			effectiveIp = refreshedIp;
+			const retry = await requestShellyStatus(refreshedIp);
+			payload = retry.payload;
 		}
+	}
 
-		const payload = await res.json();
-		const metrics = extractMetrics(payload, target.channel);
-
+	if (!payload || !matchesDeviceIdentity(payload, target.deviceId)) {
 		return {
 			deviceId: target.deviceId,
 			name: target.name,
-			ip: target.ip,
-			channel: target.channel,
-			watts: metrics.watts ?? 0,
-			output: metrics.output ?? null
-		};
-	} catch (error) {
-		return {
-			deviceId: target.deviceId,
-			name: target.name,
-			ip: target.ip,
+			ip: effectiveIp,
 			channel: target.channel,
 			watts: 0,
 			output: null
 		};
-	} finally {
-		clearTimeout(timeout);
 	}
+
+	const metrics = extractMetrics(payload, target.channel);
+
+	return {
+		deviceId: target.deviceId,
+		name: target.name,
+		ip: effectiveIp,
+		channel: target.channel,
+		watts: metrics.watts ?? 0,
+		output: metrics.output ?? null
+	};
 }
 
 function extractMetrics(payload: unknown, channel: number | null) {
@@ -227,6 +230,137 @@ function parseBoolean(value: unknown): boolean | null {
 		if (['true', '1', 'on', 'yes'].includes(normalised)) return true;
 		if (['false', '0', 'off', 'no'].includes(normalised)) return false;
 	}
+	return null;
+}
+
+function normaliseIdentifier(value: string) {
+	return value.replace(/[^a-z0-9]/gi, '').toLowerCase();
+}
+
+type StatusResponse = {
+	payload: Record<string, unknown> | null;
+};
+
+async function requestShellyStatus(ip: string): Promise<StatusResponse> {
+	const controller = new AbortController();
+	const timeout = setTimeout(() => controller.abort(), HTTP_TIMEOUT_MS);
+
+	try {
+		const res = await fetch(`http://${ip}/status`, {
+			method: 'GET',
+			signal: controller.signal,
+			headers: { accept: 'application/json' }
+		});
+
+		if (!res.ok) {
+			throw new Error(`HTTP ${res.status}`);
+		}
+
+		const payload = (await res.json()) as Record<string, unknown>;
+		return { payload };
+	} catch {
+		return { payload: null };
+	} finally {
+		clearTimeout(timeout);
+	}
+}
+
+function extractDeviceIdentifiers(payload: Record<string, unknown>): string[] {
+	const identifiers = new Set<string>();
+
+	const maybeAdd = (value: unknown) => {
+		if (typeof value === 'string' && value.trim()) {
+			identifiers.add(normaliseIdentifier(value));
+		}
+	};
+
+	maybeAdd(payload.mac);
+
+	const wifi = payload.wifi_sta;
+	if (wifi && typeof wifi === 'object') {
+		maybeAdd((wifi as Record<string, unknown>).mac);
+	}
+
+	const device = payload.device;
+	if (device && typeof device === 'object') {
+		const deviceObj = device as Record<string, unknown>;
+		maybeAdd(deviceObj.id);
+		maybeAdd(deviceObj.mac);
+	}
+
+	const sys = payload.sys;
+	if (sys && typeof sys === 'object') {
+		const sysObj = sys as Record<string, unknown>;
+		maybeAdd(sysObj.deviceid);
+		maybeAdd(sysObj.mac);
+	}
+
+	return Array.from(identifiers);
+}
+
+function matchesDeviceIdentity(payload: Record<string, unknown>, expectedId: string) {
+	const identifiers = extractDeviceIdentifiers(payload);
+	if (identifiers.length === 0) {
+		return true;
+	}
+
+	const expected = normaliseIdentifier(expectedId);
+	return identifiers.some((id) => id === expected);
+}
+
+async function resolveDeviceIpFromCloud(deviceId: string): Promise<string | null> {
+	try {
+		const target = {
+			endpoint: `${DEVICE_STATUS_ENDPOINT}?id=${encodeURIComponent(deviceId)}`,
+			method: 'GET',
+			requiresAuthKey: true
+		} as const;
+		const payload = (await fetchShellyJson(target)) as Record<string, unknown> | null;
+		if (!payload || typeof payload !== 'object') {
+			return null;
+		}
+
+		const data = payload.data;
+		if (data && typeof data === 'object') {
+			const dataObj = data as Record<string, unknown>;
+			const device = dataObj.device_status;
+			if (device && typeof device === 'object') {
+				const ip = extractIpFromStatus(device as Record<string, unknown>);
+				if (ip) return ip;
+			}
+		}
+
+		const ip = extractIpFromStatus(payload);
+		return ip;
+	} catch {
+		return null;
+	}
+}
+
+function extractIpFromStatus(payload: Record<string, unknown>): string | null {
+	const maybeIp = payload.ip ?? payload.address;
+	if (typeof maybeIp === 'string' && maybeIp.trim()) {
+		return maybeIp.trim();
+	}
+
+	const wifi = (payload.wifi_sta ?? payload.wifi) ?? null;
+	if (wifi && typeof wifi === 'object') {
+		const wifiObj = wifi as Record<string, unknown>;
+		const ip = wifiObj.ip;
+		if (typeof ip === 'string' && ip.trim()) {
+			return ip.trim();
+		}
+	}
+
+	const sys = payload.sys;
+	if (sys && typeof sys === 'object') {
+		const sysObj = sys as Record<string, unknown>;
+		const ip = sysObj.ip ?? sysObj.address;
+		if (typeof ip === 'string' && ip.trim()) {
+			return ip.trim();
+		}
+	}
+
 	return null;
 }
 

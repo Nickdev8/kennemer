@@ -35,6 +35,8 @@ Kennemer is a SvelteKit control panel for the school's shared Shelly-powered dev
    USE_LAN=0                       # turn on to prefer LAN; falls back to cloud if needed
    SHELLY_MAX_API_CALLS=3
    PUBLIC_ADVANCED_PIN=1234
+   PUBLIC_COMPACT_WATTAGE=0        # set to 1 to show a compact wattage summary bar
+   PUBLIC_DISABLE_WATTAGE=0        # set to 1 to hide wattage completely
    ```
    Keep this file out of source control if it contains live credentials.
 4. **Run the dev server**

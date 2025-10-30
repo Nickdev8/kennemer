@@ -7,6 +7,15 @@
   import type { DeviceCommandKey, ShellyDevice } from '$lib/config/schema';
   import { triggerDeviceCommand } from '$lib/api';
 
+  type WattageDeviceSummary = {
+    deviceId: string;
+    name: string;
+    ip: string;
+    channel: number | null;
+    watts: number;
+    output: boolean | null;
+  };
+
   const expectedAdvancedPin = (publicEnv.PUBLIC_ADVANCED_PIN ?? '').trim();
   const advancedPinConfigured = expectedAdvancedPin.length > 0;
 
@@ -14,6 +23,16 @@
   let errorMsg = '';
   let cooldown = new Set<string>();
   let buttonMessages: Record<string, string> = {};
+
+  const wattageRoomId = 6;
+  let wattageLabel = `Room ${wattageRoomId}`;
+  let wattageTotal = 0;
+  let wattageDevices: WattageDeviceSummary[] = [];
+  let wattageError = '';
+  let wattageLoading = false;
+  let wattageUpdatedAt: number | null = null;
+  let wattageTimer: ReturnType<typeof setInterval> | null = null;
+  const WATTAGE_REFRESH_MS = 5000;
 
   const cooldownTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -48,6 +67,53 @@
     }, durationMs);
 
     cooldownTimers.set(key, timer);
+  }
+
+  async function refreshWattage() {
+    if (wattageLoading) return;
+    wattageLoading = true;
+    wattageError = '';
+    try {
+      const res = await fetch(`/api/wattage/${wattageRoomId}`);
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        const message = typeof payload.message === 'string' ? payload.message : 'Kon vermogen niet ophalen';
+        throw new Error(message);
+      }
+
+      const data = (await res.json()) as {
+        ok: boolean;
+        label: string;
+        totalWatts: number;
+        devices: WattageDeviceSummary[];
+      };
+
+      if (!data.ok) {
+        throw new Error('Onverwachte wattage respons');
+      }
+
+      wattageLabel = data.label;
+      wattageTotal = data.totalWatts ?? 0;
+      wattageDevices = data.devices ?? [];
+      wattageUpdatedAt = Date.now();
+    } catch (error) {
+      wattageError = error instanceof Error ? error.message : 'Kon vermogen niet ophalen';
+      wattageDevices = [];
+      wattageTotal = 0;
+      wattageUpdatedAt = null;
+    } finally {
+      wattageLoading = false;
+    }
+  }
+
+  function formatWatts(value: number) {
+    return `${value.toFixed(1)} W`;
+  }
+
+  function formatDeviceState(device: WattageDeviceSummary) {
+    if (device.output === true) return 'Aan';
+    if (device.output === false) return 'Uit';
+    return 'Onbekend';
   }
 
   function commandLabel(device: ShellyDevice, command: DeviceCommandKey) {
@@ -119,10 +185,13 @@
   const preventContextMenu = (evt: Event) => evt.preventDefault();
 
   onMount(() => {
-    if (typeof window === 'undefined') {
-      return;
+    if (typeof window !== 'undefined') {
+      window.addEventListener('contextmenu', preventContextMenu);
+      refreshWattage();
+      wattageTimer = setInterval(() => {
+        refreshWattage();
+      }, WATTAGE_REFRESH_MS);
     }
-    window.addEventListener('contextmenu', preventContextMenu);
   });
 
   onDestroy(() => {
@@ -131,10 +200,61 @@
     if (typeof window !== 'undefined') {
       window.removeEventListener('contextmenu', preventContextMenu);
     }
+    if (wattageTimer) {
+      clearInterval(wattageTimer);
+      wattageTimer = null;
+    }
   });
 </script>
 
 <main class="space-y-8 min-h-screen bg-slate-100 p-6 sm:p-8">
+  <section class="rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-sm">
+    <header class="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
+      <div>
+        <h2 class="text-lg font-semibold tracking-tight text-slate-800">{wattageLabel}</h2>
+        <p class="text-sm text-slate-500">
+          {#if wattageLoading}
+            Bezig met ophalen…
+          {:else}
+            Lokaal wattage via Shelly status endpoints.
+          {/if}
+        </p>
+      </div>
+      <div class="text-right">
+        <p class="text-2xl font-bold tracking-tight text-slate-900">{formatWatts(wattageTotal)}</p>
+        <p class="text-xs uppercase tracking-wide text-slate-400">
+          {#if wattageUpdatedAt}
+            Laatste update: {new Date(wattageUpdatedAt).toLocaleTimeString()}
+          {:else}
+            Nog geen data
+          {/if}
+        </p>
+      </div>
+    </header>
+
+    {#if wattageError}
+      <p class="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
+        {wattageError}
+      </p>
+    {/if}
+
+    {#if wattageDevices.length > 0}
+      <ul class="mt-4 divide-y divide-slate-200">
+        {#each wattageDevices as device}
+          <li class="flex items-center justify-between py-2 text-sm text-slate-700">
+            <div class="min-w-0">
+              <p class="truncate font-medium">{device.name}</p>
+              <p class="text-xs uppercase tracking-wide text-slate-400">{formatDeviceState(device)}</p>
+            </div>
+            <div class="text-right font-semibold text-slate-800">{formatWatts(device.watts ?? 0)}</div>
+          </li>
+        {/each}
+      </ul>
+    {:else}
+      <p class="mt-4 text-sm text-slate-500">Geen apparaten gevonden voor deze ruimte.</p>
+    {/if}
+  </section>
+
   {#if errorMsg}
     <p class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-base font-semibold text-red-700 shadow-sm">
       {errorMsg}

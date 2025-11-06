@@ -37,6 +37,9 @@ Kennemer is a SvelteKit control panel for the school's shared Shelly-powered dev
    PUBLIC_ADVANCED_PIN=1234
    PUBLIC_COMPACT_WATTAGE=0        # set to 1 to show a compact wattage summary bar
    PUBLIC_DISABLE_WATTAGE=0        # set to 1 to hide wattage completely
+   # HTTPS_KEY_PATH=/absolute/path/to/server.key
+   # HTTPS_CERT_PATH=/absolute/path/to/server.crt
+   # HTTPS_PORT=443
    ```
    Keep this file out of source control if it contains live credentials.
 4. **Run the dev server**
@@ -50,3 +53,10 @@ Kennemer is a SvelteKit control panel for the school's shared Shelly-powered dev
 - `npm run lint` / `npm run format` – Prettier in check or write mode.
 - `npm run build` – Production build (adapter-node) suitable for the provided Dockerfile.
 - `npm run preview` – Preview the production output before deploying.
+- `npm run start` – Run the built Node adapter with HTTP plus optional HTTPS.
+
+### HTTPS Support
+- Set `HTTPS_KEY_PATH` and `HTTPS_CERT_PATH` to absolute paths for your key/cert to enable TLS alongside HTTP.
+- Override `HTTPS_PORT` (default `443`) and `HTTPS_HOST` if you need different bindings.
+- Optional: set `HTTPS_CA_PATH` for custom chains and `HTTPS_PASSPHRASE` if your key is encrypted.
+- When the variables are unset the server logs that HTTPS is disabled and only HTTP will be exposed.

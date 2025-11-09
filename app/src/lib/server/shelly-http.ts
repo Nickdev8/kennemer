@@ -22,7 +22,7 @@ export class ShellyHttpError extends Error {
 }
 
 const REQUEST_TIMEOUT_MS = 4000;
-const RATE_LIMIT_DELAY_MS = 500;
+const RATE_LIMIT_DELAY_MS = 2000;
 const MAX_RATE_LIMIT_RETRIES = (() => {
 	const raw = env.SHELLY_MAX_API_CALLS ?? env.SHELLY_MAX_RATE_LIMIT_RETRIES ?? '';
 	const parsed = Number.parseInt(raw, 10);

@@ -1,2 +1,18 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
+
+@layer base {
+	body {
+		@apply select-none;
+		-webkit-touch-callout: none;
+		-webkit-user-select: none;
+		-ms-user-select: none;
+		touch-action: manipulation;
+	}
+
+	button,
+	input,
+	textarea {
+		@apply select-none;
+	}
+}

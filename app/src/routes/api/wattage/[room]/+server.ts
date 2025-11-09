@@ -1,3 +1,6 @@
+import { readFile, writeFile } from 'node:fs/promises';
+import { resolve as resolvePath } from 'node:path';
+
 import type { RequestHandler } from './$types';
 import { fetchShellyJson } from '$lib/server/shelly-http';
 
@@ -5,9 +8,30 @@ type ShellyDeviceListEntry = {
 	id?: string;
 	room_id?: number | string;
 	ip?: string;
+	lan_ip?: string;
+	local_ip?: string;
+	address?: string;
 	name?: string;
 	channel?: number | string;
 	gen?: number;
+};
+
+type ShellyRoomEntry = {
+	id?: string | number;
+	name?: string;
+};
+
+type ShellyDeviceListPayload = {
+	devices?: Record<string, ShellyDeviceListEntry> | ShellyDeviceListEntry[];
+	rooms?: Record<string, ShellyRoomEntry> | ShellyRoomEntry[];
+};
+
+type ShellyDeviceListResponse = {
+	data?: ShellyDeviceListPayload | null;
+} & ShellyDeviceListPayload;
+
+type ShellyDeviceCachePayload = ShellyDeviceListPayload & {
+	generatedAt?: number;
 };
 
 type ShellyDeviceTarget = {
@@ -40,13 +64,12 @@ type ErrorResponse = {
 	message: string;
 };
 
-const DEVICE_LIST_ENDPOINT = 'https://shelly-115-eu.shelly.cloud/interface/device/list';
-const DEVICE_STATUS_ENDPOINT = 'https://shelly-115-eu.shelly.cloud/interface/device/status';
-const ipOverrides = new Map<string, string>();
-
+const DEVICE_LIST_ENDPOINT =
+	'https://shelly-115-eu.shelly.cloud/interface/device/get_all_lists';
 const HTTP_TIMEOUT_MS = 4000;
+const IP_CACHE_PATH = resolvePath(process.cwd(), 'ips.json');
 
-export const GET: RequestHandler = async ({ params }) => {
+export const GET: RequestHandler = async ({ params, url }) => {
 	const roomParam = params.room ?? '';
 	const roomId = Number.parseInt(roomParam, 10);
 
@@ -55,29 +78,26 @@ export const GET: RequestHandler = async ({ params }) => {
 	}
 
 	try {
-		const targets = await resolveRoomDevices(roomId);
-		if (targets.length === 0) {
+		const forceRefresh = url.searchParams.has('refresh');
+		const { label, devices } = await resolveRoomDevices(roomId, { forceRefresh });
+		if (devices.length === 0) {
 			const empty: WattageResponse = {
 				ok: true,
 				roomId,
-				label: `Room ${roomId}`,
+				label,
 				devices: [],
 				totalWatts: 0
 			};
 			return jsonResponse(empty);
 		}
 
-		const summaries: WattageDeviceSummary[] = [];
-		for (const target of targets) {
-			const summary = await fetchDeviceWattage(target);
-			summaries.push(summary);
-		}
+		const summaries = await Promise.all(devices.map((target) => fetchDeviceWattage(target)));
 
 		const totalWatts = summaries.reduce((sum, item) => sum + item.watts, 0);
 		const payload: WattageResponse = {
 			ok: true,
 			roomId,
-			label: `Room ${roomId}`,
+			label,
 			devices: summaries,
 			totalWatts
 		};
@@ -89,41 +109,105 @@ export const GET: RequestHandler = async ({ params }) => {
 	}
 };
 
-async function resolveRoomDevices(roomId: number): Promise<ShellyDeviceTarget[]> {
-	const payload = await fetchShellyJson({
+async function resolveRoomDevices(
+	roomId: number,
+	options: { forceRefresh?: boolean } = {}
+): Promise<{ label: string; devices: ShellyDeviceTarget[] }> {
+	const list = await loadDeviceListPayload(options.forceRefresh ?? false);
+	const ignoreRoomFilter = roomId === -1;
+	const label =
+		ignoreRoomFilter ? 'Alle ruimtes' : resolveRoomLabel(list?.rooms, roomId) ?? `Room ${roomId}`;
+	const devices = collectRoomDeviceTargets(list?.devices, roomId, { ignoreRoomFilter });
+
+	return { label, devices };
+}
+
+async function loadDeviceListPayload(forceRefresh: boolean): Promise<ShellyDeviceListPayload | null> {
+	if (!forceRefresh) {
+		const cached = await readDeviceListCache();
+		if (cached) {
+			return cached;
+		}
+	}
+
+	const fresh = await fetchDeviceListFromCloud();
+	if (fresh) {
+		await writeDeviceListCache(fresh);
+	}
+	return fresh;
+}
+
+async function readDeviceListCache(): Promise<ShellyDeviceListPayload | null> {
+	try {
+		const raw = await readFile(IP_CACHE_PATH, 'utf-8');
+		if (!raw) return null;
+		const parsed = JSON.parse(raw) as ShellyDeviceCachePayload;
+		return normaliseDeviceListPayload(parsed);
+	} catch {
+		return null;
+	}
+}
+
+async function writeDeviceListCache(payload: ShellyDeviceListPayload): Promise<void> {
+	const cachePayload: ShellyDeviceCachePayload = {
+		generatedAt: Date.now(),
+		devices: payload?.devices ?? {},
+		rooms: payload?.rooms ?? {}
+	};
+
+	try {
+		await writeFile(IP_CACHE_PATH, JSON.stringify(cachePayload, null, 2), 'utf-8');
+	} catch {
+		// ignore cache write errors; we'll fall back to live calls when needed
+	}
+}
+
+async function fetchDeviceListFromCloud(): Promise<ShellyDeviceListPayload | null> {
+	const payload = (await fetchShellyJson({
 		endpoint: DEVICE_LIST_ENDPOINT,
 		method: 'GET',
 		requiresAuthKey: true
-	});
+	})) as ShellyDeviceListResponse | null;
 
+	return normaliseDeviceListPayload(payload);
+}
+
+function normaliseDeviceListPayload(payload: unknown): ShellyDeviceListPayload | null {
 	if (!payload || typeof payload !== 'object') {
-		throw new Error('Invalid device list response');
+		return null;
 	}
 
-	const root = payload as Record<string, unknown>;
-	const data = root.data && typeof root.data === 'object' ? (root.data as Record<string, unknown>) : null;
-	const devicesObj = data && typeof data.devices === 'object' ? (data.devices as Record<string, unknown>) : null;
-	if (!devicesObj) {
-		return [];
+	const response = payload as ShellyDeviceListResponse;
+	if (response.data && typeof response.data === 'object') {
+		return response.data as ShellyDeviceListPayload;
 	}
 
+	return response as ShellyDeviceListPayload;
+}
+
+function collectRoomDeviceTargets(
+	devices: ShellyDeviceListPayload['devices'],
+	roomId: number,
+	options: { ignoreRoomFilter?: boolean } = {}
+): ShellyDeviceTarget[] {
+	const entries = toDeviceEntries(devices);
 	const results: ShellyDeviceTarget[] = [];
 
-	for (const [key, value] of Object.entries(devicesObj)) {
-		if (!value || typeof value !== 'object') continue;
-		const entry = value as ShellyDeviceListEntry;
-		const ip = typeof entry.ip === 'string' && entry.ip ? entry.ip : '';
-		if (!ip) continue;
+	for (const [key, entry] of entries) {
 		const entryRoom = parseNumber(entry.room_id);
-		if (entryRoom !== roomId) continue;
+		if (!options.ignoreRoomFilter && entryRoom !== roomId) continue;
+
+		const ip = pickDeviceIp(entry);
+		if (!isTargetSubnet(ip)) continue;
+
 		const deviceId = typeof entry.id === 'string' && entry.id ? entry.id : key;
 		const name = typeof entry.name === 'string' && entry.name ? entry.name : deviceId;
 		const channel = parseNumber(entry.channel);
-		const overrideIp = ipOverrides.get(deviceId);
+
 		results.push({
 			deviceId,
-			roomId,
-			ip: overrideIp ?? ip,
+			roomId: entryRoom ?? roomId,
+			ip,
 			name,
 			channel: Number.isFinite(channel) ? channel : null
 		});
@@ -132,28 +216,96 @@ async function resolveRoomDevices(roomId: number): Promise<ShellyDeviceTarget[]>
 	return results;
 }
 
-async function fetchDeviceWattage(target: ShellyDeviceTarget): Promise<WattageDeviceSummary> {
-	const initial = await requestShellyStatus(target.ip);
+function toDeviceEntries(
+	devices: ShellyDeviceListPayload['devices']
+): Array<[string, ShellyDeviceListEntry]> {
+	const entries: Array<[string, ShellyDeviceListEntry]> = [];
+	if (!devices) return entries;
 
-	let payload = initial.payload;
-	let effectiveIp = target.ip;
+	if (Array.isArray(devices)) {
+		devices.forEach((item, index) => {
+			if (!item || typeof item !== 'object') return;
+			const entry = item as ShellyDeviceListEntry;
+			const key = typeof entry.id === 'string' && entry.id ? entry.id : String(index);
+			entries.push([key, entry]);
+		});
+		return entries;
+	}
 
-	if (payload && !matchesDeviceIdentity(payload, target.deviceId)) {
-		const refreshedIp = await resolveDeviceIpFromCloud(target.deviceId);
-		if (refreshedIp && refreshedIp !== target.ip) {
-			ipOverrides.set(target.deviceId, refreshedIp);
-			target.ip = refreshedIp;
-			effectiveIp = refreshedIp;
-			const retry = await requestShellyStatus(refreshedIp);
-			payload = retry.payload;
+	for (const [key, value] of Object.entries(devices)) {
+		if (!value || typeof value !== 'object') continue;
+		entries.push([key, value as ShellyDeviceListEntry]);
+	}
+
+	return entries;
+}
+
+function pickDeviceIp(entry: ShellyDeviceListEntry): string {
+	const candidates: unknown[] = [entry.ip, entry.local_ip, entry.lan_ip, entry.address];
+	for (const candidate of candidates) {
+		const normalised = normaliseIp(candidate);
+		if (normalised) {
+			return normalised;
 		}
 	}
+	return '';
+}
+
+function normaliseIp(value: unknown): string {
+	if (typeof value === 'string') {
+		const trimmed = value.trim();
+		const compact = trimmed.replace(/\s+/g, '');
+		return compact;
+	}
+	if (typeof value === 'number' && Number.isFinite(value)) {
+		return String(value);
+	}
+	return '';
+}
+
+function isTargetSubnet(ip: string) {
+	return typeof ip === 'string' && ip.startsWith('10.10.80.');
+}
+
+function resolveRoomLabel(rooms: ShellyDeviceListPayload['rooms'], roomId: number): string | null {
+	if (!rooms) return null;
+
+	const targetId = String(roomId);
+
+	if (Array.isArray(rooms)) {
+		for (const room of rooms) {
+			if (!room || typeof room !== 'object') continue;
+			const entry = room as ShellyRoomEntry;
+			const rid = parseNumber(entry.id ?? (entry as { room_id?: number | string }).room_id);
+			if (rid !== null && String(rid) === targetId) {
+				const name = entry.name;
+				if (typeof name === 'string' && name.trim()) {
+					return name.trim();
+				}
+			}
+		}
+		return null;
+	}
+
+	const record = rooms[targetId];
+	if (record && typeof record === 'object') {
+		const entry = record as ShellyRoomEntry;
+		if (typeof entry.name === 'string' && entry.name.trim()) {
+			return entry.name.trim();
+		}
+	}
+
+	return null;
+}
+
+async function fetchDeviceWattage(target: ShellyDeviceTarget): Promise<WattageDeviceSummary> {
+	const { payload } = await requestShellyStatus(target.ip);
 
 	if (!payload || !matchesDeviceIdentity(payload, target.deviceId)) {
 		return {
 			deviceId: target.deviceId,
 			name: target.name,
-			ip: effectiveIp,
+			ip: target.ip,
 			channel: target.channel,
 			watts: 0,
 			output: null
@@ -165,7 +317,7 @@ async function fetchDeviceWattage(target: ShellyDeviceTarget): Promise<WattageDe
 	return {
 		deviceId: target.deviceId,
 		name: target.name,
-		ip: effectiveIp,
+		ip: target.ip,
 		channel: target.channel,
 		watts: metrics.watts ?? 0,
 		output: metrics.output ?? null
@@ -298,6 +450,8 @@ function extractDeviceIdentifiers(payload: Record<string, unknown>): string[] {
 	return Array.from(identifiers);
 }
 
+
+
 function matchesDeviceIdentity(payload: Record<string, unknown>, expectedId: string) {
 	const identifiers = extractDeviceIdentifiers(payload);
 	if (identifiers.length === 0) {
@@ -306,62 +460,6 @@ function matchesDeviceIdentity(payload: Record<string, unknown>, expectedId: str
 
 	const expected = normaliseIdentifier(expectedId);
 	return identifiers.some((id) => id === expected);
-}
-
-async function resolveDeviceIpFromCloud(deviceId: string): Promise<string | null> {
-	try {
-		const target = {
-			endpoint: `${DEVICE_STATUS_ENDPOINT}?id=${encodeURIComponent(deviceId)}`,
-			method: 'GET',
-			requiresAuthKey: true
-		} as const;
-		const payload = (await fetchShellyJson(target)) as Record<string, unknown> | null;
-		if (!payload || typeof payload !== 'object') {
-			return null;
-		}
-
-		const data = payload.data;
-		if (data && typeof data === 'object') {
-			const dataObj = data as Record<string, unknown>;
-			const device = dataObj.device_status;
-			if (device && typeof device === 'object') {
-				const ip = extractIpFromStatus(device as Record<string, unknown>);
-				if (ip) return ip;
-			}
-		}
-
-		const ip = extractIpFromStatus(payload);
-		return ip;
-	} catch {
-		return null;
-	}
-}
-
-function extractIpFromStatus(payload: Record<string, unknown>): string | null {
-	const maybeIp = payload.ip ?? payload.address;
-	if (typeof maybeIp === 'string' && maybeIp.trim()) {
-		return maybeIp.trim();
-	}
-
-	const wifi = (payload.wifi_sta ?? payload.wifi) ?? null;
-	if (wifi && typeof wifi === 'object') {
-		const wifiObj = wifi as Record<string, unknown>;
-		const ip = wifiObj.ip;
-		if (typeof ip === 'string' && ip.trim()) {
-			return ip.trim();
-		}
-	}
-
-	const sys = payload.sys;
-	if (sys && typeof sys === 'object') {
-		const sysObj = sys as Record<string, unknown>;
-		const ip = sysObj.ip ?? sysObj.address;
-		if (typeof ip === 'string' && ip.trim()) {
-			return ip.trim();
-		}
-	}
-
-	return null;
 }
 
 function errorMessage(error: unknown): string {

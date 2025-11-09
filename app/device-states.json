@@ -1,0 +1,26 @@
+{
+  "test2": {
+    "lastCommand": "on",
+    "updatedAt": 1762702105087
+  },
+  "test1": {
+    "lastCommand": "on",
+    "updatedAt": 1762702193383
+  },
+  "test3": {
+    "lastCommand": "on",
+    "updatedAt": 1762702251885
+  },
+  "test6": {
+    "lastCommand": "off",
+    "updatedAt": 1762701866170
+  },
+  "test4": {
+    "lastCommand": "off",
+    "updatedAt": 1762701861973
+  },
+  "test5": {
+    "lastCommand": "off",
+    "updatedAt": 1762701864072
+  }
+}

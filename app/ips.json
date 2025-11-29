@@ -1,5 +1,5 @@
 {
-  "generatedAt": 1762701914164,
+  "generatedAt": 1764416568481,
   "devices": {
     "8cbfea9bc6d0": {
       "id": "8cbfea9bc6d0",
@@ -33,18 +33,18 @@
       "channel": 0,
       "channels_count": 1,
       "mode": "roller",
-      "name": "Screen 031 kort",
+      "name": "Screen 031 Lang",
       "room_id": 1,
       "image": "images/device_images/S3SW-002P16EU.png",
       "cloud_options": {
         "exclude_event_log": false
       },
-      "cloud_online": false,
+      "cloud_online": true,
       "template": "S3SW-002P16EU-roller",
       "mainActionType": null,
       "statusLabelParam": null,
-      "modified": 1750150293,
-      "ip": "10.10.80.110",
+      "modified": 1764250545,
+      "ip": "10.10.80.104",
       "ssid": "TD",
       "name_sync": true
     },
@@ -84,14 +84,16 @@
       "name": "Lamp 6 color parterre",
       "room_id": 7,
       "image": "images/device_images/SHCB-1.png",
-      "modified": 1762188164,
+      "modified": 1763037764,
       "ip": "192.168.68.108",
       "ssid": "TD 01",
       "cloud_online": true,
       "cloud_options": {
         "exclude_event_log": false
       },
-      "name_sync": true
+      "name_sync": true,
+      "appliance_type": 2,
+      "relay_usage": "light"
     },
     "8cbfea9c0ea0": {
       "id": "8cbfea9c0ea0",
@@ -115,6 +117,25 @@
       "mainActionType": null,
       "statusLabelParam": null,
       "ip": "10.10.80.121",
+      "ssid": "TD"
+    },
+    "8cbfea97c9e8_3": {
+      "id": "8cbfea97c9e8_3",
+      "type": "S3SN-0024X",
+      "category": "inputs_reader",
+      "position": 18,
+      "gen": 3,
+      "channel": 3,
+      "channels_count": 4,
+      "mode": "inputs_reader",
+      "name": "4) Hfd Licht remote",
+      "room_id": 6,
+      "image": "images/device_images/S3SN-0024X.png",
+      "cloud_options": {
+        "exclude_event_log": false
+      },
+      "modified": 1763298900,
+      "ip": "10.10.80.107",
       "ssid": "TD"
     },
     "abe9d2": {
@@ -155,7 +176,7 @@
       },
       "jti": "",
       "cloud_online": true,
-      "modified": 1761381268,
+      "modified": 1763966798,
       "name_sync": true,
       "template": "S3SW-002P16EU-relay",
       "mainActionType": null,
@@ -189,19 +210,19 @@
       "id": "3494546aedc6",
       "type": "SHBDUO-1",
       "category": "light",
-      "position": 8,
+      "position": 13,
       "gen": 1,
       "channel": 0,
       "channels_count": 1,
       "mode": "white",
-      "name": "Lamp 3 gang parterre",
+      "name": "Lamp 3 gang 1 ste etage",
       "room_id": 2,
       "image": "images/device_images/SHBDUO-1.png",
       "cloud_options": {
         "exclude_event_log": false
       },
       "jti": "",
-      "modified": 1761122372,
+      "modified": 1763021192,
       "cloud_online": true,
       "ip": "10.10.80.131",
       "ssid": "TD"
@@ -238,18 +259,20 @@
       "channel": 0,
       "channels_count": 1,
       "mode": "white",
-      "name": "Lamp 9 color etage 1",
+      "name": "Lamp 9 color begane (1)",
       "room_id": 7,
       "image": "images/device_images/SHCB-1.png",
       "cloud_options": {
         "exclude_event_log": false
       },
       "jti": "",
-      "modified": 1761218791,
+      "modified": 1763037764,
       "cloud_online": true,
       "name_sync": true,
       "ip": "10.10.80.98",
-      "ssid": "TD"
+      "ssid": "TD",
+      "appliance_type": 2,
+      "relay_usage": "light"
     },
     "3494546e7ff2": {
       "id": "3494546e7ff2",
@@ -263,14 +286,16 @@
       "name": "Lamp 8 color parterre",
       "room_id": 7,
       "image": "images/device_images/SHCB-1.png",
-      "modified": 1761218853,
+      "modified": 1763037764,
       "ip": "192.168.68.107",
       "ssid": "TD 01",
       "cloud_online": true,
       "cloud_options": {
         "exclude_event_log": false
       },
-      "name_sync": true
+      "name_sync": true,
+      "appliance_type": 2,
+      "relay_usage": "light"
     },
     "083af27caf6c_3": {
       "id": "083af27caf6c_3",
@@ -285,7 +310,7 @@
       "room_id": 2,
       "image": "images/device_images/SPSW-004PE16EU.png",
       "jti": "",
-      "modified": 1759214502,
+      "modified": 1763021192,
       "ip": "10.10.80.74",
       "ssid": null,
       "name_sync": true,
@@ -362,7 +387,7 @@
       "template": "SNSW-102P16EU-roller",
       "mainActionType": null,
       "statusLabelParam": null,
-      "modified": 1762340660,
+      "modified": 1764404023,
       "ip": "192.168.33.80",
       "ssid": "ShellyPro4PM-083AF27BA260",
       "name_sync": true,
@@ -388,7 +413,7 @@
       "jti": "",
       "relay_usage": "other",
       "appliance_type": 14,
-      "modified": 1761045236,
+      "modified": 1763021192,
       "cloud_online": true,
       "ip": "192.168.68.103",
       "ssid": "TD 01"
@@ -397,7 +422,7 @@
       "id": "34945479c769",
       "type": "SHBDUO-1",
       "category": "light",
-      "position": 17,
+      "position": 16,
       "gen": 1,
       "channel": 0,
       "channels_count": 1,
@@ -409,7 +434,7 @@
         "exclude_event_log": false
       },
       "jti": "",
-      "modified": 1762187883,
+      "modified": 1763021192,
       "cloud_online": true,
       "ip": "10.10.80.111",
       "ssid": "TD",
@@ -438,7 +463,7 @@
       "image": "images/device_images/SHBDUO-1.png",
       "jti": "",
       "cloud_online": true,
-      "modified": 1761827669,
+      "modified": 1763016763,
       "ip": "10.10.80.113",
       "ssid": "TD",
       "cloud_options": {
@@ -470,19 +495,19 @@
       "id": "3494546e4e37",
       "type": "SHBDUO-1",
       "category": "light",
-      "position": 9,
+      "position": 15,
       "gen": 1,
       "channel": 0,
       "channels_count": 1,
       "mode": "white",
-      "name": "Lamp 4 gang parterre",
+      "name": "Lamp 4 gang 1 ste etage",
       "room_id": 2,
       "image": "images/device_images/SHBDUO-1.png",
       "cloud_options": {
         "exclude_event_log": false
       },
       "jti": "",
-      "modified": 1761065817,
+      "modified": 1763021192,
       "cloud_online": true,
       "ip": "10.10.80.114",
       "ssid": "TD"
@@ -539,7 +564,7 @@
       "id": "34945479c485",
       "type": "SHBDUO-1",
       "category": "light",
-      "position": 14,
+      "position": 10,
       "gen": 1,
       "channel": 0,
       "channels_count": 1,
@@ -551,7 +576,7 @@
         "exclude_event_log": false
       },
       "jti": "",
-      "modified": 1760772885,
+      "modified": 1764230977,
       "cloud_online": true,
       "ip": "10.10.80.96",
       "ssid": "TD"
@@ -635,7 +660,7 @@
       "cloud_options": {
         "exclude_event_log": false
       },
-      "modified": 1760012985,
+      "modified": 1763021192,
       "name_sync": true,
       "cloud_online": true,
       "ip": "10.10.80.104",
@@ -682,7 +707,7 @@
         "exclude_event_log": false
       },
       "cloud_online": true,
-      "modified": 1761219467,
+      "modified": 1764250546,
       "ip": "10.10.80.88",
       "ssid": "TD",
       "template": "S3SW-002P16EU-roller",
@@ -752,7 +777,7 @@
       "cloud_options": {
         "exclude_event_log": false
       },
-      "modified": 1759405925,
+      "modified": 1764250546,
       "cloud_online": true,
       "template": "S3SW-002P16EU-roller",
       "mainActionType": null,
@@ -790,18 +815,20 @@
       "channel": 0,
       "channels_count": 1,
       "mode": "white",
-      "name": "Lamp 8 color etage 1",
+      "name": "Lamp 8 color begane (1)",
       "room_id": 7,
       "image": "images/device_images/SHCB-1.png",
       "cloud_options": {
         "exclude_event_log": false
       },
       "jti": "",
-      "modified": 1761218791,
+      "modified": 1763037764,
       "cloud_online": true,
       "ip": "10.10.80.90",
       "ssid": "TD",
-      "name_sync": true
+      "name_sync": true,
+      "appliance_type": 2,
+      "relay_usage": "light"
     },
     "ecc9ff5fbd64": {
       "id": "ecc9ff5fbd64",
@@ -822,11 +849,30 @@
       "template": "SNSW-102P16EU-roller",
       "mainActionType": null,
       "statusLabelParam": null,
-      "modified": 1759826805,
+      "modified": 1764249490,
       "ip": "10.10.80.119",
       "ssid": "TD",
       "note": "Rommel boven het plafond",
       "name_sync": true
+    },
+    "c0cdd648a088_2": {
+      "id": "c0cdd648a088_2",
+      "type": "SNSN-0D24X",
+      "category": "inputs_reader",
+      "position": 16,
+      "gen": 2,
+      "channel": 2,
+      "channels_count": 4,
+      "mode": "inputs_reader",
+      "name": "3) Alarm ajax",
+      "room_id": 8,
+      "image": "images/device_images/SNSN-0D24X.png",
+      "cloud_options": {
+        "exclude_event_log": false
+      },
+      "modified": 1764063452,
+      "ip": "10.10.80.130",
+      "ssid": "TD"
     },
     "083af27ba260": {
       "id": "083af27ba260",
@@ -870,7 +916,7 @@
       "jti": "",
       "relay_usage": "other",
       "appliance_type": 14,
-      "modified": 1761045236,
+      "modified": 1763021192,
       "cloud_online": true,
       "ip": "192.168.68.101",
       "ssid": "TD 01"
@@ -889,7 +935,7 @@
       "image": "images/device_images/SPSW-201XE16EU.png",
       "jti": "",
       "cloud_online": true,
-      "modified": 1761822221,
+      "modified": 1763636229,
       "ip": "192.168.33.62",
       "ssid": "ShellyPro4PM-083AF27D126C",
       "cloud_options": {
@@ -917,12 +963,12 @@
       "id": "3494546af08c",
       "type": "SHBDUO-1",
       "category": "light",
-      "position": 11,
+      "position": 9,
       "gen": 1,
       "channel": 0,
       "channels_count": 1,
       "mode": "",
-      "name": "Lamp 1 gang part",
+      "name": "Lamp 1 gang 1 ste etage",
       "room_id": 2,
       "image": "images/device_images/SHBDUO-1.png",
       "cloud_options": {
@@ -930,7 +976,7 @@
       },
       "bundle": false,
       "ip": "10.10.80.112",
-      "modified": 1762186906,
+      "modified": 1763021192,
       "cloud_online": true,
       "ssid": "TD"
     },
@@ -947,7 +993,7 @@
       "room_id": 2,
       "image": "images/device_images/SNSW-001X16EU.png",
       "jti": "",
-      "modified": 1761122372,
+      "modified": 1763021192,
       "ip": "10.10.80.82",
       "ssid": "TD",
       "cloud_online": true,
@@ -998,8 +1044,8 @@
       "template": "S3SW-002P16EU-roller",
       "mainActionType": null,
       "statusLabelParam": null,
-      "modified": 1750154518,
-      "ip": "10.10.80.117",
+      "modified": 1764247850,
+      "ip": "10.10.80.133",
       "ssid": "TD"
     },
     "485519ee19de": {
@@ -1018,11 +1064,13 @@
         "exclude_event_log": false
       },
       "jti": "",
-      "modified": 1761218873,
+      "modified": 1763561801,
       "name_sync": true,
       "cloud_online": true,
       "ip": "192.168.68.106",
-      "ssid": "TD 01"
+      "ssid": "TD 01",
+      "appliance_type": 2,
+      "relay_usage": "light"
     },
     "84cca87f0498_2": {
       "id": "84cca87f0498_2",
@@ -1068,6 +1116,25 @@
       "ip": "10.10.80.123",
       "ssid": "TD"
     },
+    "8cbfea97c9e8_2": {
+      "id": "8cbfea97c9e8_2",
+      "type": "S3SN-0024X",
+      "category": "inputs_reader",
+      "position": 17,
+      "gen": 3,
+      "channel": 2,
+      "channels_count": 4,
+      "mode": "inputs_reader",
+      "name": "3) Hfd Licht remote",
+      "room_id": 6,
+      "image": "images/device_images/S3SN-0024X.png",
+      "cloud_options": {
+        "exclude_event_log": false
+      },
+      "modified": 1763298900,
+      "ip": "10.10.80.107",
+      "ssid": "TD"
+    },
     "3494546b08a0": {
       "id": "3494546b08a0",
       "type": "SHCB-1",
@@ -1077,17 +1144,19 @@
       "channel": 0,
       "channels_count": 1,
       "mode": "white",
-      "name": "Lamp 10 color etage 1",
+      "name": "Lamp 10 color begane (1)",
       "room_id": 7,
       "image": "images/device_images/SHCB-1.png",
-      "modified": 1762187871,
+      "modified": 1763039533,
       "ip": "10.10.80.64",
       "ssid": "TD",
       "cloud_online": true,
       "cloud_options": {
         "exclude_event_log": false
       },
-      "name_sync": true
+      "name_sync": true,
+      "appliance_type": 2,
+      "relay_usage": "light"
     },
     "083af27ba26c_1": {
       "id": "083af27ba26c_1",
@@ -1130,7 +1199,7 @@
         "exclude_forgotten_lights": true
       },
       "cloud_online": true,
-      "modified": 1761135616,
+      "modified": 1764249638,
       "template": "SNSW-102P16EU-roller",
       "mainActionType": null,
       "statusLabelParam": null,
@@ -1169,18 +1238,20 @@
       "channel": 0,
       "channels_count": 1,
       "mode": "white",
-      "name": "Lamp 6 color etage 1",
+      "name": "Lamp 6 color begane (1)",
       "room_id": 7,
       "image": "images/device_images/SHCB-1.png",
       "cloud_options": {
         "exclude_event_log": false
       },
       "jti": "",
-      "modified": 1762187411,
+      "modified": 1763037764,
       "cloud_online": true,
       "ip": "10.10.80.67",
       "ssid": "TD",
-      "name_sync": true
+      "name_sync": true,
+      "appliance_type": 2,
+      "relay_usage": "light"
     },
     "30c6f783e5b8_1": {
       "id": "30c6f783e5b8_1",
@@ -1214,7 +1285,7 @@
       "name": "gedenklicht",
       "room_id": 3,
       "image": "images/device_images/SNPL-00112EU.png",
-      "modified": 1761834643,
+      "modified": 1764241064,
       "ip": "10.10.80.102",
       "ssid": "TD",
       "no_room_cons": false,
@@ -1257,14 +1328,16 @@
       "name": "Lamp 10  color parterre",
       "room_id": 7,
       "image": "images/device_images/SHCB-1.png",
-      "modified": 1761218890,
+      "modified": 1763312241,
       "ip": "192.168.68.102",
       "ssid": "TD 01",
       "cloud_online": true,
       "cloud_options": {
         "exclude_event_log": false
       },
-      "name_sync": true
+      "name_sync": true,
+      "appliance_type": 2,
+      "relay_usage": "light"
     },
     "3030f9ed10cc_1": {
       "id": "3030f9ed10cc_1",
@@ -1284,6 +1357,30 @@
       "jti": "",
       "modified": 1736750689,
       "ip": "10.10.80.67",
+      "ssid": "TD"
+    },
+    "4855199d7ac0_101": {
+      "id": "4855199d7ac0_101",
+      "channel": 101,
+      "channels_count": 1,
+      "gen": 2,
+      "room_id": 8,
+      "image": "",
+      "category": "sensor",
+      "mode": "sensor",
+      "component": "temperature:101",
+      "peripheral_type": "temperature",
+      "type": "peripheral-device",
+      "name": "CV aanvoer lbk 2",
+      "cloud_options": {
+        "exclude_event_log": false
+      },
+      "icon": "fas fa-thermometer-three-quarters",
+      "jti": "",
+      "createdAt": 1762944506216,
+      "position": 13,
+      "modified": 1762952944,
+      "ip": "10.10.80.128",
       "ssid": "TD"
     },
     "8cbfea979724": {
@@ -1307,6 +1404,30 @@
       "statusLabelParam": null,
       "modified": 1750154626,
       "ip": "10.10.80.118",
+      "ssid": "TD"
+    },
+    "4855199d7ac0_100": {
+      "id": "4855199d7ac0_100",
+      "channel": 100,
+      "channels_count": 1,
+      "gen": 2,
+      "room_id": 8,
+      "image": "",
+      "category": "sensor",
+      "mode": "sensor",
+      "component": "temperature:100",
+      "peripheral_type": "temperature",
+      "type": "peripheral-device",
+      "name": "CV retour lbk 1",
+      "cloud_options": {
+        "exclude_event_log": false
+      },
+      "icon": "fas fa-thermometer-three-quarters",
+      "jti": "",
+      "createdAt": 1762944438099,
+      "position": 12,
+      "modified": 1762952966,
+      "ip": "10.10.80.128",
       "ssid": "TD"
     },
     "30c922770da8": {
@@ -1370,7 +1491,7 @@
       "cloud_options": {
         "exclude_event_log": false
       },
-      "modified": 1761135693,
+      "modified": 1764249490,
       "cloud_online": true,
       "template": "S3SW-002P16EU-roller",
       "mainActionType": null,
@@ -1383,19 +1504,19 @@
       "id": "3494546b0364",
       "type": "SHBDUO-1",
       "category": "light",
-      "position": 10,
+      "position": 17,
       "gen": 1,
       "channel": 0,
       "channels_count": 1,
       "mode": "white",
-      "name": "Lamp 5 gang parterre",
+      "name": "Lamp 5 gang 1 ste etage",
       "room_id": 2,
       "image": "images/device_images/SHBDUO-1.png",
       "cloud_options": {
         "exclude_event_log": false
       },
       "jti": "",
-      "modified": 1761031470,
+      "modified": 1763039404,
       "cloud_online": true,
       "ip": "10.10.80.126",
       "ssid": "TD"
@@ -1412,8 +1533,8 @@
       "name": "Display",
       "room_id": 2,
       "image": "images/device_images/SAWD-0A1XX10EU1.png",
-      "modified": 1761827126,
-      "ip": "10.10.80.133",
+      "modified": 1764228172,
+      "ip": "10.10.80.125",
       "ssid": "TD",
       "name_sync": true,
       "cloud_online": true,
@@ -1494,7 +1615,7 @@
       "id": "34945479c47e",
       "type": "SHBDUO-1",
       "category": "light",
-      "position": 15,
+      "position": 12,
       "gen": 1,
       "channel": 0,
       "channels_count": 1,
@@ -1506,7 +1627,7 @@
         "exclude_event_log": false
       },
       "jti": "",
-      "modified": 1760772885,
+      "modified": 1763021192,
       "cloud_online": true,
       "ip": "10.10.80.93",
       "ssid": "TD"
@@ -1515,7 +1636,7 @@
       "id": "34945479daee",
       "type": "SHBDUO-1",
       "category": "light",
-      "position": 13,
+      "position": 8,
       "gen": 1,
       "channel": 0,
       "channels_count": 1,
@@ -1527,7 +1648,7 @@
         "exclude_event_log": false
       },
       "jti": "",
-      "modified": 1762183582,
+      "modified": 1763021192,
       "cloud_online": true,
       "ip": "10.10.80.87",
       "ssid": "TD"
@@ -1571,7 +1692,7 @@
       "template": "S3SW-002P16EU-roller",
       "mainActionType": null,
       "statusLabelParam": null,
-      "modified": 1759829696,
+      "modified": 1764246903,
       "name_sync": true,
       "ip": "10.10.80.116",
       "ssid": "TD"
@@ -1591,12 +1712,12 @@
       "cloud_options": {
         "exclude_event_log": false
       },
-      "cloud_online": false,
-      "modified": 1750151121,
+      "cloud_online": true,
+      "modified": 1764250545,
       "template": "S3SW-002P16EU-roller",
       "mainActionType": null,
       "statusLabelParam": null,
-      "ip": "10.10.80.113",
+      "ip": "10.10.80.91",
       "ssid": "TD"
     },
     "30c92276f53c": {
@@ -1618,7 +1739,7 @@
       "template": "SNSW-102P16EU-roller",
       "mainActionType": null,
       "statusLabelParam": null,
-      "modified": 1759828376,
+      "modified": 1764243656,
       "ip": "10.10.80.120",
       "ssid": "TD"
     },
@@ -1634,7 +1755,7 @@
       "name": "Voordeur Hfd PRO 4",
       "room_id": 8,
       "image": "images/device_images/SPSW-004PE16EU.png",
-      "modified": 1761031470,
+      "modified": 1763561828,
       "ip": "192.168.68.100",
       "ssid": null,
       "cloud_online": true,
@@ -1666,7 +1787,7 @@
         "exclude_event_log": false
       },
       "cloud_online": true,
-      "modified": 1758093880,
+      "modified": 1764238302,
       "template": "S3SW-002P16EU-roller",
       "mainActionType": null,
       "statusLabelParam": null,
@@ -1703,18 +1824,20 @@
       "channel": 0,
       "channels_count": 1,
       "mode": "white",
-      "name": "Lamp 7 color etage 1",
+      "name": "Lamp 7 color begane (1)",
       "room_id": 7,
       "image": "images/device_images/SHCB-1.png",
       "cloud_options": {
         "exclude_event_log": false
       },
       "jti": "",
-      "modified": 1761218791,
+      "modified": 1763037764,
       "cloud_online": true,
       "name_sync": true,
       "ip": "10.10.80.94",
-      "ssid": "TD"
+      "ssid": "TD",
+      "appliance_type": 2,
+      "relay_usage": "light"
     },
     "84cca87f0498_1": {
       "id": "84cca87f0498_1",
@@ -1752,7 +1875,7 @@
         "exclude_event_log": false
       },
       "cloud_online": true,
-      "modified": 1761142096,
+      "modified": 1764250546,
       "template": "S3SW-002P16EU-roller",
       "mainActionType": null,
       "statusLabelParam": null,
@@ -1760,20 +1883,39 @@
       "ssid": "TD",
       "name_sync": true
     },
+    "c0cdd648a088_3": {
+      "id": "c0cdd648a088_3",
+      "type": "SNSN-0D24X",
+      "category": "inputs_reader",
+      "position": 17,
+      "gen": 2,
+      "channel": 3,
+      "channels_count": 4,
+      "mode": "inputs_reader",
+      "name": "4) Alarm ajax",
+      "room_id": 8,
+      "image": "images/device_images/SNSN-0D24X.png",
+      "cloud_options": {
+        "exclude_event_log": false
+      },
+      "modified": 1764063452,
+      "ip": "10.10.80.130",
+      "ssid": "TD"
+    },
     "3494546bd352": {
       "id": "3494546bd352",
       "type": "SHBDUO-1",
       "category": "light",
-      "position": 12,
+      "position": 11,
       "gen": 1,
       "channel": 0,
       "channels_count": 1,
       "mode": "white",
-      "name": "Lamp 2 gang partere",
+      "name": "Lamp 2 gang 1 ste etage",
       "room_id": 2,
       "image": "images/device_images/SHBDUO-1.png",
       "jti": "",
-      "modified": 1762188164,
+      "modified": 1763021192,
       "ip": "10.10.80.129",
       "ssid": "TD",
       "cloud_online": true,
@@ -1827,15 +1969,15 @@
       "channel": 0,
       "channels_count": 1,
       "mode": "roller",
-      "name": "Screen 031 Lang",
+      "name": "Screen 031 kort",
       "room_id": 1,
       "image": "images/device_images/S3SW-002P16EU.png",
       "cloud_options": {
         "exclude_event_log": false
       },
-      "cloud_online": false,
-      "modified": 1750150293,
-      "ip": "10.10.80.111",
+      "cloud_online": true,
+      "modified": 1764250546,
+      "ip": "10.10.80.134",
       "ssid": "TD",
       "template": "S3SW-002P16EU-roller",
       "mainActionType": null,
@@ -1885,13 +2027,13 @@
       "channel": 0,
       "channels_count": 1,
       "mode": "relay",
-      "name": "Garderobe",
+      "name": "Garderobe NB",
       "room_id": 5,
       "image": "images/device_images/SNSW-001X16EU.png",
       "cloud_options": {
         "exclude_event_log": false
       },
-      "modified": 1762180031,
+      "modified": 1764074636,
       "ip": "10.10.80.127",
       "ssid": "TD",
       "cloud_online": true,
@@ -1960,12 +2102,32 @@
         "exclude_forgotten_lights": true
       },
       "cloud_online": true,
-      "modified": 1761135648,
+      "modified": 1764249838,
       "ip": "10.10.80.85",
       "ssid": "TD",
       "name_sync": true,
       "appliance_type": 2,
       "relay_usage": "light"
+    },
+    "8cbfea97c9e8": {
+      "id": "8cbfea97c9e8",
+      "type": "S3SN-0024X",
+      "category": "inputs_reader",
+      "position": 15,
+      "gen": 3,
+      "channel": 0,
+      "channels_count": 4,
+      "mode": "inputs_reader",
+      "name": "Hfd Licht remote",
+      "room_id": 6,
+      "image": "images/device_images/S3SN-0024X.png",
+      "cloud_options": {
+        "exclude_event_log": false
+      },
+      "modified": 1763299417,
+      "ip": "10.10.80.107",
+      "ssid": "TD",
+      "cloud_online": true
     },
     "08b61fd8993c": {
       "id": "08b61fd8993c",
@@ -1979,7 +2141,7 @@
       "name": "Licht gang links part 011",
       "room_id": 2,
       "image": "images/device_images/SNSW-001X16EU.png",
-      "modified": 1761665921,
+      "modified": 1763021192,
       "ip": "192.168.68.104",
       "ssid": "TD 01",
       "cloud_online": true,
@@ -2025,7 +2187,7 @@
         "exclude_event_log": false
       },
       "cloud_online": true,
-      "modified": 1758101697,
+      "modified": 1764250545,
       "name_sync": true,
       "template": "S3SW-002P16EU-roller",
       "mainActionType": null,
@@ -2054,6 +2216,26 @@
       "ip": "10.10.80.89",
       "ssid": "TD"
     },
+    "c0cdd648a088": {
+      "id": "c0cdd648a088",
+      "type": "SNSN-0D24X",
+      "category": "inputs_reader",
+      "position": 14,
+      "gen": 2,
+      "channel": 0,
+      "channels_count": 4,
+      "mode": "inputs_reader",
+      "name": "Alarm ajax",
+      "room_id": 8,
+      "image": "images/device_images/SNSN-0D24X.png",
+      "cloud_options": {
+        "exclude_event_log": false
+      },
+      "modified": 1764068062,
+      "ip": "10.10.80.130",
+      "ssid": "TD",
+      "cloud_online": true
+    },
     "8cbfea9c8a18": {
       "id": "8cbfea9c8a18",
       "type": "S3SW-002P16EU",
@@ -2069,12 +2251,12 @@
       "cloud_options": {
         "exclude_event_log": false
       },
-      "modified": 1750151058,
-      "cloud_online": false,
+      "modified": 1764251068,
+      "cloud_online": true,
       "template": "S3SW-002P16EU-roller",
       "mainActionType": null,
       "statusLabelParam": null,
-      "ip": "10.10.80.112",
+      "ip": "10.10.80.135",
       "ssid": "TD",
       "name_sync": true
     },
@@ -2194,6 +2376,26 @@
       "fw": "1.3.3",
       "ssid": null
     },
+    "4855199d7ac0": {
+      "id": "4855199d7ac0",
+      "type": "SNSW-001P16EU",
+      "category": "relay",
+      "position": 11,
+      "gen": 2,
+      "channel": 0,
+      "channels_count": 1,
+      "mode": "relay",
+      "name": "Cv Lbk",
+      "room_id": 8,
+      "image": "images/device_images/SNSW-001P16EU.png",
+      "cloud_options": {
+        "exclude_event_log": false
+      },
+      "modified": 1762945243,
+      "cloud_online": true,
+      "ip": "10.10.80.128",
+      "ssid": "TD"
+    },
     "083af27caf6c_2": {
       "id": "083af27caf6c_2",
       "type": "SPSW-004PE16EU",
@@ -2232,10 +2434,31 @@
       },
       "jti": "",
       "backgroundColor": "",
-      "modified": 1761218825,
+      "modified": 1763037764,
       "cloud_online": true,
       "name_sync": true,
       "ip": "10.10.80.115",
+      "ssid": "TD",
+      "appliance_type": 2,
+      "relay_usage": "light"
+    },
+    "c0cdd648a088_1": {
+      "id": "c0cdd648a088_1",
+      "type": "SNSN-0D24X",
+      "category": "inputs_reader",
+      "position": 15,
+      "gen": 2,
+      "channel": 1,
+      "channels_count": 4,
+      "mode": "inputs_reader",
+      "name": "2) Alarm ajax",
+      "room_id": 8,
+      "image": "images/device_images/SNSN-0D24X.png",
+      "cloud_options": {
+        "exclude_event_log": false
+      },
+      "modified": 1764063452,
+      "ip": "10.10.80.130",
       "ssid": "TD"
     },
     "30c92273e258": {
@@ -2305,6 +2528,25 @@
       "name_sync": true,
       "fw": "1.3.3",
       "ssid": null
+    },
+    "8cbfea97c9e8_1": {
+      "id": "8cbfea97c9e8_1",
+      "type": "S3SN-0024X",
+      "category": "inputs_reader",
+      "position": 16,
+      "gen": 3,
+      "channel": 1,
+      "channels_count": 4,
+      "mode": "inputs_reader",
+      "name": "2) Hfd Licht remote",
+      "room_id": 6,
+      "image": "images/device_images/S3SN-0024X.png",
+      "cloud_options": {
+        "exclude_event_log": false
+      },
+      "modified": 1763298900,
+      "ip": "10.10.80.107",
+      "ssid": "TD"
     },
     "ecc9ff5ef124": {
       "id": "ecc9ff5ef124",
@@ -2376,7 +2618,7 @@
       "ip": "10.10.80.65",
       "cloud_online": true,
       "fw": "1.3.2",
-      "modified": 1758372106,
+      "modified": 1764242181,
       "name_sync": true,
       "shared_by_me": true,
       "ssid": null
@@ -2428,7 +2670,7 @@
       "id": "98cdac2c844e",
       "type": "SHBDUO-1",
       "category": "light",
-      "position": 16,
+      "position": 14,
       "gen": 1,
       "channel": 0,
       "channels_count": 1,
@@ -2440,7 +2682,7 @@
         "exclude_event_log": false
       },
       "jti": "",
-      "modified": 1759214502,
+      "modified": 1763021192,
       "cloud_online": true,
       "ip": "10.10.80.95",
       "ssid": "TD"

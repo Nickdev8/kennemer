@@ -64,6 +64,7 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
   let patternSequence: number[] = [];
   let patternActive = false;
   let patternStatus: 'idle' | 'success' | 'error' = 'idle';
+  let activePointerId: number | null = null;
 
   const commandOrder: DeviceCommandKey[] = ['on', 'off'];
 
@@ -209,25 +210,32 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
     cacheMessage = '';
   }
 
+  function addNodeToPattern(node: number) {
+    if (!patternSequence.includes(node)) {
+      patternSequence = [...patternSequence, node];
+    }
+  }
+
   function startPattern(node: number, event: PointerEvent | TouchEvent) {
     if (!advancedPatternConfigured) {
       advancedAccessError = 'Stel PUBLIC_ADVANCED_PATTERN in je .env bestand in.';
       return;
     }
     event.preventDefault();
+    if ('pointerId' in event) {
+      activePointerId = event.pointerId;
+      (event.target as HTMLElement | null)?.setPointerCapture?.(event.pointerId);
+    }
     patternActive = true;
     patternStatus = 'idle';
-    if (!patternSequence.includes(node)) {
-      patternSequence = [...patternSequence, node];
-    }
+    addNodeToPattern(node);
     advancedAccessError = '';
   }
 
   function extendPattern(node: number, event: PointerEvent | TouchEvent) {
     if (!patternActive) return;
     event.preventDefault();
-    if (patternSequence.includes(node)) return;
-    patternSequence = [...patternSequence, node];
+    addNodeToPattern(node);
   }
 
   function stopPattern(event?: Event) {
@@ -269,6 +277,7 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
     patternActive = false;
     patternSequence = [];
     patternStatus = 'idle';
+    activePointerId = null;
   }
 
   async function clearDeviceCache() {
@@ -445,10 +454,22 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
       {/if}
       <div
         class="space-y-6"
-        on:pointerup={stopPattern}
+        on:pointerup={(event) => {
+          stopPattern(event);
+          activePointerId = null;
+        }}
         on:mouseup={stopPattern}
         on:touchend|preventDefault={stopPattern}
         on:pointercancel={cancelPattern}
+        on:pointermove={(event) => {
+          if (!patternActive) return;
+          if (activePointerId !== null && event.pointerId !== activePointerId) return;
+          const target = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null;
+          const nodeValue = target?.dataset?.node;
+          if (nodeValue !== undefined) {
+            extendPattern(Number(nodeValue), event);
+          }
+        }}
       >
         <div class="grid select-none grid-cols-3 justify-items-center gap-6">
           {#each patternNodes as node (node)}
@@ -466,6 +487,7 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
                   ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-200'
                   : 'bg-white text-slate-500'
               } ${node === 0 ? 'col-span-3 justify-self-center' : ''}`}
+              data-node={node}
               on:pointerdown={(event) => startPattern(node, event)}
               on:pointerenter={(event) => extendPattern(node, event)}
               on:touchstart|preventDefault={(event) => startPattern(node, event)}

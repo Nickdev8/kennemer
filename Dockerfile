@@ -19,6 +19,7 @@ RUN mkdir -p /certs \
 		-subj "/CN=localhost" \
 		-addext "subjectAltName=DNS:localhost,IP:127.0.0.1" \
 	&& chown -R nodeuser:nodeuser /certs
+RUN chown -R nodeuser:nodeuser /app
 RUN setcap 'cap_net_bind_service=+ep' /usr/local/bin/node
 USER nodeuser
 ENV HOST=0.0.0.0

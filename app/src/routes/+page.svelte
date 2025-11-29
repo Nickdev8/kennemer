@@ -240,7 +240,6 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
 
   function stopPattern(event?: Event) {
     if (!patternActive) return;
-    event?.preventDefault();
     patternActive = false;
   }
 
@@ -459,7 +458,6 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
           activePointerId = null;
         }}
         on:mouseup={stopPattern}
-        on:touchend|preventDefault={stopPattern}
         on:pointercancel={cancelPattern}
         on:pointermove={(event) => {
           if (!patternActive) return;
@@ -490,8 +488,6 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
               data-node={node}
               on:pointerdown={(event) => startPattern(node, event)}
               on:pointerenter={(event) => extendPattern(node, event)}
-              on:touchstart|preventDefault={(event) => startPattern(node, event)}
-              on:touchmove|preventDefault={(event) => extendPattern(node, event)}
             >
               <span class="text-lg font-semibold">{node}</span>
               {#if activeIndex >= 0}

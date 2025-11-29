@@ -3,7 +3,7 @@ import type { ShellyDevice } from './schema';
 export const devices: ShellyDevice[] = [
 	{
 		id: 'test1',
-		label: 'Nick Test Scene',
+		label: 'Test Scene 1',
 		group: 'Scene',
 		commands: {
 			on: {
@@ -28,7 +28,7 @@ export const devices: ShellyDevice[] = [
 	},
 		{
 		id: 'test2',
-		label: 'Nick Test Scene',
+		label: 'Test Scene 2',
 		group: 'Scene',
 		commands: {
 			on: {
@@ -53,7 +53,7 @@ export const devices: ShellyDevice[] = [
 	},
 		{
 		id: 'test3',
-		label: 'Nick Test Scene',
+		label: 'Test Scene 3',
 		group: 'Scene',
 		commands: {
 			on: {
@@ -78,7 +78,7 @@ export const devices: ShellyDevice[] = [
 	},
 		{
 		id: 'test4',
-		label: 'Nick Test Scene',
+		label: 'Test Scene 4',
 		group: 'Scene',
 		commands: {
 			on: {
@@ -103,7 +103,7 @@ export const devices: ShellyDevice[] = [
 	},
 		{
 		id: 'test5',
-		label: 'Nick Test Scene',
+		label: 'Test Scene 5',
 		group: 'Scene',
 		commands: {
 			on: {
@@ -128,7 +128,7 @@ export const devices: ShellyDevice[] = [
 	},
 		{
 		id: 'test6',
-		label: 'Nick Test Scene',
+		label: 'Test Scene 6',
 		group: 'Scene',
 		commands: {
 			on: {

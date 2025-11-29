@@ -12,15 +12,15 @@
     "updatedAt": 1762702251885
   },
   "test6": {
-    "lastCommand": "off",
-    "updatedAt": 1762701866170
+    "lastCommand": "on",
+    "updatedAt": 1762703059417
   },
   "test4": {
-    "lastCommand": "off",
-    "updatedAt": 1762701861973
+    "lastCommand": "on",
+    "updatedAt": 1762703054947
   },
   "test5": {
-    "lastCommand": "off",
-    "updatedAt": 1762701864072
+    "lastCommand": "on",
+    "updatedAt": 1762703056170
   }
 }

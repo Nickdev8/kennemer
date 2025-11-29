@@ -11,8 +11,8 @@ services:
       PORT: "80"
       HOST: "0.0.0.0"
       HTTPS_PORT: "443" # optional: remove or change if you don't need TLS
-      # HTTPS_KEY_PATH: /certs/server.key
-      # HTTPS_CERT_PATH: /certs/server.crt
+      HTTPS_KEY_PATH: /certs/server.key
+      HTTPS_CERT_PATH: /certs/server.crt
       # HTTPS_CA_PATH: /certs/ca.pem
       # HTTPS_PASSPHRASE: example-passphrase
     ports:
@@ -21,7 +21,7 @@ services:
     working_dir: /app
     env_file:
       - ./app/.env
-    # volumes:
+    # volumes: # uncomment to mount your own TLS certs over the baked-in self-signed ones
     #   - ./certs/server.key:/certs/server.key:ro
     #   - ./certs/server.crt:/certs/server.crt:ro
     #   - ./certs/ca.pem:/certs/ca.pem:ro

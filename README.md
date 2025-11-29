@@ -60,3 +60,7 @@ Kennemer is a SvelteKit control panel for the school's shared Shelly-powered dev
 - Override `HTTPS_PORT` (default `443`) and `HTTPS_HOST` if you need different bindings.
 - Optional: set `HTTPS_CA_PATH` for custom chains and `HTTPS_PASSPHRASE` if your key is encrypted.
 - When the variables are unset the server logs that HTTPS is disabled and only HTTP will be exposed.
+
+#### Docker with HTTPS
+- The Docker image now bakes in a self-signed cert at `/certs/server.crt` + `/certs/server.key` and the compose file points the server at it, so `docker compose up --build` exposes both `http://localhost` and `https://localhost` (browser will warn because the cert is self-signed).
+- Replace the baked cert with your own by uncommenting the `certs` volume mounts in `docker-compose.yml` and dropping your key/cert files in `./certs` (or point `HTTPS_KEY_PATH`/`HTTPS_CERT_PATH` at another mounted path).

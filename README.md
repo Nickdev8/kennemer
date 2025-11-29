@@ -13,7 +13,7 @@ Kennemer is a SvelteKit control panel for the school's shared Shelly-powered dev
 ### Highlights
 - Real-time Shelly relay status with aggressive polling right after a command succeeds.
 - Dual cloud/LAN command paths with automatic fallback plus caching and rate-limit handling.
-- Advanced panel that unlocks with an `PUBLIC_ADVANCED_PIN`, keeping sensitive toggles out of sight.
+- Advanced panel that unlocks with a draw pattern (`PUBLIC_ADVANCED_PATTERN`, falls back to `PUBLIC_ADVANCED_PIN`), keeping sensitive toggles out of sight.
 - Optional device simulation (`SHELLY_SIMULATE_DEVICES=1`) so you can develop without touching real hardware.
 
 ### Tech Stack
@@ -34,7 +34,7 @@ Kennemer is a SvelteKit control panel for the school's shared Shelly-powered dev
    SHELLY_SIMULATE_DEVICES=1       # set to 0 to talk to the real hardware
    USE_LAN=0                       # turn on to prefer LAN; falls back to cloud if needed
    SHELLY_MAX_API_CALLS=3
-   PUBLIC_ADVANCED_PIN=1234
+   PUBLIC_ADVANCED_PATTERN=1-2-3-6 # digits 1-9 in the order they should be connected
    PUBLIC_COMPACT_WATTAGE=0        # set to 1 to show a compact wattage summary bar
    PUBLIC_DISABLE_WATTAGE=0        # set to 1 to hide wattage completely
    # HTTPS_KEY_PATH=/absolute/path/to/server.key

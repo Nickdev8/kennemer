@@ -26,8 +26,15 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
 
   const wattageDisabled = readBooleanFlag(publicEnv.PUBLIC_DISABLE_WATTAGE);
 
-  const expectedAdvancedPin = (publicEnv.PUBLIC_ADVANCED_PIN ?? '').trim();
-  const advancedPinConfigured = expectedAdvancedPin.length > 0;
+  const expectedAdvancedPattern = (
+    publicEnv.PUBLIC_ADVANCED_PATTERN ??
+    publicEnv.PUBLIC_ADVANCED_PIN ??
+    ''
+  )
+    .replace(/[^0-9]/g, '')
+    .trim();
+  const advancedPatternConfigured = expectedAdvancedPattern.length > 0;
+  const patternNodes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
 
   export let data: PageData;
 
@@ -53,8 +60,10 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
   let showAdvancedPrompt = false;
   let showAdvancedPanel = false;
   let advancedUnlocked = false;
-  let advancedPinInput = '';
   let advancedAccessError = '';
+  let patternSequence: number[] = [];
+  let patternActive = false;
+  let patternStatus: 'idle' | 'success' | 'error' = 'idle';
 
   const commandOrder: DeviceCommandKey[] = ['on', 'off'];
 
@@ -184,14 +193,14 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
       showAdvancedPanel = true;
       return;
     }
-    advancedPinInput = '';
     advancedAccessError = '';
+    cancelPattern();
     showAdvancedPrompt = true;
   }
 
   function closeAdvancedPrompt() {
     showAdvancedPrompt = false;
-    advancedPinInput = '';
+    cancelPattern();
     advancedAccessError = '';
   }
 
@@ -200,26 +209,66 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
     cacheMessage = '';
   }
 
-  function submitAdvancedPin() {
-    const submitted = advancedPinInput.trim();
-    if (!advancedPinConfigured) {
-      advancedAccessError = 'Stel PUBLIC_ADVANCED_PIN in je .env bestand in.';
+  function startPattern(node: number, event: PointerEvent | TouchEvent) {
+    if (!advancedPatternConfigured) {
+      advancedAccessError = 'Stel PUBLIC_ADVANCED_PATTERN in je .env bestand in.';
       return;
     }
-    if (submitted === expectedAdvancedPin) {
+    event.preventDefault();
+    patternActive = true;
+    patternStatus = 'idle';
+    if (!patternSequence.includes(node)) {
+      patternSequence = [...patternSequence, node];
+    }
+    advancedAccessError = '';
+  }
+
+  function extendPattern(node: number, event: PointerEvent | TouchEvent) {
+    if (!patternActive) return;
+    event.preventDefault();
+    if (patternSequence.includes(node)) return;
+    patternSequence = [...patternSequence, node];
+  }
+
+  function stopPattern(event?: Event) {
+    if (!patternActive) return;
+    event?.preventDefault();
+    patternActive = false;
+  }
+
+  function submitPattern(event?: Event) {
+    event?.preventDefault();
+    if (patternSequence.length === 0) return;
+
+    if (!advancedPatternConfigured) {
+      advancedAccessError = 'Stel PUBLIC_ADVANCED_PATTERN in je .env bestand in.';
+      patternSequence = [];
+      return;
+    }
+
+    const submitted = patternSequence.join('');
+    patternActive = false;
+
+    if (submitted === expectedAdvancedPattern) {
       advancedUnlocked = true;
       showAdvancedPrompt = false;
-      advancedPinInput = '';
       advancedAccessError = '';
+      patternStatus = 'success';
       showAdvancedPanel = true;
     } else {
-      advancedAccessError = 'Onjuiste pincode. Probeer het opnieuw.';
+      patternStatus = 'error';
+      advancedAccessError = 'Onjuist patroon. Probeer het opnieuw.';
+      setTimeout(() => {
+        patternStatus = 'idle';
+      }, 600);
     }
   }
 
-  function handleAdvancedSubmit(event: Event) {
-    event.preventDefault();
-    submitAdvancedPin();
+  function cancelPattern(event?: Event) {
+    event?.preventDefault();
+    patternActive = false;
+    patternSequence = [];
+    patternStatus = 'idle';
   }
 
   async function clearDeviceCache() {
@@ -377,14 +426,16 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
 
 {#if showAdvancedPrompt}
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 px-4">
-    <div class="w-full max-w-sm space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+    <div class="w-full max-w-md space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
       <div class="space-y-1">
-        <h2 class="text-lg font-semibold text-slate-800">Pincode vereist</h2>
-        <p class="text-sm text-slate-600">Voer de pincode voor geavanceerde bediening in.</p>
+        <h2 class="text-lg font-semibold text-slate-800">Patroon vereist</h2>
+        <p class="text-sm text-slate-600">
+          Verbind het patroon om geavanceerde bediening te ontgrendelen.
+        </p>
       </div>
-      {#if !advancedPinConfigured}
+      {#if !advancedPatternConfigured}
         <p class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-amber-800">
-          Stel PUBLIC_ADVANCED_PIN in je .env bestand in om toegang te krijgen.
+          Stel PUBLIC_ADVANCED_PATTERN in je .env bestand in om toegang te krijgen.
         </p>
       {/if}
       {#if advancedAccessError}
@@ -392,15 +443,43 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
           {advancedAccessError}
         </p>
       {/if}
-      <form class="space-y-4" on:submit={handleAdvancedSubmit}>
-        <input
-          type="password"
-          class="w-full rounded-xl border border-slate-300 px-4 py-3 text-base tracking-wide text-slate-800 focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200"
-          placeholder="Pincode"
-          bind:value={advancedPinInput}
-          disabled={!advancedPinConfigured}
-          autocomplete="one-time-code"
-        />
+      <div
+        class="space-y-6"
+        on:pointerup={stopPattern}
+        on:mouseup={stopPattern}
+        on:touchend|preventDefault={stopPattern}
+        on:pointercancel={cancelPattern}
+      >
+        <div class="grid select-none grid-cols-3 justify-items-center gap-6">
+          {#each patternNodes as node (node)}
+            {@const activeIndex = patternSequence.indexOf(node)}
+            <button
+              type="button"
+              class={`relative flex h-20 w-20 items-center justify-center rounded-full border-2 transition ${
+                patternStatus === 'error'
+                  ? 'border-rose-400'
+                  : patternStatus === 'success'
+                    ? 'border-emerald-400'
+                    : 'border-slate-300'
+              } ${
+                activeIndex >= 0
+                  ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-200'
+                  : 'bg-white text-slate-500'
+              } ${node === 0 ? 'col-span-3 justify-self-center' : ''}`}
+              on:pointerdown={(event) => startPattern(node, event)}
+              on:pointerenter={(event) => extendPattern(node, event)}
+              on:touchstart|preventDefault={(event) => startPattern(node, event)}
+              on:touchmove|preventDefault={(event) => extendPattern(node, event)}
+            >
+              <span class="text-lg font-semibold">{node}</span>
+              {#if activeIndex >= 0}
+                <span class="pointer-events-none absolute -right-2 -top-2 flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs font-bold text-emerald-600 shadow-md shadow-emerald-100">
+                  {activeIndex + 1}
+                </span>
+              {/if}
+            </button>
+          {/each}
+        </div>
         <div class="flex items-center justify-between gap-3">
           <button
             type="button"
@@ -409,15 +488,26 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
           >
             Annuleren
           </button>
-          <button
-            type="submit"
-            class="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold tracking-wide text-white transition-colors duration-150 ease-out hover:bg-slate-900 disabled:opacity-60"
-            disabled={!advancedPinConfigured}
-          >
-            Ontgrendel
-          </button>
+          <div class="flex items-center gap-3">
+            <button
+              type="button"
+              class="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-60"
+              on:click={cancelPattern}
+              disabled={patternSequence.length === 0}
+            >
+              Reset
+            </button>
+            <button
+              type="button"
+              class="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold tracking-wide text-white transition-colors duration-150 ease-out hover:bg-slate-900 disabled:opacity-60"
+              on:click={submitPattern}
+              disabled={!advancedPatternConfigured || patternSequence.length === 0}
+            >
+              Ontgrendel
+            </button>
+          </div>
         </div>
-      </form>
+      </div>
     </div>
   </div>
 {/if}

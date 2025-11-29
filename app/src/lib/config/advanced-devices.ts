@@ -4,8 +4,8 @@ import type { ShellyDevice } from './schema';
 export const advancedDevices: ShellyDevice[] = [
 	// Example:
 	{
-		id: 'server-rack',
-		label: 'Server Rack Power',
+		id: 'advenced 1',
+		label: 'Example geavanceerd 1',
 		group: 'Advanced',
 		commands: {
 			on: { label: 'Power On', cloud: { endpoint: 'https://example.net/device/on' } },

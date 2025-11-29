@@ -65,11 +65,38 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
   let patternActive = false;
   let patternStatus: 'idle' | 'success' | 'error' = 'idle';
   let activePointerId: number | null = null;
+  let advancedIdleTimeout: ReturnType<typeof setTimeout> | null = null;
 
   const commandOrder: DeviceCommandKey[] = ['on', 'off'];
 
   const commandKey = (deviceId: string, command: DeviceCommandKey) => `${deviceId}:${command}`;
   const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+  function clearAdvancedIdleTimer() {
+    if (advancedIdleTimeout) {
+      clearTimeout(advancedIdleTimeout);
+      advancedIdleTimeout = null;
+    }
+  }
+
+  function startAdvancedIdleTimer(mode: 'prompt' | 'panel') {
+    clearAdvancedIdleTimer();
+    advancedIdleTimeout = setTimeout(() => {
+      if (mode === 'prompt' && showAdvancedPrompt) {
+        closeAdvancedPrompt();
+      } else if (mode === 'panel' && showAdvancedPanel) {
+        closeAdvancedPanel();
+      }
+    }, 10000);
+  }
+
+  function markAdvancedActivity() {
+    if (showAdvancedPanel) {
+      startAdvancedIdleTimer('panel');
+    } else if (showAdvancedPrompt) {
+      startAdvancedIdleTimer('prompt');
+    }
+  }
 
   async function refreshWattage(forceRefresh = false) {
     if (wattageDisabled) {
@@ -135,13 +162,35 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
     return config.label ?? (command === 'on' ? 'On' : 'Off');
   }
 
-  async function handlePress(deviceId: string, command: DeviceCommandKey): Promise<void> {
+  type PressOptions = { suppressRefresh?: boolean };
+
+  let wattageRefreshTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  function requestWattageRefresh() {
+    if (wattageDisabled) return;
+    if (wattageRefreshTimeout) clearTimeout(wattageRefreshTimeout);
+    wattageRefreshTimeout = setTimeout(() => {
+      wattageRefreshTimeout = null;
+      refreshWattage(true);
+    }, 150);
+  }
+
+  async function handlePress(
+    deviceId: string,
+    command: DeviceCommandKey,
+    options: PressOptions = {}
+  ): Promise<void> {
     const key = commandKey(deviceId, command);
     loadingCommandKey = key;
     errorMsg = '';
+    let succeeded = false;
     try {
       await triggerDeviceCommand(deviceId, command);
       setDeviceState(deviceId, command);
+      succeeded = true;
+      if (advancedUnlocked && showAdvancedPanel) {
+        markAdvancedActivity();
+      }
     } catch (err) {
       const error = err as Error & { code?: string };
       if (error?.code === 'RATE_LIMIT') {
@@ -151,14 +200,18 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
       errorMsg = error instanceof Error ? error.message : 'Unknown error';
     } finally {
       loadingCommandKey = null;
+      if (succeeded && !options.suppressRefresh) {
+        requestWattageRefresh();
+      }
     }
   }
 
   async function handleBulkCommand(command: DeviceCommandKey) {
     for (const device of primaryDevices) {
-      await handlePress(device.id, command);
+      await handlePress(device.id, command, { suppressRefresh: true });
       await sleep(50);
     }
+    requestWattageRefresh();
   }
 
   function setDeviceState(deviceId: string, command: DeviceCommandKey) {
@@ -192,28 +245,36 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
     cacheMessage = '';
     if (advancedUnlocked) {
       showAdvancedPanel = true;
+      markAdvancedActivity();
       return;
     }
     advancedAccessError = '';
     cancelPattern();
     showAdvancedPrompt = true;
+    markAdvancedActivity();
   }
 
   function closeAdvancedPrompt() {
     showAdvancedPrompt = false;
     cancelPattern();
     advancedAccessError = '';
+    clearAdvancedIdleTimer();
   }
 
   function closeAdvancedPanel() {
     showAdvancedPanel = false;
+    cancelPattern();
+    advancedAccessError = '';
+    advancedUnlocked = false;
     cacheMessage = '';
+    clearAdvancedIdleTimer();
   }
 
   function addNodeToPattern(node: number) {
     if (!patternSequence.includes(node)) {
       patternSequence = [...patternSequence, node];
     }
+    markAdvancedActivity();
   }
 
   function startPattern(node: number, event: PointerEvent | TouchEvent) {
@@ -230,12 +291,14 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
     patternStatus = 'idle';
     addNodeToPattern(node);
     advancedAccessError = '';
+    markAdvancedActivity();
   }
 
   function extendPattern(node: number, event: PointerEvent | TouchEvent) {
     if (!patternActive) return;
     event.preventDefault();
     addNodeToPattern(node);
+    markAdvancedActivity();
   }
 
   function stopPattern(event?: Event) {
@@ -262,6 +325,7 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
       advancedAccessError = '';
       patternStatus = 'success';
       showAdvancedPanel = true;
+      markAdvancedActivity();
     } else {
       patternStatus = 'error';
       advancedAccessError = 'Onjuist patroon. Probeer het opnieuw.';
@@ -277,6 +341,7 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
     patternSequence = [];
     patternStatus = 'idle';
     activePointerId = null;
+    markAdvancedActivity();
   }
 
   async function clearDeviceCache() {
@@ -316,6 +381,10 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
     if (typeof window !== 'undefined') {
       window.removeEventListener('contextmenu', preventContextMenu);
     }
+    if (wattageRefreshTimeout) {
+      clearTimeout(wattageRefreshTimeout);
+    }
+    clearAdvancedIdleTimer();
   });
 </script>
 
@@ -433,8 +502,16 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
 </main>
 
 {#if showAdvancedPrompt}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 px-4">
-    <div class="w-full max-w-md space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 px-4"
+    tabindex="-1"
+    on:click={closeAdvancedPrompt}
+    on:keydown={markAdvancedActivity}
+  >
+    <div
+      class="w-full max-w-md space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
+      on:click|stopPropagation
+    >
       <div class="space-y-1">
         <h2 class="text-lg font-semibold text-slate-800">Patroon vereist</h2>
         <p class="text-sm text-slate-600">
@@ -531,8 +608,17 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
 {/if}
 
 {#if advancedUnlocked && showAdvancedPanel}
-  <div class="fixed inset-0 z-40 flex flex-col bg-slate-900/80 px-4 py-6 sm:px-8">
-    <div class="relative mx-auto flex w-full max-w-5xl flex-1 flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white/95 shadow-xl">
+  <div
+    class="fixed inset-0 z-40 flex flex-col bg-slate-900/80 px-4 py-6 sm:px-8"
+    on:click={closeAdvancedPanel}
+    on:pointerdown={markAdvancedActivity}
+    on:keydown={markAdvancedActivity}
+    tabindex="-1"
+  >
+    <div
+      class="relative mx-auto flex w-full max-w-5xl flex-1 flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white/95 shadow-xl"
+      on:click|stopPropagation
+    >
       <header class="flex flex-col gap-4 border-b border-slate-200 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div class="space-y-1">
           <h2 class="text-2xl font-semibold tracking-tight text-slate-900">Advanced Controls</h2>

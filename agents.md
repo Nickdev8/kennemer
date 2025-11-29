@@ -1,14 +1,16 @@
 # Codex Agent Notes
 
 ## Project Overview
-- Simple SvelteKit dashboard (frontend + server endpoints) controlling Shelly lighting/screen devices for a school kiosk.
+- SvelteKit dashboard (frontend + server endpoints) controlling Shelly lighting/screen devices for a school kiosk.
 - Runs on Odroid inside Docker; local touchscreen in kiosk mode.
-- Primary controls: 8 buttons triggering Shelly HTTP RPC calls (cloud + LAN). Status badge polls device state.
+- Primary controls: buttons triggering Shelly HTTP RPC calls (cloud + LAN). Status badge polls device state and wattage refreshes after each command (bulk counts once).
+- Advanced area gated by pattern unlock; supports outside-click close and 10s idle auto-close for prompt/panel.
 
 ## Stack
 - SvelteKit (adapter-node) with TypeScript & Tailwind.
 - Server-side utilities in `app/src/lib/server/shelly-http.ts` handle HTTP dispatch, retries, and status parsing.
 - Config-driven actions: `app/src/lib/config/devices.ts` defines buttons; `schema.ts` types; config is LAN-first with `.local` hostnames.
+- Button visuals configurable via `type` (`on/off`, `none`, or hex) and optional `typeBorder`; cards mirror custom hex colors.
 - Dockerfile builds via `svelte-kit build`, runtime uses built output (`node build/index.js`).
 
 ## Key Environment Vars
@@ -18,9 +20,9 @@
 ## Common Tasks
 1. Updating button actions / adding devices:
    - Edit `app/src/lib/config/devices.ts`; each `cloud`/`lan` entry can be a single target or an array for fan-out.
-   - Provide a `status` block per device when you want polling/ badges; the UI keys off the device id.
+   - Optional visuals per command: set `type` (`on`, `off`, `none`, or hex) and `typeBorder` (hex) to style buttons/cards.
 2. Adjusting Shelly RPC logic: see helper in `app/src/lib/server/shelly-http.ts` (handles rate limit retries & JSON/form payloads).
-3. Styling changes: `app/src/routes/+page.svelte` uses Tailwind utilities; adjust button layout/status labels here.
+3. Styling/UX changes: `app/src/routes/+page.svelte` for layout, wattage refresh behavior, and advanced unlock flows (idle timers, outside-click close).
 4. Docker rebuild: from repo root run `docker compose up --build web` after `npm install` in `app` to refresh dependencies.
 
 ## Pending Follow-ups

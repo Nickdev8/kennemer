@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -e
+
+echo "Restarting kiosk service (first pass)..."
+sudo systemctl restart odroid-kiosk
+
+echo "Waiting for completion..."
+sleep 1
+
+echo "Restarting kiosk service (second pass)..."
+sudo systemctl restart odroid-kiosk
+
+echo "Done."

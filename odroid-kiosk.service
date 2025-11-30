@@ -1,0 +1,26 @@
+[Unit]
+Description=ODROID Kiosk Session
+After=multi-user.target network-online.target getty@tty7.service
+Wants=network-online.target getty@tty7.service
+
+ConditionPathExists=/dev/fb0
+
+[Service]
+Type=simple
+User=root
+Environment=KIOSK_USER=kiosk
+Environment=DISPLAY=:0
+
+ExecStartPre=/bin/sleep 3
+
+# START IN FOREGROUND — DO NOT EXIT
+ExecStart=/usr/local/bin/screen start
+# Keep service alive
+Restart=always
+RestartSec=5
+
+# Prevent systemd from killing Xorg when ExecStart ends
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target

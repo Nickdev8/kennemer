@@ -6,6 +6,14 @@
   </a>
 </div>
 
+
+
+https://github.com/user-attachments/assets/829898f8-7536-4730-b2df-8f1d1052f528
+
+https://github.com/user-attachments/assets/df56418f-1570-46dd-a5a5-fe70f3744413
+
+
+
 ## Kennemer Device Panel
 
 Kennemer is a SvelteKit control panel for the school's shared Shelly-powered devices. It polls status data, offers one-click on/off actions, and exposes an advanced area guarded by a PIN for higher-risk equipment. The UI is optimized for a wall tablet but stays responsive on desktop and mobile.

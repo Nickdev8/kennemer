@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+KIOSK_USER="${KIOSK_USER:-kiosk}"
+DISPLAY_NUM=":0"
+VT="vt7"
+VT_NUM="${VT#vt}"
+LOG="/var/log/screen.log"
+URL_DEFAULT="http://localhost/"
+
+# Hardcode correct Brave binary
+BROWSER_CMD="/opt/brave.com/brave/brave"
+
+KIOSK_FLAGS=(
+  --kiosk
+  --new-window
+  --no-first-run
+  --no-default-browser-check
+  --disable-session-crashed-bubble
+  --disable-extensions
+  --noerrdialogs
+
+  --disable-gpu
+  --disable-logging
+  --use-gl=swiftshader
+  --ozone-platform=x11
+  --in-process-gpu
+
+  --disable-features=BraveSidebar,Sidebar,SidePanel,SidePanelPinning,BookmarksBar,BraveWallet
+)
+
+log(){ echo "[$(date '+%F %T')] $*" | tee -a "$LOG" >/dev/null; }
+
+wait_for_x(){
+  for _ in $(seq 1 120); do
+    if [[ -S /tmp/.X11-unix/X0 ]] && xdpyinfo -display "$DISPLAY_NUM" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.5
+  done
+  return 1
+}
+
+start_xorg(){
+  pkill -f "Xorg $DISPLAY_NUM" 2>/dev/null || true
+  rm -f /tmp/.X11-unix/X0 || true
+
+  local XORG_BIN
+  XORG_BIN="$(command -v Xorg || echo /usr/lib/xorg/Xorg)"
+
+  log "Starting Xorg..."
+  nohup "$XORG_BIN" "$DISPLAY_NUM" "$VT" -nolisten tcp -configdir /etc/X11/xorg.conf.d >>"$LOG" 2>&1 &
+  sleep 1
+  chvt "$VT_NUM" || true
+
+  if ! wait_for_x; then
+    log "Xorg failed to start initially, retrying..."
+    sleep 2
+    nohup "$XORG_BIN" "$DISPLAY_NUM" "$VT" -nolisten tcp -configdir /etc/X11/xorg.conf.d >>"$LOG" 2>&1 &
+    sleep 1
+    chvt "$VT_NUM" || true
+    wait_for_x || { log "Xorg totally failed"; exit 1; }
+  fi
+
+  DISPLAY="$DISPLAY_NUM" xhost +SI:localuser:$KIOSK_USER >/dev/null 2>&1 || true
+  log "Xorg ready"
+}
+
+start_wm(){
+  log "Starting window manager"
+  pkill -u "$KIOSK_USER" -f "openbox|matchbox" || true
+
+  sudo -u "$KIOSK_USER" DISPLAY="$DISPLAY_NUM" nohup openbox --sm-disable >>"$LOG" 2>&1 &
+  sleep 1
+
+  if ! pgrep -u "$KIOSK_USER" -x openbox >/dev/null; then
+    log "Openbox failed. Installing fallback matchbox WM..."
+    apt-get update -y
+    apt-get install -y matchbox-window-manager
+    sudo -u "$KIOSK_USER" DISPLAY="$DISPLAY_NUM" nohup matchbox-window-manager -use_titlebar no >>"$LOG" 2>&1 &
+  fi
+
+  if pgrep -u "$KIOSK_USER" -f "openbox|matchbox" >/dev/null; then
+    log "WM ready"
+  else
+    log "Window manager failed"
+    exit 1
+  fi
+}
+
+start_browser(){
+  local url="${1:-$URL_DEFAULT}"
+  log "Starting browser at $url"
+
+  pkill -u "$KIOSK_USER" -f "$BROWSER_CMD" || true
+
+  sudo -u "$KIOSK_USER" DISPLAY="$DISPLAY_NUM" \
+    DBUS_SESSION_BUS_ADDRESS=/dev/null \
+    nohup "$BROWSER_CMD" "${KIOSK_FLAGS[@]}" "$url" >>"$LOG" 2>&1 &
+}
+
+watchdog(){
+  while true; do
+
+    # Restart X if dead
+    if ! pgrep -f "Xorg $DISPLAY_NUM" >/dev/null; then
+      log "Watchdog: Xorg died -> restarting"
+      start_xorg
+      start_wm
+      start_browser "$URL_DEFAULT"
+    fi
+
+    # Restart WM if dead
+    if ! pgrep -u "$KIOSK_USER" -f "openbox|matchbox" >/dev/null; then
+      log "Watchdog: WM died -> restarting"
+      start_wm
+    fi
+
+    # Restart Brave ONLY if kiosk instance is gone
+    if ! pgrep -u "$KIOSK_USER" -f "/opt/brave.com/brave/brave --kiosk" >/dev/null; then
+      log "Watchdog: kiosk brave is gone -> restarting"
+      start_browser "$URL_DEFAULT"
+    fi
+
+    sleep 5
+  done
+}
+
+command_start(){
+  start_xorg
+  start_wm
+  start_browser "${1:-$URL_DEFAULT}"
+  log "Kiosk online"
+
+  # launch watchdog in foreground so systemd stays attached
+  watchdog
+}
+
+command_stop(){
+  log "Stopping kiosk"
+  pkill -u "$KIOSK_USER" -f "$BROWSER_CMD" || true
+  pkill -u "$KIOSK_USER" -f "openbox|matchbox" || true
+  pkill -f "Xorg $DISPLAY_NUM" || true
+}
+
+case "${1:-}" in
+  start)   shift; command_start "${1:-}";;
+  restart) shift; command_stop; sleep 1; command_start "${1:-}";;
+  stop)    command_stop;;
+  status)  pgrep Xorg && echo "Xorg running" || echo "not running";;
+  *) echo "Usage: $0 {start|restart|stop|status}";;
+esac

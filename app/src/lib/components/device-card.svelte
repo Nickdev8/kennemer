@@ -45,6 +45,8 @@
 	let cardStyle: string | undefined;
 	let deviceLoading = false;
 	let isToggle = false;
+	let isSingle = false;
+	let isStateless = false;
 	let commandGridClass = 'grid-cols-2';
 	let statusLabel = 'Uit';
 	let statusDotClass = 'bg-slate-400';
@@ -58,7 +60,11 @@
 
 	$: isToggle = device.buttonMode === 'toggle';
 
-	$: commandGridClass = isToggle ? 'grid-cols-1' : 'grid-cols-2';
+	$: isSingle = device.buttonMode === 'single';
+
+	$: isStateless = device.stateless === true;
+
+	$: commandGridClass = isToggle || isSingle ? 'grid-cols-1' : 'grid-cols-2';
 
 	$: {
 		if (optimisticStatus === 'on') {
@@ -73,7 +79,10 @@
 	}
 
 	$: {
-		if (initialStatus !== undefined && initialStatus !== previousInitialStatus) {
+		if (isStateless || isSingle) {
+			optimisticStatus = null;
+			previousInitialStatus = initialStatus;
+		} else if (initialStatus !== undefined && initialStatus !== previousInitialStatus) {
 			previousInitialStatus = initialStatus;
 			if (!deviceLoading) {
 				optimisticStatus = initialStatus ?? null;
@@ -83,6 +92,10 @@
 
 	$: cardClassName = (() => {
 		cardStyle = undefined;
+
+		if (isStateless || isSingle) {
+			return `${baseCardClass} ${cardNeutralClass}`;
+		}
 
 		if (optimisticStatus === 'on') {
 			const onCommand = device.commands.on;
@@ -124,6 +137,11 @@
 	};
 
 	let toggleState: ToggleButtonState | null = null;
+	type SingleButtonState = CommandVisualState & {
+		command: DeviceCommandKey;
+		label: string;
+	};
+	let singleState: SingleButtonState | null = null;
 
 	const hexColorRegex = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 
@@ -220,7 +238,7 @@ function getTextColor(hexColor: string): string {
 		};
 	}
 
-	$: commandVisualStates = isToggle
+	$: commandVisualStates = isToggle || isSingle
 		? {}
 		: commandOrder.reduce(
 				(acc, command) => {
@@ -268,9 +286,27 @@ function getTextColor(hexColor: string): string {
 		};
 	})();
 
+	$: singleState = (() => {
+		if (!isSingle) return null;
+		const command: DeviceCommandKey = 'on';
+		if (!device.commands.on) return null;
+		const key = commandKey(device.id, command);
+		const visual = computeButtonClass(command, key, { forceProminent: true });
+		return {
+			key,
+			className: visual.className,
+			style: visual.style,
+			ariaPressed: false,
+			command,
+			label: device.commands.on?.label ?? ''
+		};
+	})();
+
 	function handleCommand(command: DeviceCommandKey) {
 		const key = commandKey(device.id, command);
-		optimisticStatus = command;
+		if (!isStateless && !isSingle) {
+			optimisticStatus = command;
+		}
 		dispatch('command', { deviceId: device.id, command });
 	}
 
@@ -286,14 +322,33 @@ function getTextColor(hexColor: string): string {
 				<p class="text-xs uppercase tracking-wide text-slate-400">{device.group}</p>
 			{/if}
 		</div>
-		<div class={`flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${statusTextClass}`}>
-			<span class={`h-2.5 w-2.5 rounded-full ${statusDotClass}`}></span>
-			<span>{statusLabel}</span>
-		</div>
+		{#if !isStateless && !isSingle}
+			<div class={`flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${statusTextClass}`}>
+				<span class={`h-2.5 w-2.5 rounded-full ${statusDotClass}`}></span>
+				<span>{statusLabel}</span>
+			</div>
+		{/if}
 	</div>
 
 	<div class={`grid flex-1 ${commandGridClass} gap-4`}>
-		{#if isToggle}
+		{#if isSingle}
+			{#if singleState}
+				<button
+					type="button"
+					class={singleState.className}
+					style={singleState.style}
+					aria-pressed={singleState.ariaPressed}
+					on:click={() => handleCommand(singleState.command)}
+				>
+					<span class="pointer-events-none text-center">{singleState.label}</span>
+					{#if loadingCommandKey === singleState.key}
+						<span class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl bg-slate-900/40 text-sm font-semibold uppercase tracking-wide text-white">
+							Bezig…
+						</span>
+					{/if}
+				</button>
+			{/if}
+		{:else if isToggle}
 			{#if toggleState}
 				<button
 					type="button"

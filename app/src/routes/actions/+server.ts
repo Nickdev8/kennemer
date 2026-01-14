@@ -28,8 +28,10 @@ export const POST: RequestHandler = async ({ request }) => {
 
 	try {
 		await sendDeviceCommand(device, command);
-		const state = await updateDeviceState(device.id, command);
-		publishDeviceState({ deviceId: device.id, state });
+		if (!device.stateless) {
+			const state = await updateDeviceState(device.id, command);
+			publishDeviceState({ deviceId: device.id, state });
+		}
 		return new Response(JSON.stringify({ ok: true, state: { deviceId: device.id, lastCommand: command } }));
 	} catch (err) {
 		if (err instanceof ShellyHttpError) {

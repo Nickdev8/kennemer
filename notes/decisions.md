@@ -1,0 +1,4 @@
+- Given your design intent, I recommend splitting:
+  - USE_LAN_DEVICES to control device/relay actions.
+  - USE_LAN_WATTAGE if you want an explicit future switch for wattage behavior (even though it is currently LAN-based).
+- Then, handle scenes explicitly to always use cloud (ignore USE_LAN_DEVICES for scene calls).

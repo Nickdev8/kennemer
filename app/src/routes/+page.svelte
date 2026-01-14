@@ -1,11 +1,13 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import DeviceCard from '$lib/components/device-card.svelte';
+  import TriggerCard from '$lib/components/trigger-card.svelte';
   import { devices as primaryDevices } from '$lib/config/devices';
   import { advancedDevices } from '$lib/config/advanced-devices';
+  import { advancedTriggers } from '$lib/config/advanced-triggers';
   import { env as publicEnv } from '$env/dynamic/public';
   import type { DeviceCommandKey, ShellyDevice } from '$lib/config/schema';
-  import { triggerDeviceCommand } from '$lib/api';
+  import { triggerAction, triggerDeviceCommand } from '$lib/api';
   import type { PageData } from './$types';
   import RefreshCw from 'lucide-svelte/icons/refresh-cw';
 
@@ -45,12 +47,50 @@
 
   let loadingCommandKey: string | null = null;
   let errorMsg = '';
+  let advancedErrorMsg = '';
   let deviceStates = new Map<string, DeviceCommandKey>(
     Object.entries(data?.deviceStates ?? {}) as [string, DeviceCommandKey][]
   );
 
   const primaryDeviceCount = primaryDevices.length;
-  const advancedDeviceCount = advancedDevices.length;
+
+  const advancedSectionOrder = [
+    { id: 'techniek', label: 'Techniek', deviceIds: ['voordeur'] },
+    {
+      id: 'licht-techniek',
+      label: 'Licht techniek',
+      deviceIds: [
+        'licht-poort-hfd',
+        'licht-pannenkoek',
+        'licht-onder-kap-plein-1-2',
+        'sportveld-led',
+        'ledstrip-overkapping-plein-3',
+        'garderobe-nb',
+        'groen-achter-kopje-ketelhuis',
+        'groen-voor-kopje-magazijn',
+        'cv-licht',
+        'hek-groen'
+      ]
+    },
+    {
+      id: 'power-socket',
+      label: 'Power socket',
+      deviceIds: ['gedenklicht', 'wcd-hek-2', 'wcd-buiten-magazijn']
+    }
+  ];
+
+  const advancedDeviceMap = new Map(advancedDevices.map((device) => [device.id, device]));
+  const advancedSections = advancedSectionOrder.map((section) => ({
+    ...section,
+    devices: section.deviceIds
+      .map((deviceId) => advancedDeviceMap.get(deviceId))
+      .filter(Boolean) as ShellyDevice[]
+  }));
+
+  const advancedDeviceCount = advancedSections.reduce(
+    (total, section) => total + section.devices.length,
+    0
+  );
 
   const wattageRoomId = -1;
   let wattageLabel = `Room ${wattageRoomId}`;
@@ -84,6 +124,7 @@
   let activePointerId: number | null = null;
   let advancedIdleTimeout: ReturnType<typeof setTimeout> | null = null;
   let stateStream: EventSource | null = null;
+  let loadingTriggerId: string | null = null;
 
   const commandOrder: DeviceCommandKey[] = ['on', 'off'];
 
@@ -197,7 +238,7 @@
     return status === 'on' ? 'off' : 'on';
   }
 
-  type PressOptions = { suppressRefresh?: boolean };
+  type PressOptions = { suppressRefresh?: boolean; stateless?: boolean };
 
   let wattageRefreshTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -221,7 +262,9 @@
     let succeeded = false;
     try {
       await triggerDeviceCommand(deviceId, command);
-      setDeviceState(deviceId, command);
+      if (!options.stateless) {
+        setDeviceState(deviceId, command);
+      }
       succeeded = true;
       if (advancedUnlocked && showAdvancedPanel) {
         markAdvancedActivity();
@@ -452,6 +495,21 @@
 
   const preventContextMenu = (evt: Event) => evt.preventDefault();
 
+  async function handleTriggerPress(triggerId: string) {
+    loadingTriggerId = triggerId;
+    advancedErrorMsg = '';
+    try {
+      await triggerAction(triggerId);
+      if (advancedUnlocked && showAdvancedPanel) {
+        markAdvancedActivity();
+      }
+    } catch (err) {
+      advancedErrorMsg = err instanceof Error ? err.message : 'Unknown error';
+    } finally {
+      loadingTriggerId = null;
+    }
+  }
+
   onMount(() => {
     if (typeof window !== 'undefined') {
       window.addEventListener('contextmenu', preventContextMenu);
@@ -488,6 +546,7 @@
         <p class="text-sm text-slate-500">Snelle bediening met duidelijke status en wattage.</p>
       </div>
       <div class="flex flex-wrap items-center gap-3">
+        <!--
         <button
           type="button"
           class="rounded-2xl border border-emerald-500 bg-emerald-500 px-6 py-4 text-sm font-semibold uppercase tracking-[0.25em] text-white shadow-lg shadow-emerald-200/70 transition hover:bg-emerald-600 disabled:opacity-50"
@@ -504,6 +563,7 @@
         >
           Alles uit
         </button>
+        -->
       </div>
     </div>
   </header>
@@ -585,7 +645,9 @@
             {resolveToggleCommand}
             {loadingCommandKey}
             initialStatus={deviceStates.get(device.id) ?? null}
-            on:command={({ detail }) => handlePress(detail.deviceId, detail.command)}
+            on:command={({ detail }) =>
+              handlePress(detail.deviceId, detail.command, { stateless: device.stateless })
+            }
           />
         {/each}
       </div>
@@ -734,26 +796,72 @@
             <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Advanced devices</p>
             <span class="text-xs uppercase tracking-wide text-slate-400">{advancedDeviceCount} knoppen</span>
           </div>
-          <div class="min-h-0 flex-1 overflow-y-auto pr-2">
-            {#if advancedDevices.length === 0}
+          {#if advancedErrorMsg}
+            <p class="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700">
+              {advancedErrorMsg}
+            </p>
+          {/if}
+          <div
+            class="min-h-0 flex-1 overflow-y-auto pr-2"
+            on:scroll={markAdvancedActivity}
+            on:wheel|passive={markAdvancedActivity}
+            on:touchmove|passive={markAdvancedActivity}
+            on:pointerdown={markAdvancedActivity}
+            on:mousedown={markAdvancedActivity}
+          >
+            {#if advancedDeviceCount === 0}
               <p class="text-sm text-slate-600">
                 Geen geavanceerde apparaten geconfigureerd in
                 <code class="rounded bg-slate-100 px-2 py-0.5 text-xs">app/src/lib/config/advanced-devices.ts</code>.
               </p>
             {:else}
-              <div class="grid grid-cols-1 gap-6 pb-4 sm:grid-cols-2 lg:grid-cols-3">
-                {#each advancedDevices as device}
-                  <DeviceCard
-                    {device}
-                    {commandOrder}
-                    {commandKey}
-                    {commandLabel}
-                    {resolveToggleCommand}
-                    {loadingCommandKey}
-                    initialStatus={deviceStates.get(device.id) ?? null}
-                    showGroup
-                    on:command={({ detail }) => handlePress(detail.deviceId, detail.command)}
-                  />
+              <div class="flex flex-col gap-6 pb-4">
+                {#each advancedSections as section (section.id)}
+                  <div class="space-y-4">
+                    <div class="flex items-center gap-3">
+                      <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        {section.label}
+                      </p>
+                      <span class="h-px flex-1 bg-slate-200"></span>
+                    </div>
+                    <div class="grid grid-cols-1 gap-4">
+                      {#each section.devices as device (device.id)}
+                        <DeviceCard
+                          {device}
+                          {commandOrder}
+                          {commandKey}
+                          {commandLabel}
+                          {resolveToggleCommand}
+                          {loadingCommandKey}
+                          initialStatus={deviceStates.get(device.id) ?? null}
+                          on:command={({ detail }) =>
+                            handlePress(detail.deviceId, detail.command, {
+                              stateless: device.stateless
+                            })
+                          }
+                        />
+                      {/each}
+                    </div>
+                  </div>
+                  {#if section.id === 'techniek'}
+                    <div class="space-y-4">
+                      <div class="flex items-center gap-3">
+                        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Set kleur licht
+                        </p>
+                        <span class="h-px flex-1 bg-slate-200"></span>
+                      </div>
+                      <div class="grid grid-cols-1 gap-4">
+                        {#each advancedTriggers as trigger (trigger.id)}
+                          <TriggerCard
+                            {trigger}
+                            {loadingTriggerId}
+                            on:trigger={({ detail }) => handleTriggerPress(detail.triggerId)}
+                          />
+                        {/each}
+                      </div>
+                    </div>
+                  {/if}
                 {/each}
               </div>
             {/if}

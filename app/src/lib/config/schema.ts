@@ -10,6 +10,7 @@ export interface ShellyHttpTarget {
 export type ShellyTargetConfig = ShellyHttpTarget | ShellyHttpTarget[];
 
 export type DeviceCommandKey = 'on' | 'off';
+export type DeviceButtonMode = 'toggle' | 'dual' | 'single';
 
 export interface ShellyDeviceCommand {
 	label?: string;
@@ -37,6 +38,22 @@ export interface ShellyDevice {
 	 * Controls whether the UI renders a single toggle button or dual on/off buttons.
 	 * Defaults to dual when omitted.
 	 */
-	buttonMode?: 'toggle' | 'dual';
-	commands: Record<DeviceCommandKey, ShellyDeviceCommand>;
+	buttonMode?: DeviceButtonMode;
+	/**
+	 * When true, commands fire without showing or persisting device state.
+	 */
+	stateless?: boolean;
+	/**
+	 * Marks devices that participate in color preset triggers.
+	 */
+	colorCapable?: boolean;
+	commands: Partial<Record<DeviceCommandKey, ShellyDeviceCommand>>;
+}
+
+export interface ShellyTrigger {
+	id: string;
+	label: string;
+	type?: string;
+	typeBorder?: string;
+	sceneId: string;
 }

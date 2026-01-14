@@ -66,6 +66,7 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
   let patternStatus: 'idle' | 'success' | 'error' = 'idle';
   let activePointerId: number | null = null;
   let advancedIdleTimeout: ReturnType<typeof setTimeout> | null = null;
+  let stateStream: EventSource | null = null;
 
   const commandOrder: DeviceCommandKey[] = ['on', 'off'];
 
@@ -158,8 +159,12 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
 
   function commandLabel(device: ShellyDevice, command: DeviceCommandKey) {
     const config = device.commands[command];
-    if (!config) return command === 'on' ? 'On' : 'Off';
-    return config.label ?? (command === 'on' ? 'On' : 'Off');
+    if (!config) return command === 'on' ? 'Aan' : 'Uit';
+    return config.label ?? (command === 'on' ? 'Aan' : 'Uit');
+  }
+
+  function resolveToggleCommand(status: DeviceCommandKey | null) {
+    return status === 'on' ? 'off' : 'on';
   }
 
   type PressOptions = { suppressRefresh?: boolean };
@@ -220,6 +225,22 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
     deviceStates = next;
   }
 
+  function applyDeviceStates(states: Record<string, { lastCommand: DeviceCommandKey }>) {
+    const next = new Map<string, DeviceCommandKey>();
+    Object.entries(states).forEach(([id, entry]) => {
+      if (entry?.lastCommand) {
+        next.set(id, entry.lastCommand);
+      }
+    });
+    deviceStates = next;
+  }
+
+  function applyDeviceStateUpdate(deviceId: string, command: DeviceCommandKey) {
+    const next = new Map(deviceStates);
+    next.set(deviceId, command);
+    deviceStates = next;
+  }
+
   async function loadDeviceStates() {
     try {
       const res = await fetch('/api/device-state', { cache: 'no-store' });
@@ -229,16 +250,51 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
         states: Record<string, { lastCommand: DeviceCommandKey }>;
       };
       if (!payload?.ok || !payload.states) return;
-      const next = new Map<string, DeviceCommandKey>();
-      Object.entries(payload.states).forEach(([id, entry]) => {
-        if (entry?.lastCommand) {
-          next.set(id, entry.lastCommand);
-        }
-      });
-      deviceStates = next;
+      applyDeviceStates(payload.states);
     } catch {
       // ignore
     }
+  }
+
+  function startStateStream() {
+    if (typeof window === 'undefined' || stateStream) return;
+    const stream = new EventSource('/api/device-state/stream');
+
+    stream.addEventListener('init', (event) => {
+      const data = (event as MessageEvent<string>).data;
+      if (!data) return;
+      try {
+        const payload = JSON.parse(data) as Record<string, { lastCommand: DeviceCommandKey }>;
+        if (payload) {
+          applyDeviceStates(payload);
+        }
+      } catch {
+        // ignore malformed payloads
+      }
+    });
+
+    stream.addEventListener('state', (event) => {
+      const data = (event as MessageEvent<string>).data;
+      if (!data) return;
+      try {
+        const payload = JSON.parse(data) as {
+          deviceId: string;
+          state: { lastCommand: DeviceCommandKey };
+        };
+        if (payload?.deviceId && payload.state?.lastCommand) {
+          applyDeviceStateUpdate(payload.deviceId, payload.state.lastCommand);
+        }
+      } catch {
+        // ignore malformed payloads
+      }
+    });
+
+    stream.addEventListener('error', () => {
+      stream.close();
+      stateStream = null;
+    });
+
+    stateStream = stream;
   }
 
   function openAdvancedAccess() {
@@ -374,6 +430,7 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
           refreshWattage();
         }
       });
+      startStateStream();
     }
   });
 
@@ -384,6 +441,10 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
     if (wattageRefreshTimeout) {
       clearTimeout(wattageRefreshTimeout);
     }
+    if (stateStream) {
+      stateStream.close();
+      stateStream = null;
+    }
     clearAdvancedIdleTimer();
   });
 </script>
@@ -392,9 +453,9 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
   <header class="border-b border-slate-200 bg-white/90 px-6 py-4 shadow-sm">
     <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
       <div>
-        <p class="text-xs uppercase tracking-wide text-slate-500">Kennermer scenes</p>
-        <h1 class="text-3xl font-semibold tracking-tight text-slate-900">Kennermer Dashboard</h1>
-        <p class="text-sm text-slate-500">Enkel de belangrijkste scene-knoppen en een duidelijke wattage-som.</p>
+        <p class="text-xs uppercase tracking-wide text-slate-500">Dashboard</p>
+        <h1 class="text-3xl font-semibold tracking-tight text-slate-900">HFD</h1>
+        <p class="text-sm text-slate-500">Snelle bediening met duidelijke status en wattage.</p>
       </div>
       <div class="flex flex-wrap items-center gap-3">
         <button
@@ -417,7 +478,7 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
     </div>
   </header>
 
-  <div class="flex flex-1 gap-4 overflow-hidden px-4 pb-4 pt-4">
+  <div class="flex min-h-0 flex-1 gap-4 overflow-hidden px-4 pb-4 pt-4">
     <section class="flex w-full max-w-xs flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div class="space-y-4">
         <div>
@@ -471,11 +532,11 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
       </div>
     </section>
 
-    <section class="flex flex-1 flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <section class="flex min-h-0 flex-1 flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <header class="mb-4 flex items-center justify-between">
         <div>
           <p class="text-xs uppercase tracking-wide text-slate-500">Scènes</p>
-          <h2 class="text-2xl font-semibold text-slate-900">Aan/uit knoppen</h2>
+          <h2 class="text-2xl font-semibold text-slate-900">Scene bediening</h2>
         </div>
         <span class="text-xs uppercase tracking-wide text-slate-400">{primaryDeviceCount} knoppen</span>
       </header>
@@ -484,13 +545,14 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
           {errorMsg}
         </p>
       {/if}
-      <div class="grid flex-1 grid-cols-1 gap-3 pb-2 pr-1 sm:grid-cols-2">
+      <div class="grid h-full flex-1 grid-cols-3 grid-rows-3 gap-3 pb-2 pr-1">
         {#each primaryDevices as device}
           <DeviceCard
             {device}
             {commandOrder}
             {commandKey}
             {commandLabel}
+            {resolveToggleCommand}
             {loadingCommandKey}
             initialStatus={deviceStates.get(device.id) ?? null}
             on:command={({ detail }) => handlePress(detail.deviceId, detail.command)}
@@ -663,6 +725,7 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
                 {commandOrder}
                 {commandKey}
                 {commandLabel}
+                {resolveToggleCommand}
                 {loadingCommandKey}
                 initialStatus={deviceStates.get(device.id) ?? null}
                 showGroup

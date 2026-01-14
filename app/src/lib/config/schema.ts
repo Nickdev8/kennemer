@@ -33,5 +33,10 @@ export interface ShellyDevice {
 	id: string;
 	label: string;
 	group: string;
+	/**
+	 * Controls whether the UI renders a single toggle button or dual on/off buttons.
+	 * Defaults to dual when omitted.
+	 */
+	buttonMode?: 'toggle' | 'dual';
 	commands: Record<DeviceCommandKey, ShellyDeviceCommand>;
 }

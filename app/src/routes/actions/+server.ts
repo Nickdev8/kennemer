@@ -4,6 +4,7 @@ import { advancedDevices } from '$lib/config/advanced-devices';
 import type { DeviceCommandKey } from '$lib/config/schema';
 import { sendDeviceCommand, ShellyHttpError } from '$lib/server/shelly-http';
 import { updateDeviceState } from '$lib/server/device-state-store';
+import { publishDeviceState } from '$lib/server/device-state-events';
 
 type ActionRequest = {
 	deviceId?: string;
@@ -27,7 +28,8 @@ export const POST: RequestHandler = async ({ request }) => {
 
 	try {
 		await sendDeviceCommand(device, command);
-		await updateDeviceState(device.id, command);
+		const state = await updateDeviceState(device.id, command);
+		publishDeviceState({ deviceId: device.id, state });
 		return new Response(JSON.stringify({ ok: true, state: { deviceId: device.id, lastCommand: command } }));
 	} catch (err) {
 		if (err instanceof ShellyHttpError) {

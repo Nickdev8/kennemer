@@ -26,8 +26,30 @@ export async function writeDeviceStates(states: DeviceStateMap): Promise<void> {
 	await writeFile(DEVICE_STATE_PATH, JSON.stringify(states, null, 2), 'utf-8');
 }
 
-export async function updateDeviceState(deviceId: string, command: DeviceCommandKey) {
+export async function updateDeviceState(
+	deviceId: string,
+	command: DeviceCommandKey
+): Promise<StoredDeviceState> {
 	const current = await readDeviceStates();
 	current[deviceId] = { lastCommand: command, updatedAt: Date.now() };
 	await writeDeviceStates(current);
+	return current[deviceId];
+}
+
+export async function updateDeviceStateIfNewer(
+	deviceId: string,
+	command: DeviceCommandKey,
+	reportedAt?: number
+) {
+	const current = await readDeviceStates();
+	const nextTimestamp = Number.isFinite(reportedAt) ? Number(reportedAt) : Date.now();
+	const existing = current[deviceId];
+
+	if (existing && typeof existing.updatedAt === 'number' && existing.updatedAt > nextTimestamp) {
+		return { updated: false, state: existing };
+	}
+
+	current[deviceId] = { lastCommand: command, updatedAt: nextTimestamp };
+	await writeDeviceStates(current);
+	return { updated: true, state: current[deviceId] };
 }

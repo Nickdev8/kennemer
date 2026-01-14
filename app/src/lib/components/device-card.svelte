@@ -3,27 +3,27 @@
 	import type { DeviceCommandKey, ShellyDevice } from '$lib/config/schema';
 
 	const baseCardClass =
-		'flex h-full max-h-[18rem] min-h-[12rem] flex-col gap-3 rounded-2xl border border-slate-200 px-4 py-4 shadow-sm transition duration-300 ease-out';
-	const cardNeutralClass = 'border-slate-200 bg-white/95';
+		'flex h-full max-h-[18rem] min-h-[12rem] flex-col gap-3 rounded-3xl border-l-8 border-slate-200 bg-white px-5 py-5 shadow-sm transition duration-200 ease-out';
+	const cardNeutralClass = 'border-slate-200 border-l-slate-200 bg-white';
 	const cardOnClass =
-		'border-emerald-300/80 bg-gradient-to-br from-emerald-50 via-white to-emerald-100 shadow-lg shadow-emerald-100/60 ring-2 ring-emerald-200';
-	const cardOffClass = 'border-rose-300/80 bg-rose-50/90 shadow-inner ring-1 ring-rose-200';
+		'border-emerald-300 bg-emerald-50 shadow-lg shadow-emerald-100/70 ring-2 ring-emerald-200';
+	const cardOffClass = 'border-slate-200 bg-slate-50 shadow-inner';
 	const cardCustomClass = 'shadow-lg';
 
 	const baseButtonClass =
-		'relative flex w-full items-center justify-center rounded-xl px-5 py-6 text-xl font-semibold transition duration-150 ease-out enabled:hover:-translate-y-0.5 enabled:hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60 max-h-32 min-h-[4rem]';
+		'relative flex w-full items-center justify-center rounded-2xl px-5 py-6 text-xl font-semibold transition duration-150 ease-out active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 max-h-32 min-h-[4rem]';
 	const buttonOnIdleClass =
-		'border border-emerald-500 bg-white text-slate-700 enabled:hover:bg-emerald-200';
+		'border border-emerald-500 bg-white text-slate-700';
 	const buttonOffIdleClass =
-		'border border-rose-500 bg-white text-slate-700 enabled:hover:bg-rose-200';
+		'border border-rose-500 bg-white text-slate-700';
 	const buttonOnProminentClass =
-		'border border-emerald-500 bg-emerald-500 text-white shadow-lg shadow-emerald-200/70 enabled:hover:bg-emerald-600';
+		'border border-emerald-500 bg-emerald-500 text-white shadow-lg shadow-emerald-200/70';
 	const buttonOffProminentClass =
-		'border border-rose-500 bg-rose-500 text-white shadow-lg shadow-rose-200/70 enabled:hover:bg-rose-600';
+		'border border-rose-500 bg-rose-500 text-white shadow-lg shadow-rose-200/70';
 	const buttonNeutralClass =
-		'border border-slate-300 bg-white text-slate-700 enabled:hover:bg-slate-100';
+		'border border-slate-300 bg-white text-slate-700';
 	const buttonCustomClass =
-		'border text-white shadow-lg shadow-slate-200/70 enabled:hover:brightness-95';
+		'border text-white shadow-lg shadow-slate-200/70';
 
 	export let device: ShellyDevice;
 	export let commandOrder: DeviceCommandKey[];
@@ -32,23 +32,49 @@
 	export let loadingCommandKey: string | null;
 	export let initialStatus: DeviceCommandKey | null = null;
 	export let showGroup = false;
+	export let resolveToggleCommand: (status: DeviceCommandKey | null) => DeviceCommandKey = (
+		status
+	) => (status === 'on' ? 'off' : 'on');
 
 	const dispatch = createEventDispatcher<{
 		command: { deviceId: string; command: DeviceCommandKey };
 	}>();
 
-let optimisticStatus: DeviceCommandKey | null = null;
-let previousInitialStatus: DeviceCommandKey | null | undefined = undefined;
-let cardStyle: string | undefined;
+	let optimisticStatus: DeviceCommandKey | null = null;
+	let previousInitialStatus: DeviceCommandKey | null | undefined = undefined;
+	let cardStyle: string | undefined;
+	let deviceLoading = false;
+	let isToggle = false;
+	let commandGridClass = 'grid-cols-2';
+	let statusLabel = 'Uit';
+	let statusDotClass = 'bg-slate-400';
+	let statusTextClass = 'text-slate-600';
 
 	const currentOptimisticKey = () =>
 		optimisticStatus ? commandKey(device.id, optimisticStatus) : null;
 
+	$: deviceLoading =
+		typeof loadingCommandKey === 'string' && loadingCommandKey.startsWith(`${device.id}:`);
+
+	$: isToggle = device.buttonMode === 'toggle';
+
+	$: commandGridClass = isToggle ? 'grid-cols-1' : 'grid-cols-2';
+
+	$: {
+		if (optimisticStatus === 'on') {
+			statusLabel = 'Aan';
+			statusDotClass = 'bg-emerald-500';
+			statusTextClass = 'text-emerald-700';
+		} else {
+			statusLabel = 'Uit';
+			statusDotClass = 'bg-slate-400';
+			statusTextClass = 'text-slate-600';
+		}
+	}
+
 	$: {
 		if (initialStatus !== undefined && initialStatus !== previousInitialStatus) {
 			previousInitialStatus = initialStatus;
-			const deviceLoading =
-				typeof loadingCommandKey === 'string' && loadingCommandKey.startsWith(`${device.id}:`);
 			if (!deviceLoading) {
 				optimisticStatus = initialStatus ?? null;
 			}
@@ -68,7 +94,11 @@ let cardStyle: string | undefined;
 		if (hexColor) {
 			const borderColor = borderHex ?? hexColor;
 			const background = lightenHex(hexColor, 0.9);
-			cardStyle = [`border-color:${borderColor}`, `background:${background}`].join(';');
+			cardStyle = [
+				`border-color:${borderColor}`,
+				`border-left-color:${borderColor}`,
+				`background:${background}`
+			].join(';');
 			return `${baseCardClass} ${cardCustomClass}`;
 		}
 
@@ -85,6 +115,12 @@ let cardStyle: string | undefined;
 	};
 
 	let commandVisualStates: Partial<Record<DeviceCommandKey, CommandVisualState>> = {};
+	type ToggleButtonState = CommandVisualState & {
+		command: DeviceCommandKey;
+		label: string;
+	};
+
+	let toggleState: ToggleButtonState | null = null;
 
 	const hexColorRegex = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 
@@ -124,7 +160,11 @@ function getTextColor(hexColor: string): string {
 		style?: string;
 	};
 
-	function computeButtonClass(command: DeviceCommandKey, key: string): ButtonVisual {
+	function computeButtonClass(
+		command: DeviceCommandKey,
+		key: string,
+		options: { forceProminent?: boolean } = {}
+	): ButtonVisual {
 		const config = device.commands[command];
 		const typeValue = config?.type;
 		const typeString =
@@ -156,13 +196,13 @@ function getTextColor(hexColor: string): string {
 		} else if (rawType === 'none' || rawType === 'neutral') {
 			classes.push(buttonNeutralClass);
 		} else if (rawType === 'off') {
-			classes.push(optimisticStatus === 'off' ? buttonOffProminentClass : buttonOffIdleClass);
+			classes.push(options.forceProminent ? buttonOffProminentClass : buttonOffIdleClass);
 		} else if (rawType === 'on') {
-			classes.push(optimisticStatus === 'on' ? buttonOnProminentClass : buttonOnIdleClass);
+			classes.push(options.forceProminent ? buttonOnProminentClass : buttonOnIdleClass);
 		} else if (command === 'off') {
-			classes.push(optimisticStatus === 'off' ? buttonOffProminentClass : buttonOffIdleClass);
+			classes.push(options.forceProminent ? buttonOffProminentClass : buttonOffIdleClass);
 		} else {
-			classes.push(optimisticStatus === 'on' ? buttonOnProminentClass : buttonOnIdleClass);
+			classes.push(options.forceProminent ? buttonOnProminentClass : buttonOnIdleClass);
 		}
 
 		if (loadingCommandKey === key) {
@@ -175,21 +215,41 @@ function getTextColor(hexColor: string): string {
 		};
 	}
 
-	$: commandVisualStates = commandOrder.reduce(
-		(acc, command) => {
-			if (!device.commands[command]) return acc;
-			const key = commandKey(device.id, command);
-			const visual = computeButtonClass(command, key);
-			acc[command] = {
-				key,
-				className: visual.className,
-				style: visual.style,
-				ariaPressed: optimisticStatus === command
-			};
-			return acc;
-		},
-		{} as Partial<Record<DeviceCommandKey, CommandVisualState>>
-	);
+	$: commandVisualStates = isToggle
+		? {}
+		: commandOrder.reduce(
+				(acc, command) => {
+					if (!device.commands[command]) return acc;
+					const key = commandKey(device.id, command);
+					const visual = computeButtonClass(command, key);
+					acc[command] = {
+						key,
+						className: visual.className,
+						style: visual.style,
+						ariaPressed: optimisticStatus === command
+					};
+					return acc;
+				},
+				{} as Partial<Record<DeviceCommandKey, CommandVisualState>>
+			);
+
+	$: toggleState = (() => {
+		if (!isToggle) return null;
+		const stateCommand: DeviceCommandKey = optimisticStatus === 'on' ? 'on' : 'off';
+		const actionCommand = resolveToggleCommand(optimisticStatus);
+		if (!device.commands[stateCommand] || !device.commands[actionCommand]) return null;
+		const actionKey = commandKey(device.id, actionCommand);
+		const key = deviceLoading && loadingCommandKey ? loadingCommandKey : actionKey;
+		const visual = computeButtonClass(actionCommand, key, { forceProminent: true });
+		return {
+			key,
+			className: visual.className,
+			style: visual.style,
+			ariaPressed: stateCommand === 'on',
+			command: actionCommand,
+			label: commandLabel(device, actionCommand)
+		};
+	})();
 
 	function handleCommand(command: DeviceCommandKey) {
 		const key = commandKey(device.id, command);
@@ -209,29 +269,52 @@ function getTextColor(hexColor: string): string {
 				<p class="text-xs uppercase tracking-wide text-slate-400">{device.group}</p>
 			{/if}
 		</div>
+		<div class={`flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${statusTextClass}`}>
+			<span class={`h-2.5 w-2.5 rounded-full ${statusDotClass}`}></span>
+			<span>{statusLabel}</span>
+		</div>
 	</div>
 
-	<div class="grid flex-1 grid-cols-2 gap-4">
-		{#each commandOrder as cmd}
-			{#if device.commands[cmd]}
-				{@const state = commandVisualStates[cmd]}
-				{#if state}
-					<button
-						type="button"
-						class={state.className}
-						style={state.style}
-						aria-pressed={state.ariaPressed}
-						on:click={() => handleCommand(cmd)}
-					>
-						<span class="pointer-events-none text-center">{commandLabel(device, cmd)}</span>
-						{#if loadingCommandKey === state.key}
-							<span class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-xl bg-slate-900/70 text-sm font-semibold uppercase tracking-wide text-white">
-								Bezig…
-							</span>
-						{/if}
-					</button>
-				{/if}
+	<div class={`grid flex-1 ${commandGridClass} gap-4`}>
+		{#if isToggle}
+			{#if toggleState}
+				<button
+					type="button"
+					class={toggleState.className}
+					style={toggleState.style}
+					aria-pressed={toggleState.ariaPressed}
+					on:click={() => handleCommand(toggleState.command)}
+				>
+					<span class="pointer-events-none text-center">{toggleState.label}</span>
+					{#if loadingCommandKey === toggleState.key}
+						<span class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl bg-slate-900/40 text-sm font-semibold uppercase tracking-wide text-white">
+							Bezig…
+						</span>
+					{/if}
+				</button>
 			{/if}
-		{/each}
+		{:else}
+			{#each commandOrder as cmd}
+				{#if device.commands[cmd]}
+					{@const state = commandVisualStates[cmd]}
+					{#if state}
+						<button
+							type="button"
+							class={state.className}
+							style={state.style}
+							aria-pressed={state.ariaPressed}
+							on:click={() => handleCommand(cmd)}
+						>
+							<span class="pointer-events-none text-center">{commandLabel(device, cmd)}</span>
+							{#if loadingCommandKey === state.key}
+								<span class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl bg-slate-900/40 text-sm font-semibold uppercase tracking-wide text-white">
+									Bezig…
+								</span>
+							{/if}
+						</button>
+					{/if}
+				{/if}
+			{/each}
+		{/if}
 	</div>
 </section>

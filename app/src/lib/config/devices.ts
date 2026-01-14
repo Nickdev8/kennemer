@@ -6,6 +6,7 @@ export const gangColorDevice: ShellyDevice = {
 	id: 'gang-color',
 	label: 'Gang kleur',
 	group: 'Advanced',
+	buttonMode: 'toggle',
 	commands: {
 		on: {
 			label: 'Gang paars',
@@ -33,12 +34,13 @@ export const gangColorDevice: ShellyDevice = {
 
 export const devices: ShellyDevice[] = [
 	{
-		id: 'test1',
-		label: 'Nicks Test Scene',
+		id: 'scene-2de',
+		label: '2de',
 		group: 'Scene',
+		buttonMode: 'toggle',
 		commands: {
 			on: {
-				label: 'Lamp aan',
+				label: 'Aan',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
@@ -47,7 +49,7 @@ export const devices: ShellyDevice[] = [
 				}
 			},
 			off: {
-				label: 'Lamp uit',
+				label: 'Uit',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
@@ -58,12 +60,39 @@ export const devices: ShellyDevice[] = [
 		}
 	},
 	{
-		id: 'gang',
-		label: 'Gang',
+		id: 'scene-aula-plafond',
+		label: 'Aula plafond',
 		group: 'Scene',
+		buttonMode: 'toggle',
 		commands: {
 			on: {
-				label: 'Gang aan',
+				label: 'Aan',
+				cloud: {
+					endpoint: shellySceneEndpoint,
+					method: 'POST',
+					payload: { id: '1761824228559', channel: 0, turn: 'on' },
+					requiresAuthKey: true
+				}
+			},
+			off: {
+				label: 'Uit',
+				cloud: {
+					endpoint: shellySceneEndpoint,
+					method: 'POST',
+					payload: { id: '1761824279482', channel: 0, turn: 'off' },
+					requiresAuthKey: true
+				}
+			}
+		}
+	},
+	{
+		id: 'scene-gang-entree',
+		label: 'Gang + entree',
+		group: 'Scene',
+		buttonMode: 'toggle',
+		commands: {
+			on: {
+				label: 'Aan',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
@@ -72,7 +101,163 @@ export const devices: ShellyDevice[] = [
 				}
 			},
 			off: {
-				label: 'Gang uit',
+				label: 'Uit',
+				cloud: {
+					endpoint: shellySceneEndpoint,
+					method: 'POST',
+					payload: { id: '1730105330475', channel: 0, turn: 'off' },
+					requiresAuthKey: true
+				}
+			}
+		}
+	},
+	{
+		id: 'scene-1ste',
+		label: '1ste',
+		group: 'Scene',
+		buttonMode: 'toggle',
+		commands: {
+			on: {
+				label: 'Aan',
+				cloud: {
+					endpoint: shellySceneEndpoint,
+					method: 'POST',
+					payload: { id: '1761824228559', channel: 0, turn: 'on' },
+					requiresAuthKey: true
+				}
+			},
+			off: {
+				label: 'Uit',
+				cloud: {
+					endpoint: shellySceneEndpoint,
+					method: 'POST',
+					payload: { id: '1761824279482', channel: 0, turn: 'off' },
+					requiresAuthKey: true
+				}
+			}
+		}
+	},
+	{
+		id: 'scene-screen-lokalen',
+		label: 'Screen lokalen',
+		group: 'Scene',
+		buttonMode: 'toggle',
+		commands: {
+			on: {
+				label: 'Aan',
+				cloud: {
+					endpoint: shellySceneEndpoint,
+					method: 'POST',
+					payload: { id: '1761824228559', channel: 0, turn: 'on' },
+					requiresAuthKey: true
+				}
+			},
+			off: {
+				label: 'Uit',
+				cloud: {
+					endpoint: shellySceneEndpoint,
+					method: 'POST',
+					payload: { id: '1761824279482', channel: 0, turn: 'off' },
+					requiresAuthKey: true
+				}
+			}
+		}
+	},
+	{
+		id: 'scene-kantine',
+		label: 'Kantine',
+		group: 'Scene',
+		buttonMode: 'toggle',
+		commands: {
+			on: {
+				label: 'Aan',
+				cloud: {
+					endpoint: shellySceneEndpoint,
+					method: 'POST',
+					payload: { id: '1761824228559', channel: 0, turn: 'on' },
+					requiresAuthKey: true
+				}
+			},
+			off: {
+				label: 'Uit',
+				cloud: {
+					endpoint: shellySceneEndpoint,
+					method: 'POST',
+					payload: { id: '1761824279482', channel: 0, turn: 'off' },
+					requiresAuthKey: true
+				}
+			}
+		}
+	},
+	{
+		id: 'scene-parterre',
+		label: 'Parterre',
+		group: 'Scene',
+		buttonMode: 'toggle',
+		commands: {
+			on: {
+				label: 'Aan',
+				cloud: {
+					endpoint: shellySceneEndpoint,
+					method: 'POST',
+					payload: { id: '1761824228559', channel: 0, turn: 'on' },
+					requiresAuthKey: true
+				}
+			},
+			off: {
+				label: 'Uit',
+				cloud: {
+					endpoint: shellySceneEndpoint,
+					method: 'POST',
+					payload: { id: '1761824279482', channel: 0, turn: 'off' },
+					requiresAuthKey: true
+				}
+			}
+		}
+	},
+	{
+		id: 'scene-aula-vide',
+		label: 'Aula vide',
+		group: 'Scene',
+		buttonMode: 'toggle',
+		commands: {
+			on: {
+				label: 'Aan',
+				cloud: {
+					endpoint: shellySceneEndpoint,
+					method: 'POST',
+					payload: { id: '1761824228559', channel: 0, turn: 'on' },
+					requiresAuthKey: true
+				}
+			},
+			off: {
+				label: 'Uit',
+				cloud: {
+					endpoint: shellySceneEndpoint,
+					method: 'POST',
+					payload: { id: '1761824279482', channel: 0, turn: 'off' },
+					requiresAuthKey: true
+				}
+			}
+		}
+	},
+	{
+		id: 'scene-kopje-gang',
+		label: 'Kopje gang',
+		group: 'Scene',
+		buttonMode: 'toggle',
+		commands: {
+			on: {
+				label: 'Aan',
+				cloud: {
+					endpoint: shellySceneEndpoint,
+					method: 'POST',
+					payload: { id: '1727329580882', channel: 0, turn: 'on' },
+					requiresAuthKey: true
+				}
+			},
+			off: {
+				label: 'Uit',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
@@ -83,3 +268,4 @@ export const devices: ShellyDevice[] = [
 		}
 	}
 ];
+

@@ -288,10 +288,14 @@ function getTextColor(hexColor: string): string {
 
 	$: singleState = (() => {
 		if (!isSingle) return null;
+		const forceNeutral = isStateless && device.group === 'Scene';
 		const command: DeviceCommandKey = 'on';
 		if (!device.commands.on) return null;
 		const key = commandKey(device.id, command);
-		const visual = computeButtonClass(command, key, { forceProminent: true });
+		const visual = computeButtonClass(command, key, {
+			forceNeutral,
+			forceProminent: !forceNeutral
+		});
 		return {
 			key,
 			className: visual.className,

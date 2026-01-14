@@ -10,9 +10,10 @@
 
 ## Common changes
 - Add or adjust buttons:
-  - Edit `app/src/lib/config/devices.ts` (primary) or `app/src/lib/config/advanced-devices.ts` (advanced).
+  - Edit `app/src/lib/config/devices.ts` (primary) or `app/src/lib/config/advanced.ts` (advanced).
   - Each command can target LAN or cloud, optionally as an array for fan-out.
   - Visuals: `type` can be `on`, `off`, `none`, or a hex color, plus `typeBorder`.
+  - Advanced triggers live next to advanced devices in `app/src/lib/config/advanced.ts`.
 - Update UI layout and interaction:
   - Edit `app/src/routes/+page.svelte`.
   - Device card behavior is in `app/src/lib/components/device-card.svelte`.

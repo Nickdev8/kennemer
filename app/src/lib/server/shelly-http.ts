@@ -48,8 +48,11 @@ function toTargetArray(config?: ShellyTargetConfig): ShellyHttpTarget[] {
 	return Array.isArray(config) ? config : [config];
 }
 
-function resolveCommandTargets(command: ShellyDeviceCommand): ShellyHttpTarget[] {
-	const preferLan = readBooleanFlag('USE_LAN', 'USE_LOCAL');
+function resolveCommandTargets(
+	command: ShellyDeviceCommand,
+	options: { preferLan: boolean }
+): ShellyHttpTarget[] {
+	const preferLan = options.preferLan;
 	const lanTargets = toTargetArray(command.lan);
 	const cloudTargets = toTargetArray(command.cloud);
 
@@ -65,13 +68,28 @@ function resolveCommandTargets(command: ShellyDeviceCommand): ShellyHttpTarget[]
 	return selected;
 }
 
+function isSceneCommand(device: ShellyDevice, target: ShellyHttpTarget) {
+	if (device.group.trim().toLowerCase() === 'scene') return true;
+	return target.endpoint.includes('/scene/manual_run');
+}
+
+function stripHeaderKeys(headers: Record<string, string> | undefined, keys: string[]) {
+	if (!headers) return undefined;
+	const blocked = new Set(keys.map((key) => key.toLowerCase()));
+	return Object.fromEntries(
+		Object.entries(headers).filter(([key]) => !blocked.has(key.toLowerCase()))
+	);
+}
+
 type ExecuteOptions = {
 	expectJson?: boolean;
 };
 
 function buildRequestInit(target: ShellyHttpTarget, requiresAuth: boolean, authKey: string) {
 	const method = target.method ?? 'POST';
-	const encoding = target.encoding ?? 'form';
+	const encoding = target.endpoint.includes('/scene/manual_run')
+		? 'form'
+		: (target.encoding ?? 'form');
 	const basePayload = target.payload ? { ...target.payload } : {};
 	const payload = requiresAuth ? { auth_key: authKey, ...basePayload } : basePayload;
 
@@ -96,8 +114,12 @@ function buildRequestInit(target: ShellyHttpTarget, requiresAuth: boolean, authK
 		}
 	} else {
 		const params = new URLSearchParams();
-		Object.entries(payload).forEach(([key, value]) => {
+		if (requiresAuth) {
+			params.set('auth_key', authKey);
+		}
+		Object.entries(basePayload).forEach(([key, value]) => {
 			if (value === undefined || value === null) return;
+			if (requiresAuth && key === 'auth_key') return;
 			params.append(key, String(value));
 		});
 		body = params.toString();
@@ -116,6 +138,13 @@ function buildRequestInit(target: ShellyHttpTarget, requiresAuth: boolean, authK
 	};
 }
 
+let sceneDebugLogged = false;
+
+function maskAuthKey(body: string | undefined) {
+	if (!body) return body;
+	return body.replace(/auth_key=([^&]*)/i, 'auth_key=***');
+}
+
 async function executeRequest(
 	target: ShellyHttpTarget,
 	requiresAuth: boolean,
@@ -130,6 +159,22 @@ async function executeRequest(
 	const { url, init } = buildRequestInit(target, requiresAuth, authKey);
 	const controller = new AbortController();
 	const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+	const isScene = target.endpoint.includes('/scene/manual_run');
+
+	if (isScene && !sceneDebugLogged) {
+		sceneDebugLogged = true;
+		const bodyString = typeof init.body === 'string' ? init.body : undefined;
+		const maskedBody = maskAuthKey(bodyString);
+		const hasAuth = typeof bodyString === 'string' && bodyString.includes('auth_key=');
+		const headers = init.headers ?? {};
+		console.log('[Shelly scene debug]', {
+			method: init.method ?? 'POST',
+			url,
+			headers,
+			body: maskedBody,
+			hasAuth
+		});
+	}
 
 	try {
 		const response = await fetch(url, { ...init, signal: controller.signal });
@@ -239,11 +284,24 @@ export async function sendDeviceCommand(device: ShellyDevice, commandKey: Device
 		);
 	}
 
-	const targets = resolveCommandTargets(command);
+	const preferLanDevices = readBooleanFlag('USE_LAN_DEVICES', 'USE_LAN', 'USE_LOCAL');
+	const forceCloud = device.group.trim().toLowerCase() === 'scene';
+	const targets = resolveCommandTargets(command, {
+		preferLan: forceCloud ? false : preferLanDevices
+	});
 
 	for (const target of targets) {
-		const requiresAuth = target.requiresAuthKey ?? true;
-		await withRateLimitRetry(() => executeRequest(target, requiresAuth));
+		const sceneCommand = isSceneCommand(device, target);
+		const resolvedTarget = sceneCommand
+			? {
+					...target,
+					// Shelly scenes require form-encoded auth; JSON silently fails.
+					encoding: 'form' as const,
+					headers: stripHeaderKeys(target.headers, ['content-type', 'authorization'])
+				}
+			: target;
+		const requiresAuth = sceneCommand ? true : (target.requiresAuthKey ?? true);
+		await withRateLimitRetry(() => executeRequest(resolvedTarget, requiresAuth));
 	}
 }
 

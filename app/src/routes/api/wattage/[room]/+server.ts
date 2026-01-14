@@ -2,6 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { resolve as resolvePath } from 'node:path';
 
 import type { RequestHandler } from './$types';
+import { env } from '$env/dynamic/private';
 import { fetchShellyJson } from '$lib/server/shelly-http';
 import { fetchSwitchStatus } from '$lib/server/shelly-rpc';
 
@@ -92,9 +93,17 @@ type ErrorResponse = {
 
 const DEVICE_LIST_ENDPOINT =
 	'https://shelly-115-eu.shelly.cloud/interface/device/get_all_lists';
+const CLOUD_STATUS_ENDPOINT =
+	'https://shelly-115-eu.shelly.cloud/device/status';
 const HTTP_TIMEOUT_MS = 4000;
 const IP_CACHE_PATH = resolvePath(process.cwd(), 'ips.json');
 const CACHE_TTL_MS = 2 * 60 * 1000;
+
+const useLanWattage = (() => {
+	const raw = (env.USE_LAN_WATTAGE ?? '').trim().toLowerCase();
+	if (!raw) return true;
+	return ['1', 'true', 'yes', 'on'].includes(raw);
+})();
 
 type CachedWattage = {
 	watts: number;
@@ -378,7 +387,8 @@ async function fetchDeviceWattage(target: ShellyDeviceTarget): Promise<WattageDe
 	const now = Date.now();
 	// Capability is derived from cloud metadata or explicit RPC hints.
 	const metadataCapability = inferCapabilityFromMetadata(target);
-	const lanReading = await fetchLanReading(target);
+	// LAN wattage is best-effort; cloud is the reliable fallback.
+	const lanReading = useLanWattage ? await fetchLanReading(target) : null;
 	const capability = resolveCapability(metadataCapability, lanReading?.capabilityHint ?? null);
 
 	if (lanReading && isValidReading(lanReading)) {
@@ -390,9 +400,16 @@ async function fetchDeviceWattage(target: ShellyDeviceTarget): Promise<WattageDe
 		return summary;
 	}
 
-	const cloudReading = await fetchCloudReading(target);
-	if (cloudReading && isValidReading(cloudReading)) {
-		const summary = buildSummary(target, cloudReading, 'metered', 'ok');
+	const cloudResult = await fetchCloudReading(target);
+	if (cloudResult && cloudResult.reading) {
+		console.log('[Wattage cloud fallback]', {
+			deviceId: target.deviceId,
+			payload: cloudResult.payload,
+			extractedWatts: cloudResult.reading.watts
+		});
+	}
+	if (cloudResult && cloudResult.reading && isValidReading(cloudResult.reading)) {
+		const summary = buildSummary(target, cloudResult.reading, 'metered', 'ok');
 		rememberReading(target.deviceId, summary);
 		return summary;
 	}
@@ -466,11 +483,34 @@ async function fetchLanReading(
 	};
 }
 
-async function fetchCloudReading(
-	target: ShellyDeviceTarget
-): Promise<{ watts: number | null; output: boolean | null; source: WattageSource; timestamp: number } | null> {
-	void target;
-	return null;
+async function fetchCloudReading(target: ShellyDeviceTarget): Promise<{
+	reading: { watts: number | null; output: boolean | null; source: WattageSource; timestamp: number };
+	payload: unknown;
+} | null> {
+	try {
+		const payload = await fetchShellyJson({
+			endpoint: CLOUD_STATUS_ENDPOINT,
+			method: 'POST',
+			encoding: 'form',
+			payload: { id: target.deviceId },
+			requiresAuthKey: true
+		});
+
+		const resolved = resolveCloudStatusPayload(payload);
+		if (!resolved) return null;
+		const metrics = extractMetrics(resolved, target.channel);
+		return {
+			reading: {
+				watts: metrics.watts ?? null,
+				output: metrics.output ?? null,
+				source: 'cloud',
+				timestamp: Date.now()
+			},
+			payload
+		};
+	} catch {
+		return null;
+	}
 }
 
 function inferCapabilityFromMetadata(target: ShellyDeviceTarget): WattageCapability {
@@ -591,7 +631,7 @@ function buildSummary(
 		watts: typeof reading.watts === 'number' && Number.isFinite(reading.watts) ? reading.watts : 0,
 		output: reading.output ?? null,
 		source: reading.source,
-		timestamp: reading.timestamp ?? null,
+		timestamp: reading.timestamp ?? Date.now(),
 		capability,
 		state
 	};
@@ -688,6 +728,40 @@ function extractMetrics(payload: unknown, channel: number | null) {
 			}
 		}
 
+		if (Array.isArray(source.switch)) {
+			for (const entry of source.switch) {
+				if (!entry || typeof entry !== 'object') continue;
+				const record = entry as Record<string, unknown>;
+				const switchIndex = parseNumber(record.id ?? record.idx ?? record.index);
+				if (channel !== null && switchIndex !== null && switchIndex !== channel) continue;
+				const value = parseNumber(record.apower ?? record.power);
+				if (typeof value === 'number') {
+					watts = value;
+					break;
+				}
+				if (output === null) {
+					output = parseBoolean(record.output ?? record.on ?? record.ison ?? record.enabled);
+				}
+			}
+		}
+
+		if (Array.isArray(source.relays)) {
+			for (const relay of source.relays) {
+				if (!relay || typeof relay !== 'object') continue;
+				const record = relay as Record<string, unknown>;
+				const relayIndex = parseNumber(record.id ?? record.idx ?? record.index);
+				if (channel !== null && relayIndex !== null && relayIndex !== channel) continue;
+				const value = parseNumber(record.apower ?? record.power);
+				if (typeof value === 'number') {
+					watts = value;
+					break;
+				}
+				if (output === null) {
+					output = parseBoolean(record.output ?? record.on ?? record.ison ?? record.enabled);
+				}
+			}
+		}
+
 		if (Array.isArray(source.lights)) {
 			for (const light of source.lights) {
 				if (!light || typeof light !== 'object') continue;
@@ -703,9 +777,48 @@ function extractMetrics(payload: unknown, channel: number | null) {
 		if (watts === null && typeof source.power === 'number') {
 			watts = source.power;
 		}
+
+		if (watts === null && typeof source.apower === 'number') {
+			watts = source.apower;
+		}
+
+		if (watts === null) {
+			for (const [key, value] of Object.entries(source)) {
+				if (!value || typeof value !== 'object') continue;
+				const record = value as Record<string, unknown>;
+				if (!/^switch:\d+$/i.test(key) && !/^relay:\d+$/i.test(key)) continue;
+				const valueWatts = parseNumber(record.apower ?? record.power);
+				if (typeof valueWatts === 'number') {
+					watts = valueWatts;
+					if (output === null) {
+						output = parseBoolean(record.output ?? record.on ?? record.ison ?? record.enabled);
+					}
+					break;
+				}
+			}
+		}
 	}
 
-	return { watts: watts ?? 0, output };
+	return { watts, output };
+}
+
+function resolveCloudStatusPayload(payload: unknown): Record<string, unknown> | null {
+	if (!payload || typeof payload !== 'object') return null;
+	const root = payload as Record<string, unknown>;
+	const direct = root.device_status ?? root.status;
+	if (direct && typeof direct === 'object') {
+		return direct as Record<string, unknown>;
+	}
+	const data = root.data;
+	if (data && typeof data === 'object') {
+		const dataObj = data as Record<string, unknown>;
+		const nested = dataObj.device_status ?? dataObj.status;
+		if (nested && typeof nested === 'object') {
+			return nested as Record<string, unknown>;
+		}
+		return dataObj;
+	}
+	return root;
 }
 
 function parseNumber(value: unknown): number | null {

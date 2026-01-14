@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 import { devices } from '$lib/config/devices';
-import { advancedDevices } from '$lib/config/advanced-devices';
+import { advancedDevices } from '$lib/config/advanced';
 import type { DeviceCommandKey } from '$lib/config/schema';
 import { sendDeviceCommand, ShellyHttpError } from '$lib/server/shelly-http';
 import { updateDeviceState } from '$lib/server/device-state-store';

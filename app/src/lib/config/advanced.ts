@@ -1,6 +1,9 @@
-import type { ShellyDevice, ShellyDeviceCommand } from './schema';
+import { env } from '$env/dynamic/public';
+import type { ShellyDevice, ShellyDeviceCommand, ShellyTrigger } from './schema';
 
-const shellyRelayEndpoint = 'https://shelly-115-eu.shelly.cloud/device/relay/control';
+const shellyRelayEndpoint =
+	env.PUBLIC_SHELLY_RELAY_ENDPOINT ??
+	'https://shelly-115-eu.shelly.cloud/device/relay/control';
 
 const buildRelayCommand = (
 	deviceId: string,
@@ -107,4 +110,20 @@ export const advancedDevices: ShellyDevice[] = [
 		label: 'Wcd buiten magazijn',
 		group: 'Power socket'
 	})
+];
+
+export const advancedTriggers: ShellyTrigger[] = [
+	{
+		id: 'licht-techniek-paars',
+		label: 'Alles paars',
+		sceneId: '1763038295754',
+		type: '#7c3aed'
+	},
+	{
+		id: 'licht-techniek-wit',
+		label: 'Alles wit',
+		sceneId: '1763040330000',
+		type: '#ffffff',
+		typeBorder: '#d0d7e2'
+	}
 ];

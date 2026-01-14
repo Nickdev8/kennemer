@@ -6,7 +6,8 @@
 
 ## Environment flags (common)
 - `SHELLY_AUTH_KEY`: required for cloud API calls.
-- `USE_LAN`: prefer LAN endpoints when set.
+- `USE_LAN_DEVICES`: prefer LAN endpoints for device/relay actions when set.
+- `USE_LAN_WATTAGE`: toggle LAN wattage fast-path (cloud fallback remains available).
 - `SHELLY_SIMULATE_DEVICES`: bypass real hardware calls.
 - `SHELLY_MAX_API_CALLS`: max rate-limit retries.
 - `PUBLIC_ADVANCED_PATTERN` or `PUBLIC_ADVANCED_PIN`: unlock advanced panel.

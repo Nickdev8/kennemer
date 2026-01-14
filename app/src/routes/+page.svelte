@@ -3,8 +3,7 @@
   import DeviceCard from '$lib/components/device-card.svelte';
   import TriggerCard from '$lib/components/trigger-card.svelte';
   import { devices as primaryDevices } from '$lib/config/devices';
-  import { advancedDevices } from '$lib/config/advanced-devices';
-  import { advancedTriggers } from '$lib/config/advanced-triggers';
+  import { advancedDevices, advancedTriggers } from '$lib/config/advanced';
   import { env as publicEnv } from '$env/dynamic/public';
   import type { DeviceCommandKey, ShellyDevice } from '$lib/config/schema';
   import { triggerAction, triggerDeviceCommand } from '$lib/api';
@@ -635,7 +634,7 @@
           {errorMsg}
         </p>
       {/if}
-      <div class="grid h-full flex-1 grid-cols-3 grid-rows-3 gap-3 pb-2 pr-1">
+      <div class="grid h-full flex-1 grid-cols-3 grid-rows-3 gap-6 pb-2 pr-1">
         {#each primaryDevices as device}
           <DeviceCard
             {device}
@@ -812,7 +811,7 @@
             {#if advancedDeviceCount === 0}
               <p class="text-sm text-slate-600">
                 Geen geavanceerde apparaten geconfigureerd in
-                <code class="rounded bg-slate-100 px-2 py-0.5 text-xs">app/src/lib/config/advanced-devices.ts</code>.
+                <code class="rounded bg-slate-100 px-2 py-0.5 text-xs">app/src/lib/config/advanced.ts</code>.
               </p>
             {:else}
               <div class="flex flex-col gap-6 pb-4">

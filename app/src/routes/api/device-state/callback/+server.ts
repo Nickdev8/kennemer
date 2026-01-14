@@ -1,6 +1,6 @@
 import type { RequestHandler } from './$types';
 import { devices } from '$lib/config/devices';
-import { advancedDevices } from '$lib/config/advanced-devices';
+import { advancedDevices } from '$lib/config/advanced';
 import { updateDeviceStateIfNewer } from '$lib/server/device-state-store';
 import { publishDeviceState } from '$lib/server/device-state-events';
 import type { DeviceCommandKey } from '$lib/config/schema';

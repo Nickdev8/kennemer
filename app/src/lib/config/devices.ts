@@ -1,6 +1,9 @@
+import { env } from '$env/dynamic/public';
 import type { ShellyDevice } from './schema';
 
-const shellySceneEndpoint = 'https://shelly-115-eu.shelly.cloud/scene/manual_run';
+const shellySceneEndpoint =
+	env.PUBLIC_SHELLY_SCENE_ENDPOINT ??
+	'https://shelly-115-eu.shelly.cloud/scene/manual_run';
 
 export const gangColorDevice: ShellyDevice = {
 	id: 'gang-color',
@@ -149,7 +152,7 @@ export const devices: ShellyDevice[] = [
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
-					payload: { id: '1761824228559', channel: 0, turn: 'on' },
+					payload: { id: '1768398909398', channel: 0, turn: 'on' },
 					requiresAuthKey: true
 				}
 			}

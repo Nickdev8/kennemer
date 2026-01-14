@@ -28,7 +28,7 @@
 ## app/src/lib
 - `config/`: device definitions and schema.
   - `devices.ts`: primary dashboard device list and commands.
-  - `advanced-devices.ts`: advanced panel device list.
+  - `advanced.ts`: advanced panel devices + trigger definitions.
   - `schema.ts`: types for device/command configuration.
 - `components/device-card.svelte`: main button card UI.
 - `api.ts`: browser helper for `POST /actions`.

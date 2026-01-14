@@ -1,5 +1,5 @@
 import type { RequestHandler } from './$types';
-import { advancedTriggers } from '$lib/config/advanced-triggers';
+import { advancedTriggers } from '$lib/config/advanced';
 import { sendDeviceCommand, ShellyHttpError } from '$lib/server/shelly-http';
 import type { ShellyDevice } from '$lib/config/schema';
 

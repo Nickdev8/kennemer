@@ -7,7 +7,7 @@
   import type { DeviceCommandKey, ShellyDevice } from '$lib/config/schema';
   import { triggerDeviceCommand } from '$lib/api';
   import type { PageData } from './$types';
-import RefreshCw from 'lucide-svelte/icons/refresh-cw';
+  import RefreshCw from 'lucide-svelte/icons/refresh-cw';
 
   type WattageDeviceSummary = {
     deviceId: string;
@@ -16,6 +16,8 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
     channel: number | null;
     watts: number;
     output: boolean | null;
+    source?: 'lan-rpc' | 'lan-status' | 'cloud' | 'cached' | 'unknown';
+    timestamp?: number | null;
   };
 
   function readBooleanFlag(value: string | undefined) {
@@ -35,6 +37,7 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
     .trim();
   const advancedPatternConfigured = expectedAdvancedPattern.length > 0;
   const patternNodes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
+  const wattageDebug = readBooleanFlag(publicEnv.PUBLIC_DEBUG_WATTAGE);
 
   export let data: PageData;
 
@@ -54,6 +57,15 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
   let wattageError = '';
   let wattageLoading = false;
   let wattageUpdatedAt: number | null = null;
+  let wattageSummary:
+    | {
+        excludedCount: number;
+        cachedCount: number;
+        cloudCount: number;
+        lanRpcCount: number;
+        lanStatusCount: number;
+      }
+    | null = null;
   let cacheMessage = '';
   let cacheClearing = false;
 
@@ -106,6 +118,7 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
       wattageDevices = [];
       wattageUpdatedAt = null;
       wattageError = '';
+      wattageSummary = null;
       return;
     }
     if (wattageLoading) return;
@@ -127,6 +140,13 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
         label: string;
         totalWatts: number;
         devices: WattageDeviceSummary[];
+        summary?: {
+          excludedCount: number;
+          cachedCount: number;
+          cloudCount: number;
+          lanRpcCount: number;
+          lanStatusCount: number;
+        };
       };
 
       if (!data.ok) {
@@ -136,12 +156,14 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
       wattageLabel = data.label;
       wattageTotal = data.totalWatts ?? 0;
       wattageDevices = data.devices ?? [];
+      wattageSummary = data.summary ?? null;
       wattageUpdatedAt = Date.now();
     } catch (error) {
       wattageError = error instanceof Error ? error.message : 'Kon vermogen niet ophalen';
       wattageDevices = [];
       wattageTotal = 0;
       wattageUpdatedAt = null;
+      wattageSummary = null;
     } finally {
       wattageLoading = false;
     }
@@ -505,6 +527,17 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
               {formatWatts(wattageTotal)}
             {/if}
           </p>
+          {#if !wattageDisabled && !wattageError && wattageSummary}
+            {#if wattageSummary.excludedCount > 0}
+              <p class="mt-1 text-xs font-semibold text-amber-600">
+                {wattageSummary.excludedCount} apparaten onbekend
+              </p>
+            {:else if wattageSummary.cachedCount > 0 || wattageSummary.cloudCount > 0}
+              <p class="mt-1 text-xs font-semibold text-slate-500">
+                Bevat fallback data
+              </p>
+            {/if}
+          {/if}
         </div>
         <button
           type="button"
@@ -711,30 +744,59 @@ import RefreshCw from 'lucide-svelte/icons/refresh-cw';
       {#if cacheMessage}
         <p class="px-6 pb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{cacheMessage}</p>
       {/if}
-      <div class="flex-1 overflow-y-auto px-6 py-6">
-        {#if advancedDevices.length === 0}
-          <p class="text-sm text-slate-600">
-            Geen geavanceerde apparaten geconfigureerd in
-            <code class="rounded bg-slate-100 px-2 py-0.5 text-xs">app/src/lib/config/advanced-devices.ts</code>.
-          </p>
-        {:else}
-          <div class="grid grid-cols-1 gap-6 pb-4 sm:grid-cols-2 lg:grid-cols-3">
-            {#each advancedDevices as device}
-              <DeviceCard
-                {device}
-                {commandOrder}
-                {commandKey}
-                {commandLabel}
-                {resolveToggleCommand}
-                {loadingCommandKey}
-                initialStatus={deviceStates.get(device.id) ?? null}
-                showGroup
-                on:command={({ detail }) => handlePress(detail.deviceId, detail.command)}
-              />
-            {/each}
+          <div class="flex-1 overflow-y-auto px-6 py-6">
+            {#if advancedDevices.length === 0}
+              <p class="text-sm text-slate-600">
+                Geen geavanceerde apparaten geconfigureerd in
+                <code class="rounded bg-slate-100 px-2 py-0.5 text-xs">app/src/lib/config/advanced-devices.ts</code>.
+              </p>
+            {:else}
+              <div class="grid grid-cols-1 gap-6 pb-4 sm:grid-cols-2 lg:grid-cols-3">
+                {#each advancedDevices as device}
+                  <DeviceCard
+                    {device}
+                    {commandOrder}
+                    {commandKey}
+                    {commandLabel}
+                    {resolveToggleCommand}
+                    {loadingCommandKey}
+                    initialStatus={deviceStates.get(device.id) ?? null}
+                    showGroup
+                    on:command={({ detail }) => handlePress(detail.deviceId, detail.command)}
+                  />
+                {/each}
+              </div>
+            {/if}
+            {#if wattageDebug}
+              <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-4">
+                <div class="flex items-center justify-between">
+                  <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Wattage debug
+                  </p>
+                  {#if wattageSummary}
+                    <p class="text-xs text-slate-400">
+                      RPC {wattageSummary.lanRpcCount} · Status {wattageSummary.lanStatusCount} ·
+                      Cache {wattageSummary.cachedCount} · Cloud {wattageSummary.cloudCount}
+                    </p>
+                  {/if}
+                </div>
+                {#if wattageDevices.length === 0}
+                  <p class="mt-3 text-sm text-slate-500">Geen wattage data.</p>
+                {:else}
+                  <div class="mt-3 grid grid-cols-1 gap-2 text-sm text-slate-700">
+                    {#each wattageDevices as device}
+                      <div class="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                        <span class="truncate">{device.name}</span>
+                        <span class="ml-3 shrink-0 text-xs font-semibold text-slate-500">
+                          {device.source ?? 'unknown'} · {formatWatts(device.watts)}
+                        </span>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {/if}
           </div>
-        {/if}
-      </div>
     </div>
   </div>
 {/if}

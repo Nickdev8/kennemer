@@ -3,6 +3,7 @@ import { resolve as resolvePath } from 'node:path';
 
 import type { RequestHandler } from './$types';
 import { fetchShellyJson } from '$lib/server/shelly-http';
+import { fetchSwitchStatus } from '$lib/server/shelly-rpc';
 
 type ShellyDeviceListEntry = {
 	id?: string;
@@ -40,7 +41,10 @@ type ShellyDeviceTarget = {
 	ip: string;
 	name: string;
 	channel: number | null;
+	gen: number | null;
 };
+
+type WattageSource = 'lan-rpc' | 'lan-status' | 'cloud' | 'cached' | 'unknown';
 
 type WattageDeviceSummary = {
 	deviceId: string;
@@ -49,6 +53,8 @@ type WattageDeviceSummary = {
 	channel: number | null;
 	watts: number;
 	output: boolean | null;
+	source: WattageSource;
+	timestamp: number | null;
 };
 
 type WattageResponse = {
@@ -57,6 +63,13 @@ type WattageResponse = {
 	label: string;
 	devices: WattageDeviceSummary[];
 	totalWatts: number;
+	summary: {
+		excludedCount: number;
+		cachedCount: number;
+		cloudCount: number;
+		lanRpcCount: number;
+		lanStatusCount: number;
+	};
 };
 
 type ErrorResponse = {
@@ -68,6 +81,16 @@ const DEVICE_LIST_ENDPOINT =
 	'https://shelly-115-eu.shelly.cloud/interface/device/get_all_lists';
 const HTTP_TIMEOUT_MS = 4000;
 const IP_CACHE_PATH = resolvePath(process.cwd(), 'ips.json');
+const CACHE_TTL_MS = 2 * 60 * 1000;
+
+type CachedWattage = {
+	watts: number;
+	output: boolean | null;
+	timestamp: number;
+	source: WattageSource;
+};
+
+const lastKnownWattage = new Map<string, CachedWattage>();
 
 export const GET: RequestHandler = async ({ params, url }) => {
 	const roomParam = params.room ?? '';
@@ -86,20 +109,28 @@ export const GET: RequestHandler = async ({ params, url }) => {
 				roomId,
 				label,
 				devices: [],
-				totalWatts: 0
+				totalWatts: 0,
+				summary: {
+					excludedCount: 0,
+					cachedCount: 0,
+					cloudCount: 0,
+					lanRpcCount: 0,
+					lanStatusCount: 0
+				}
 			};
 			return jsonResponse(empty);
 		}
 
 		const summaries = await Promise.all(devices.map((target) => fetchDeviceWattage(target)));
 
-		const totalWatts = summaries.reduce((sum, item) => sum + item.watts, 0);
+		const totals = summariseWattage(summaries);
 		const payload: WattageResponse = {
 			ok: true,
 			roomId,
 			label,
 			devices: summaries,
-			totalWatts
+			totalWatts: totals.totalWatts,
+			summary: totals.summary
 		};
 
 		return jsonResponse(payload);
@@ -203,13 +234,15 @@ function collectRoomDeviceTargets(
 		const deviceId = typeof entry.id === 'string' && entry.id ? entry.id : key;
 		const name = typeof entry.name === 'string' && entry.name ? entry.name : deviceId;
 		const channel = parseNumber(entry.channel);
+		const gen = parseNumber(entry.gen);
 
 		results.push({
 			deviceId,
 			roomId: entryRoom ?? roomId,
 			ip,
 			name,
-			channel: Number.isFinite(channel) ? channel : null
+			channel: Number.isFinite(channel) ? channel : null,
+			gen: Number.isFinite(gen) ? gen : null
 		});
 	}
 
@@ -299,28 +332,182 @@ function resolveRoomLabel(rooms: ShellyDeviceListPayload['rooms'], roomId: numbe
 }
 
 async function fetchDeviceWattage(target: ShellyDeviceTarget): Promise<WattageDeviceSummary> {
-	const { payload } = await requestShellyStatus(target.ip);
+	const now = Date.now();
+	const lanReading = await fetchLanReading(target);
 
+	if (lanReading && isValidReading(lanReading)) {
+		rememberReading(target.deviceId, lanReading);
+		return buildSummary(target, lanReading);
+	}
+
+	const cloudReading = await fetchCloudReading(target);
+	if (cloudReading && isValidReading(cloudReading)) {
+		rememberReading(target.deviceId, cloudReading);
+		return buildSummary(target, cloudReading);
+	}
+
+	const cached = readCachedReading(target.deviceId, now);
+	if (cached) {
+		return buildSummary(target, cached);
+	}
+
+	console.warn('Wattage unknown', {
+		deviceId: target.deviceId,
+		ip: target.ip,
+		gen: target.gen
+	});
+
+	return buildSummary(target, {
+		watts: 0,
+		output: null,
+		source: 'unknown',
+		timestamp: null
+	});
+}
+
+function supportsRpcPower(target: ShellyDeviceTarget) {
+	return typeof target.gen === 'number' && target.gen >= 2;
+}
+
+async function fetchLanReading(
+	target: ShellyDeviceTarget
+): Promise<{ watts: number | null; output: boolean | null; source: WattageSource; timestamp: number } | null> {
+	const timestamp = Date.now();
+	const channel = target.channel ?? 0;
+
+	if (supportsRpcPower(target)) {
+		const payload = await fetchSwitchStatus(target.ip, channel);
+		if (payload && typeof payload.apower === 'number') {
+			return {
+				watts: payload.apower,
+				output: typeof payload.output === 'boolean' ? payload.output : null,
+				source: 'lan-rpc',
+				timestamp
+			};
+		}
+		return {
+			watts: null,
+			output: null,
+			source: 'lan-rpc',
+			timestamp
+		};
+	}
+
+	const { payload } = await requestShellyStatus(target.ip);
 	if (!payload || !matchesDeviceIdentity(payload, target.deviceId)) {
 		return {
-			deviceId: target.deviceId,
-			name: target.name,
-			ip: target.ip,
-			channel: target.channel,
-			watts: 0,
-			output: null
+			watts: null,
+			output: null,
+			source: 'lan-status',
+			timestamp
 		};
 	}
 
 	const metrics = extractMetrics(payload, target.channel);
+	return {
+		watts: metrics.watts ?? null,
+		output: metrics.output ?? null,
+		source: 'lan-status',
+		timestamp
+	};
+}
 
+async function fetchCloudReading(
+	target: ShellyDeviceTarget
+): Promise<{ watts: number | null; output: boolean | null; source: WattageSource; timestamp: number } | null> {
+	void target;
+	return null;
+}
+
+function isValidReading(reading: {
+	watts: number | null;
+	output: boolean | null;
+	source: WattageSource;
+}) {
+	if (typeof reading.watts !== 'number' || !Number.isFinite(reading.watts)) return false;
+	if (reading.watts < 0) return false;
+	if (reading.watts === 0) {
+		return reading.output === false;
+	}
+	return true;
+}
+
+function rememberReading(deviceId: string, reading: {
+	watts: number | null;
+	output: boolean | null;
+	source: WattageSource;
+	timestamp: number;
+}) {
+	if (reading.watts === null || !Number.isFinite(reading.watts)) return;
+	lastKnownWattage.set(deviceId, {
+		watts: reading.watts,
+		output: reading.output ?? null,
+		timestamp: reading.timestamp,
+		source: reading.source
+	});
+}
+
+function readCachedReading(deviceId: string, now: number): CachedWattage | null {
+	const cached = lastKnownWattage.get(deviceId);
+	if (!cached) return null;
+	if (now - cached.timestamp > CACHE_TTL_MS) {
+		lastKnownWattage.delete(deviceId);
+		return null;
+	}
+	return { ...cached, source: 'cached' };
+}
+
+function buildSummary(
+	target: ShellyDeviceTarget,
+	reading: {
+		watts: number | null;
+		output: boolean | null;
+		source: WattageSource;
+		timestamp: number | null;
+	}
+): WattageDeviceSummary {
 	return {
 		deviceId: target.deviceId,
 		name: target.name,
 		ip: target.ip,
 		channel: target.channel,
-		watts: metrics.watts ?? 0,
-		output: metrics.output ?? null
+		watts: typeof reading.watts === 'number' && Number.isFinite(reading.watts) ? reading.watts : 0,
+		output: reading.output ?? null,
+		source: reading.source,
+		timestamp: reading.timestamp ?? null
+	};
+}
+
+function summariseWattage(summaries: WattageDeviceSummary[]) {
+	let totalWatts = 0;
+	let excludedCount = 0;
+	let cachedCount = 0;
+	let cloudCount = 0;
+	let lanRpcCount = 0;
+	let lanStatusCount = 0;
+
+	for (const item of summaries) {
+		if (item.source === 'unknown') {
+			excludedCount += 1;
+			continue;
+		}
+		if (!Number.isFinite(item.watts)) continue;
+		totalWatts += item.watts;
+		if (item.source === 'cached') cachedCount += 1;
+		if (item.source === 'cloud') cloudCount += 1;
+		if (item.source === 'lan-rpc') lanRpcCount += 1;
+		if (item.source === 'lan-status') lanStatusCount += 1;
+	}
+
+	return {
+		totalWatts,
+		summary: {
+			excludedCount,
+			cachedCount,
+			cloudCount,
+			lanRpcCount,
+			lanStatusCount
+		}
 	};
 }
 

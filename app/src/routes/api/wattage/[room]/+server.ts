@@ -15,6 +15,9 @@ type ShellyDeviceListEntry = {
 	name?: string;
 	channel?: number | string;
 	gen?: number;
+	category?: string;
+	model?: string;
+	type?: string;
 };
 
 type ShellyRoomEntry = {
@@ -42,8 +45,13 @@ type ShellyDeviceTarget = {
 	name: string;
 	channel: number | null;
 	gen: number | null;
+	category: string | null;
+	model: string | null;
+	type: string | null;
 };
 
+type WattageCapability = 'metered' | 'not-metered' | 'unknown';
+type WattageState = 'ok' | 'unavailable';
 type WattageSource = 'lan-rpc' | 'lan-status' | 'cloud' | 'cached' | 'unknown';
 
 type WattageDeviceSummary = {
@@ -55,6 +63,8 @@ type WattageDeviceSummary = {
 	output: boolean | null;
 	source: WattageSource;
 	timestamp: number | null;
+	capability: WattageCapability;
+	state: WattageState;
 };
 
 type WattageResponse = {
@@ -64,7 +74,10 @@ type WattageResponse = {
 	devices: WattageDeviceSummary[];
 	totalWatts: number;
 	summary: {
-		excludedCount: number;
+		unavailableCount: number;
+		notMeteredCount: number;
+		meteredCount: number;
+		unknownCapabilityCount: number;
 		cachedCount: number;
 		cloudCount: number;
 		lanRpcCount: number;
@@ -88,6 +101,7 @@ type CachedWattage = {
 	output: boolean | null;
 	timestamp: number;
 	source: WattageSource;
+	capability: WattageCapability;
 };
 
 const lastKnownWattage = new Map<string, CachedWattage>();
@@ -111,7 +125,10 @@ export const GET: RequestHandler = async ({ params, url }) => {
 				devices: [],
 				totalWatts: 0,
 				summary: {
-					excludedCount: 0,
+					unavailableCount: 0,
+					notMeteredCount: 0,
+					meteredCount: 0,
+					unknownCapabilityCount: 0,
 					cachedCount: 0,
 					cloudCount: 0,
 					lanRpcCount: 0,
@@ -124,6 +141,20 @@ export const GET: RequestHandler = async ({ params, url }) => {
 		const summaries = await Promise.all(devices.map((target) => fetchDeviceWattage(target)));
 
 		const totals = summariseWattage(summaries);
+		if (totals.summary.unavailableCount > 0) {
+			const unavailable = summaries.filter(
+				(item) => item.capability === 'metered' && item.state === 'unavailable'
+			);
+			if (unavailable.length > 0) {
+				console.warn('Wattage unavailable for metered devices', {
+					devices: unavailable.map((item) => ({
+						deviceId: item.deviceId,
+						ip: item.ip,
+						source: item.source
+					}))
+				});
+			}
+		}
 		const payload: WattageResponse = {
 			ok: true,
 			roomId,
@@ -235,6 +266,9 @@ function collectRoomDeviceTargets(
 		const name = typeof entry.name === 'string' && entry.name ? entry.name : deviceId;
 		const channel = parseNumber(entry.channel);
 		const gen = parseNumber(entry.gen);
+		const category = normaliseLabel(entry.category);
+		const model = normaliseLabel(entry.model);
+		const type = normaliseLabel(entry.type);
 
 		results.push({
 			deviceId,
@@ -242,7 +276,10 @@ function collectRoomDeviceTargets(
 			ip,
 			name,
 			channel: Number.isFinite(channel) ? channel : null,
-			gen: Number.isFinite(gen) ? gen : null
+			gen: Number.isFinite(gen) ? gen : null,
+			category,
+			model,
+			type
 		});
 	}
 
@@ -296,6 +333,12 @@ function normaliseIp(value: unknown): string {
 	return '';
 }
 
+function normaliseLabel(value: unknown): string | null {
+	if (typeof value !== 'string') return null;
+	const trimmed = value.trim();
+	return trimmed ? trimmed : null;
+}
+
 function isTargetSubnet(ip: string) {
 	return typeof ip === 'string' && ip.startsWith('10.10.80.');
 }
@@ -333,36 +376,36 @@ function resolveRoomLabel(rooms: ShellyDeviceListPayload['rooms'], roomId: numbe
 
 async function fetchDeviceWattage(target: ShellyDeviceTarget): Promise<WattageDeviceSummary> {
 	const now = Date.now();
+	// Capability is derived from cloud metadata or explicit RPC hints.
+	const metadataCapability = inferCapabilityFromMetadata(target);
 	const lanReading = await fetchLanReading(target);
+	const capability = resolveCapability(metadataCapability, lanReading?.capabilityHint ?? null);
 
 	if (lanReading && isValidReading(lanReading)) {
-		rememberReading(target.deviceId, lanReading);
-		return buildSummary(target, lanReading);
+		// Any valid power reading implies a metered device.
+		const summary = buildSummary(target, lanReading, 'metered', 'ok');
+		if (summary.capability === 'metered') {
+			rememberReading(target.deviceId, summary);
+		}
+		return summary;
 	}
 
 	const cloudReading = await fetchCloudReading(target);
 	if (cloudReading && isValidReading(cloudReading)) {
-		rememberReading(target.deviceId, cloudReading);
-		return buildSummary(target, cloudReading);
+		const summary = buildSummary(target, cloudReading, 'metered', 'ok');
+		rememberReading(target.deviceId, summary);
+		return summary;
 	}
 
-	const cached = readCachedReading(target.deviceId, now);
-	if (cached) {
-		return buildSummary(target, cached);
+	// Only cache and count devices that are expected to report watts.
+	if (capability !== 'not-metered') {
+		const cached = readCachedReading(target, now);
+		if (cached) {
+			return cached;
+		}
 	}
 
-	console.warn('Wattage unknown', {
-		deviceId: target.deviceId,
-		ip: target.ip,
-		gen: target.gen
-	});
-
-	return buildSummary(target, {
-		watts: 0,
-		output: null,
-		source: 'unknown',
-		timestamp: null
-	});
+	return buildUnavailableSummary(target, capability);
 }
 
 function supportsRpcPower(target: ShellyDeviceTarget) {
@@ -371,7 +414,13 @@ function supportsRpcPower(target: ShellyDeviceTarget) {
 
 async function fetchLanReading(
 	target: ShellyDeviceTarget
-): Promise<{ watts: number | null; output: boolean | null; source: WattageSource; timestamp: number } | null> {
+): Promise<{
+	watts: number | null;
+	output: boolean | null;
+	source: WattageSource;
+	timestamp: number;
+	capabilityHint: WattageCapability | null;
+} | null> {
 	const timestamp = Date.now();
 	const channel = target.channel ?? 0;
 
@@ -382,14 +431,17 @@ async function fetchLanReading(
 				watts: payload.apower,
 				output: typeof payload.output === 'boolean' ? payload.output : null,
 				source: 'lan-rpc',
-				timestamp
+				timestamp,
+				capabilityHint: 'metered'
 			};
 		}
+		const hasOutput = payload && typeof payload.output === 'boolean';
 		return {
 			watts: null,
-			output: null,
+			output: hasOutput ? payload.output ?? null : null,
 			source: 'lan-rpc',
-			timestamp
+			timestamp,
+			capabilityHint: hasOutput ? 'not-metered' : null
 		};
 	}
 
@@ -399,7 +451,8 @@ async function fetchLanReading(
 			watts: null,
 			output: null,
 			source: 'lan-status',
-			timestamp
+			timestamp,
+			capabilityHint: null
 		};
 	}
 
@@ -408,7 +461,8 @@ async function fetchLanReading(
 		watts: metrics.watts ?? null,
 		output: metrics.output ?? null,
 		source: 'lan-status',
-		timestamp
+		timestamp,
+		capabilityHint: typeof metrics.watts === 'number' ? 'metered' : null
 	};
 }
 
@@ -417,6 +471,51 @@ async function fetchCloudReading(
 ): Promise<{ watts: number | null; output: boolean | null; source: WattageSource; timestamp: number } | null> {
 	void target;
 	return null;
+}
+
+function inferCapabilityFromMetadata(target: ShellyDeviceTarget): WattageCapability {
+	const category = target.category?.toLowerCase() ?? '';
+	const model = target.model?.toLowerCase() ?? '';
+	const type = target.type?.toLowerCase() ?? '';
+	const name = target.name?.toLowerCase() ?? '';
+	const haystack = `${category} ${model} ${type} ${name}`.trim();
+
+	if (!haystack) return 'unknown';
+
+	// Covers and rollers never expose power metering.
+	if (category.includes('roller') || haystack.includes('cover') || haystack.includes('roller')) {
+		return 'not-metered';
+	}
+
+	// Obvious non-metering devices.
+	if (
+		haystack.includes('wall display') ||
+		haystack.includes('walldisplay') ||
+		haystack.includes('display') ||
+		haystack.includes('sensor') ||
+		haystack.includes('input')
+	) {
+		return 'not-metered';
+	}
+
+	// Devices without PM/EM in the model are considered non-metered.
+	if (model) {
+		if (model.includes('pm') || model.includes('em')) {
+			return 'metered';
+		}
+		return 'not-metered';
+	}
+
+	return 'unknown';
+}
+
+function resolveCapability(
+	metadata: WattageCapability,
+	hint: WattageCapability | null
+): WattageCapability {
+	// RPC hint is authoritative: if it exposes apower, it's metered; if it exposes only output, it's not-metered.
+	if (hint) return hint;
+	return metadata;
 }
 
 function isValidReading(reading: {
@@ -437,24 +536,40 @@ function rememberReading(deviceId: string, reading: {
 	output: boolean | null;
 	source: WattageSource;
 	timestamp: number;
+	capability: WattageCapability;
 }) {
 	if (reading.watts === null || !Number.isFinite(reading.watts)) return;
 	lastKnownWattage.set(deviceId, {
 		watts: reading.watts,
 		output: reading.output ?? null,
 		timestamp: reading.timestamp,
-		source: reading.source
+		source: reading.source,
+		capability: reading.capability
 	});
 }
 
-function readCachedReading(deviceId: string, now: number): CachedWattage | null {
-	const cached = lastKnownWattage.get(deviceId);
+function readCachedReading(
+	target: ShellyDeviceTarget,
+	now: number
+): WattageDeviceSummary | null {
+	const cached = lastKnownWattage.get(target.deviceId);
 	if (!cached) return null;
 	if (now - cached.timestamp > CACHE_TTL_MS) {
-		lastKnownWattage.delete(deviceId);
+		lastKnownWattage.delete(target.deviceId);
 		return null;
 	}
-	return { ...cached, source: 'cached' };
+	return {
+		deviceId: target.deviceId,
+		name: target.name,
+		ip: target.ip,
+		channel: target.channel,
+		watts: cached.watts,
+		output: cached.output ?? null,
+		source: 'cached',
+		timestamp: cached.timestamp,
+		capability: cached.capability,
+		state: 'ok'
+	};
 }
 
 function buildSummary(
@@ -464,7 +579,9 @@ function buildSummary(
 		output: boolean | null;
 		source: WattageSource;
 		timestamp: number | null;
-	}
+	},
+	capability: WattageCapability,
+	state: WattageState
 ): WattageDeviceSummary {
 	return {
 		deviceId: target.deviceId,
@@ -474,23 +591,60 @@ function buildSummary(
 		watts: typeof reading.watts === 'number' && Number.isFinite(reading.watts) ? reading.watts : 0,
 		output: reading.output ?? null,
 		source: reading.source,
-		timestamp: reading.timestamp ?? null
+		timestamp: reading.timestamp ?? null,
+		capability,
+		state
+	};
+}
+
+function buildUnavailableSummary(
+	target: ShellyDeviceTarget,
+	capability: WattageCapability
+): WattageDeviceSummary {
+	const state: WattageState = capability === 'metered' ? 'unavailable' : 'ok';
+	return {
+		deviceId: target.deviceId,
+		name: target.name,
+		ip: target.ip,
+		channel: target.channel,
+		watts: 0,
+		output: null,
+		source: 'unknown',
+		timestamp: null,
+		capability,
+		state
 	};
 }
 
 function summariseWattage(summaries: WattageDeviceSummary[]) {
 	let totalWatts = 0;
-	let excludedCount = 0;
+	let unavailableCount = 0;
+	let notMeteredCount = 0;
+	let meteredCount = 0;
+	let unknownCapabilityCount = 0;
 	let cachedCount = 0;
 	let cloudCount = 0;
 	let lanRpcCount = 0;
 	let lanStatusCount = 0;
 
 	for (const item of summaries) {
-		if (item.source === 'unknown') {
-			excludedCount += 1;
+		if (item.capability === 'not-metered') {
+			notMeteredCount += 1;
 			continue;
 		}
+
+		if (item.capability === 'metered') {
+			meteredCount += 1;
+		} else {
+			unknownCapabilityCount += 1;
+			continue;
+		}
+
+		if (item.state === 'unavailable') {
+			unavailableCount += 1;
+			continue;
+		}
+
 		if (!Number.isFinite(item.watts)) continue;
 		totalWatts += item.watts;
 		if (item.source === 'cached') cachedCount += 1;
@@ -502,7 +656,10 @@ function summariseWattage(summaries: WattageDeviceSummary[]) {
 	return {
 		totalWatts,
 		summary: {
-			excludedCount,
+			unavailableCount,
+			notMeteredCount,
+			meteredCount,
+			unknownCapabilityCount,
 			cachedCount,
 			cloudCount,
 			lanRpcCount,

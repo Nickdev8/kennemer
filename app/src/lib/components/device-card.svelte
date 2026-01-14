@@ -163,7 +163,7 @@ function getTextColor(hexColor: string): string {
 	function computeButtonClass(
 		command: DeviceCommandKey,
 		key: string,
-		options: { forceProminent?: boolean } = {}
+		options: { forceProminent?: boolean; forceNeutral?: boolean } = {}
 	): ButtonVisual {
 		const config = device.commands[command];
 		const typeValue = config?.type;
@@ -180,7 +180,9 @@ function getTextColor(hexColor: string): string {
 		const classes = [baseButtonClass];
 		let style: string | undefined;
 
-		if (hexColor) {
+		if (options.forceNeutral) {
+			classes.push(buttonNeutralClass);
+		} else if (hexColor) {
 			const textColor = getTextColor(hexColor);
 			const borderColor = borderHex ?? hexColor;
 			classes.push(buttonCustomClass);
@@ -240,14 +242,18 @@ function getTextColor(hexColor: string): string {
 		if (!device.commands[stateCommand] || !device.commands[actionCommand]) return null;
 		const actionKey = commandKey(device.id, actionCommand);
 		const key = deviceLoading && loadingCommandKey ? loadingCommandKey : actionKey;
-		const visual = computeButtonClass(actionCommand, key, { forceProminent: true });
+		const forceNeutral = stateCommand === 'on' && actionCommand === 'off';
+		const forceProminent = stateCommand === 'off' && actionCommand === 'on';
+		const visual = computeButtonClass(actionCommand, key, { forceProminent, forceNeutral });
+		// Toggle labels describe the action, not the current state.
+		const actionLabel = actionCommand === 'on' ? 'Zet aan' : 'Zet uit';
 		return {
 			key,
 			className: visual.className,
 			style: visual.style,
 			ariaPressed: stateCommand === 'on',
 			command: actionCommand,
-			label: commandLabel(device, actionCommand)
+			label: actionLabel
 		};
 	})();
 

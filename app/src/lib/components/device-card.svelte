@@ -84,25 +84,28 @@
 	$: cardClassName = (() => {
 		cardStyle = undefined;
 
-		const currentCommand = optimisticStatus ? device.commands[optimisticStatus] : null;
-		const hexColor = currentCommand ? normalizeHexColor(currentCommand.type ?? '') : null;
-		const borderHex =
-			currentCommand && currentCommand.typeBorder
-				? normalizeHexColor(currentCommand.typeBorder)
-				: hexColor;
+		if (optimisticStatus === 'on') {
+			const onCommand = device.commands.on;
+			const hexColor = onCommand ? normalizeHexColor(onCommand.type ?? '') : null;
+			const borderHex =
+				onCommand && onCommand.typeBorder
+					? normalizeHexColor(onCommand.typeBorder)
+					: hexColor;
 
-		if (hexColor) {
-			const borderColor = borderHex ?? hexColor;
-			const background = lightenHex(hexColor, 0.9);
-			cardStyle = [
-				`border-color:${borderColor}`,
-				`border-left-color:${borderColor}`,
-				`background:${background}`
-			].join(';');
-			return `${baseCardClass} ${cardCustomClass}`;
+			if (hexColor) {
+				const borderColor = borderHex ?? hexColor;
+				const background = lightenHex(hexColor, 0.9);
+				cardStyle = [
+					`border-color:${borderColor}`,
+					`border-left-color:${borderColor}`,
+					`background:${background}`
+				].join(';');
+				return `${baseCardClass} ${cardCustomClass}`;
+			}
+
+			return `${baseCardClass} ${cardOnClass}`;
 		}
 
-		if (optimisticStatus === 'on') return `${baseCardClass} ${cardOnClass}`;
 		if (optimisticStatus === 'off') return `${baseCardClass} ${cardOffClass}`;
 		return `${baseCardClass} ${cardNeutralClass}`;
 	})();
@@ -242,15 +245,23 @@ function getTextColor(hexColor: string): string {
 		if (!device.commands[stateCommand] || !device.commands[actionCommand]) return null;
 		const actionKey = commandKey(device.id, actionCommand);
 		const key = deviceLoading && loadingCommandKey ? loadingCommandKey : actionKey;
-		const forceNeutral = stateCommand === 'on' && actionCommand === 'off';
-		const forceProminent = stateCommand === 'off' && actionCommand === 'on';
-		const visual = computeButtonClass(actionCommand, key, { forceProminent, forceNeutral });
-		// Toggle labels describe the action, not the current state.
+		const visual = computeButtonClass(actionCommand, key, { forceNeutral: true });
+		const onCommand = device.commands.on;
+		const onHexColor = onCommand ? normalizeHexColor(onCommand.type ?? '') : null;
+		const onBorderHex =
+			onCommand && onCommand.typeBorder
+				? normalizeHexColor(onCommand.typeBorder)
+				: onHexColor;
+		const borderColor = onBorderHex ?? '#10b981';
+		const accentBorderStyle =
+			stateCommand === 'on' ? `border-color:${borderColor}` : undefined;
+		const mergedStyle = [visual.style, accentBorderStyle].filter(Boolean).join(';');
+		// Toggle labels describe the action, and the button stays neutral when state is on.
 		const actionLabel = actionCommand === 'on' ? 'Zet aan' : 'Zet uit';
 		return {
 			key,
 			className: visual.className,
-			style: visual.style,
+			style: mergedStyle || undefined,
 			ariaPressed: stateCommand === 'on',
 			command: actionCommand,
 			label: actionLabel

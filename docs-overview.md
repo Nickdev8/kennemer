@@ -7,8 +7,8 @@ Kennemer is a SvelteKit dashboard used on a wall tablet (kiosk) to control Shell
 - UI renders device cards and buttons from config in `app/src/lib/config`.
 - Button press calls `POST /actions` via `app/src/lib/api.ts`.
 - Server routes to `app/src/routes/actions/+server.ts`, which dispatches Shelly HTTP calls via `app/src/lib/server/shelly-http.ts` and updates the local state cache.
-- Device states are persisted to `app/device-states.json` and loaded on page start via `GET /api/device-state`.
-- Wattage totals come from `GET /api/wattage/[room]`, which fetches device lists from Shelly Cloud, caches IPs in `app/ips.json`, and then queries `/status` on each device IP.
+- Device states are persisted to `app/device-states.json`, loaded on page start via `GET /api/device-state`, and updated live over `GET /api/device-state/stream` (SSE).
+- Wattage totals come from `GET /api/wattage/[room]`, which fetches device lists from Shelly Cloud, caches IPs in `app/ips.json`, and then queries LAN endpoints (Gen2 RPC or legacy `/status`) per device.
 
 ## UX behavior
 - Primary dashboard is optimized for a kiosk: minimal navigation, fast feedback.

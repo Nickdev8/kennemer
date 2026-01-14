@@ -144,7 +144,7 @@ export const devices: ShellyDevice[] = [
 		buttonMode: 'toggle',
 		commands: {
 			on: {
-				label: 'Aan',
+				label: 'Omhoog',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',

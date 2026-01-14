@@ -11,6 +11,7 @@
 - `SHELLY_MAX_API_CALLS`: max rate-limit retries.
 - `PUBLIC_ADVANCED_PATTERN` or `PUBLIC_ADVANCED_PIN`: unlock advanced panel.
 - `PUBLIC_DISABLE_WATTAGE`, `PUBLIC_COMPACT_WATTAGE`: UI toggles.
+- `PUBLIC_DEBUG_WATTAGE`: show wattage diagnostics list in the advanced panel.
 
 ## Docker
 - Build and run with `docker compose up --build`.

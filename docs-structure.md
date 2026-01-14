@@ -20,6 +20,8 @@
 - `routes/+page.ts`: initial load of device states.
 - `routes/actions/+server.ts`: POST endpoint to trigger device commands.
 - `routes/api/device-state/+server.ts`: GET endpoint for cached device states.
+- `routes/api/device-state/callback/+server.ts`: POST endpoint for authoritative device state callbacks.
+- `routes/api/device-state/stream/+server.ts`: SSE endpoint for live device state updates.
 - `routes/api/wattage/[room]/+server.ts`: wattage data collection + IP caching.
 - `routes/api/wattage/cache/+server.ts`: clears cached IPs.
 
@@ -31,4 +33,5 @@
 - `components/device-card.svelte`: main button card UI.
 - `api.ts`: browser helper for `POST /actions`.
 - `server/shelly-http.ts`: LAN/cloud request dispatch, auth, retries.
+- `server/shelly-rpc.ts`: Gen2 Shelly RPC helper for wattage reads.
 - `server/device-state-store.ts`: read/write persisted device state.

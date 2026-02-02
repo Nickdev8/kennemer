@@ -1,55 +1,150 @@
-import { readFile, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { readFile, rename, writeFile, mkdir } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
+import { env } from '$env/dynamic/private';
 import type { DeviceCommandKey } from '$lib/config/schema';
 
-const DEVICE_STATE_PATH = resolve(process.cwd(), 'device-states.json');
+const DEVICE_STATE_PATH = resolve(
+	process.cwd(),
+	env.DEVICE_STATE_PATH ?? 'device-states.json'
+);
 
 export type StoredDeviceState = {
 	lastCommand: DeviceCommandKey;
 	updatedAt: number;
+	source: string;
 };
 
 type DeviceStateMap = Record<string, StoredDeviceState>;
 
+let cachedStates: DeviceStateMap = {};
+let loadPromise: Promise<void> | null = null;
+let writeWarningLogged = false;
+
+function normalizeStates(raw: unknown): DeviceStateMap {
+	if (!raw || typeof raw !== 'object') return {};
+	const entries: DeviceStateMap = {};
+	for (const [deviceId, value] of Object.entries(raw)) {
+		if (!value || typeof value !== 'object') continue;
+		const record = value as Partial<StoredDeviceState> & {
+			lastCommand?: string;
+			updatedAt?: number;
+		};
+		const lastCommand = record.lastCommand;
+		if (lastCommand !== 'on' && lastCommand !== 'off') continue;
+		const updatedAt = Number.isFinite(record.updatedAt)
+			? Number(record.updatedAt)
+			: Date.now();
+		const source =
+			typeof record.source === 'string' && record.source.trim()
+				? record.source
+				: 'unknown';
+		entries[deviceId] = { lastCommand, updatedAt, source };
+	}
+	return entries;
+}
+
+async function loadDeviceStates(): Promise<void> {
+	if (loadPromise) {
+		await loadPromise;
+		return;
+	}
+	loadPromise = (async () => {
+		try {
+			const raw = await readFile(DEVICE_STATE_PATH, 'utf-8');
+			cachedStates = normalizeStates(JSON.parse(raw));
+		} catch (error) {
+			const code = (error as NodeJS.ErrnoException).code;
+			if (code !== 'ENOENT') {
+				cachedStates = {};
+			}
+		}
+	})();
+	await loadPromise;
+}
+
+void loadDeviceStates();
+
+function shouldUpdateState(existing: StoredDeviceState | undefined, nextTimestamp: number) {
+	return !(
+		existing &&
+		typeof existing.updatedAt === 'number' &&
+		existing.updatedAt > nextTimestamp
+	);
+}
+
 export async function readDeviceStates(): Promise<DeviceStateMap> {
+	await loadDeviceStates();
+	return cachedStates;
+}
+
+async function persistDeviceStates(states: DeviceStateMap): Promise<void> {
 	try {
-		const raw = await readFile(DEVICE_STATE_PATH, 'utf-8');
-		if (!raw) return {};
-		const parsed = JSON.parse(raw) as DeviceStateMap;
-		return parsed && typeof parsed === 'object' ? parsed : {};
-	} catch {
-		return {};
+		await mkdir(dirname(DEVICE_STATE_PATH), { recursive: true });
+		const tempPath = `${DEVICE_STATE_PATH}.tmp-${Date.now()}-${Math.random()
+			.toString(16)
+			.slice(2)}`;
+		await writeFile(tempPath, JSON.stringify(states, null, 2), 'utf-8');
+		await rename(tempPath, DEVICE_STATE_PATH);
+	} catch (error) {
+		if (!writeWarningLogged) {
+			writeWarningLogged = true;
+			console.warn('[device-state] Failed to persist device states', error);
+		}
 	}
 }
 
 export async function writeDeviceStates(states: DeviceStateMap): Promise<void> {
-	await writeFile(DEVICE_STATE_PATH, JSON.stringify(states, null, 2), 'utf-8');
+	cachedStates = states;
+	await persistDeviceStates(states);
 }
 
 export async function updateDeviceState(
 	deviceId: string,
 	command: DeviceCommandKey
 ): Promise<StoredDeviceState> {
-	const current = await readDeviceStates();
-	current[deviceId] = { lastCommand: command, updatedAt: Date.now() };
-	await writeDeviceStates(current);
-	return current[deviceId];
+	await loadDeviceStates();
+	cachedStates[deviceId] = {
+		lastCommand: command,
+		updatedAt: Date.now(),
+		source: 'action'
+	};
+	void persistDeviceStates(cachedStates);
+	return cachedStates[deviceId];
 }
 
 export async function updateDeviceStateIfNewer(
 	deviceId: string,
 	command: DeviceCommandKey,
-	reportedAt?: number
+	reportedAt?: number,
+	source = 'callback'
 ) {
-	const current = await readDeviceStates();
+	await loadDeviceStates();
 	const nextTimestamp = Number.isFinite(reportedAt) ? Number(reportedAt) : Date.now();
-	const existing = current[deviceId];
+	const existing = cachedStates[deviceId];
 
-	if (existing && typeof existing.updatedAt === 'number' && existing.updatedAt > nextTimestamp) {
+	if (!shouldUpdateState(existing, nextTimestamp)) {
 		return { updated: false, state: existing };
 	}
 
-	current[deviceId] = { lastCommand: command, updatedAt: nextTimestamp };
-	await writeDeviceStates(current);
-	return { updated: true, state: current[deviceId] };
+	cachedStates[deviceId] = { lastCommand: command, updatedAt: nextTimestamp, source };
+	void persistDeviceStates(cachedStates);
+	return { updated: true, state: cachedStates[deviceId] };
+}
+
+export async function updateDeviceStateIfNewerTransient(
+	deviceId: string,
+	command: DeviceCommandKey,
+	reportedAt?: number,
+	source = 'transient'
+) {
+	await loadDeviceStates();
+	const nextTimestamp = Number.isFinite(reportedAt) ? Number(reportedAt) : Date.now();
+	const existing = cachedStates[deviceId];
+
+	if (!shouldUpdateState(existing, nextTimestamp)) {
+		return { updated: false, state: existing };
+	}
+
+	cachedStates[deviceId] = { lastCommand: command, updatedAt: nextTimestamp, source };
+	return { updated: true, state: cachedStates[deviceId] };
 }

@@ -51,6 +51,8 @@
 	let statusLabel = 'Uit';
 	let statusDotClass = 'bg-slate-400';
 	let statusTextClass = 'text-slate-600';
+	let hasKnownStatus = false;
+	let hasTransientOn = false;
 
 	const currentOptimisticKey = () =>
 		optimisticStatus ? commandKey(device.id, optimisticStatus) : null;
@@ -67,14 +69,23 @@
 	$: commandGridClass = isToggle || isSingle ? 'grid-cols-1' : 'grid-cols-2';
 
 	$: {
+		hasTransientOn =
+			isSingle && isStateless && device.group === 'Scene' && initialStatus === 'on';
 		if (optimisticStatus === 'on') {
 			statusLabel = 'Aan';
 			statusDotClass = 'bg-emerald-500';
 			statusTextClass = 'text-emerald-700';
-		} else {
+			hasKnownStatus = true;
+		} else if (optimisticStatus === 'off') {
 			statusLabel = 'Uit';
 			statusDotClass = 'bg-slate-400';
 			statusTextClass = 'text-slate-600';
+			hasKnownStatus = true;
+		} else {
+			statusLabel = '—';
+			statusDotClass = 'bg-slate-300';
+			statusTextClass = 'text-slate-400';
+			hasKnownStatus = false;
 		}
 	}
 
@@ -263,7 +274,12 @@ function getTextColor(hexColor: string): string {
 		if (!device.commands[stateCommand] || !device.commands[actionCommand]) return null;
 		const actionKey = commandKey(device.id, actionCommand);
 		const key = deviceLoading && loadingCommandKey ? loadingCommandKey : actionKey;
-		const visual = computeButtonClass(actionCommand, key, { forceNeutral: true });
+		const showGreenAction = actionCommand === 'off';
+		const visualCommand: DeviceCommandKey = showGreenAction ? 'on' : actionCommand;
+		const visual = computeButtonClass(visualCommand, key, {
+			forceNeutral: !showGreenAction,
+			forceProminent: showGreenAction
+		});
 		const onCommand = device.commands.on;
 		const onHexColor = onCommand ? normalizeHexColor(onCommand.type ?? '') : null;
 		const onBorderHex =
@@ -288,7 +304,7 @@ function getTextColor(hexColor: string): string {
 
 	$: singleState = (() => {
 		if (!isSingle) return null;
-		const forceNeutral = isStateless && device.group === 'Scene';
+		const forceNeutral = isStateless && device.group === 'Scene' && !hasTransientOn;
 		const command: DeviceCommandKey = 'on';
 		if (!device.commands.on) return null;
 		const key = commandKey(device.id, command);
@@ -328,8 +344,12 @@ function getTextColor(hexColor: string): string {
 		</div>
 		{#if !isStateless && !isSingle}
 			<div class={`flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${statusTextClass}`}>
-				<span class={`h-2.5 w-2.5 rounded-full ${statusDotClass}`}></span>
-				<span>{statusLabel}</span>
+				{#if hasKnownStatus}
+					<span class={`h-2.5 w-2.5 rounded-full ${statusDotClass}`}></span>
+					<span>{statusLabel}</span>
+				{:else}
+					<span>{statusLabel}</span>
+				{/if}
 			</div>
 		{/if}
 	</div>

@@ -9,7 +9,7 @@ type TriggerRequest = {
 	triggerId?: string;
 };
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, fetch, url }) => {
 	const { triggerId }: TriggerRequest = await request.json();
 
 	if (!triggerId) {
@@ -50,6 +50,23 @@ export const POST: RequestHandler = async ({ request }) => {
 			}
 		};
 		await sendDeviceCommand(sceneDevice, 'on');
+		const callbackUrl = new URL('/api/device-state/callback', url).toString();
+		const postTransientState = (state: 'on' | 'off') =>
+			fetch(callbackUrl, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					deviceId: trigger.id,
+					state,
+					reportedAt: Date.now(),
+					transient: true
+				})
+			}).catch(() => undefined);
+
+		void postTransientState('on');
+		setTimeout(() => {
+			void postTransientState('off');
+		}, 5000);
 		return new Response(JSON.stringify({ ok: true }));
 	} catch (err) {
 		if (err instanceof ShellyHttpError) {

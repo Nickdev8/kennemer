@@ -542,7 +542,6 @@
       <div>
         <p class="text-xs uppercase tracking-wide text-slate-500">Dashboard</p>
         <h1 class="text-3xl font-semibold tracking-tight text-slate-900">HFD</h1>
-        <p class="text-sm text-slate-500">Snelle bediening met duidelijke status en wattage.</p>
       </div>
       <div class="flex flex-wrap items-center gap-3">
         <!--
@@ -769,7 +768,7 @@
     tabindex="-1"
   >
     <div
-      class="relative mx-auto flex w-full max-w-5xl flex-1 flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white/95 shadow-xl"
+      class="relative mx-auto flex w-[90vw] max-w-[1800px] flex-1 flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white/95 shadow-xl"
       on:click|stopPropagation
     >
       <header class="flex flex-col gap-4 border-b border-slate-200 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
@@ -823,7 +822,13 @@
                       </p>
                       <span class="h-px flex-1 bg-slate-200"></span>
                     </div>
-                    <div class="grid grid-cols-1 gap-4">
+                    <div
+                      class={`grid gap-4 ${
+                        ['techniek', 'licht-techniek', 'power-socket'].includes(section.id)
+                          ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'
+                          : 'grid-cols-1'
+                      }`}
+                    >
                       {#each section.devices as device (device.id)}
                         <DeviceCard
                           {device}
@@ -850,13 +855,15 @@
                         </p>
                         <span class="h-px flex-1 bg-slate-200"></span>
                       </div>
-                      <div class="grid grid-cols-1 gap-4">
+                      <div class="grid auto-rows-fr grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                         {#each advancedTriggers as trigger (trigger.id)}
-                          <TriggerCard
-                            {trigger}
-                            {loadingTriggerId}
-                            on:trigger={({ detail }) => handleTriggerPress(detail.triggerId)}
-                          />
+                          <div class="flex h-full items-center">
+                            <TriggerCard
+                              {trigger}
+                              {loadingTriggerId}
+                              on:trigger={({ detail }) => handleTriggerPress(detail.triggerId)}
+                            />
+                          </div>
                         {/each}
                       </div>
                     </div>
@@ -868,7 +875,7 @@
         </section>
 
         <!-- Right column: system diagnostics and actions. -->
-        <aside class="w-full space-y-4 lg:max-w-sm lg:flex-shrink-0">
+        <aside class="w-full space-y-4 lg:w-[400px] lg:flex-shrink-0">
           <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">System actions</p>
             <div class="mt-3 grid gap-2">

@@ -43,6 +43,7 @@ Advanced cards staan in `app/src/lib/config/advanced.ts`.
 Op de Kennemer Odroid:
 - `update`: haalt de laatste git-commits op.
 - `restart`: herlaadt het scherm zodat updates zichtbaar zijn.
+- The folder is located `cd /opt/kennemer/`
 
 ## .env (app/.env)
 Hier staan runtime-instellingen (niet committen).
@@ -52,6 +53,7 @@ Meest gebruikt:
 - `USE_LAN_DEVICES=1` om LAN te prefereren
 - `USE_LAN_WATTAGE=1` voor LAN wattage
 - `PUBLIC_ADVANCED_PATTERN` of `PUBLIC_ADVANCED_PIN` voor advanced toegang
+Template staat in `app/env.temp` — kopieer naar `app/.env`.
 
 
 

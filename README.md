@@ -11,12 +11,13 @@ http://localhost/api/device-state/callback?deviceId=scene-screen-lokalen&state=o
 Bewerk `app/src/lib/config/devices.ts`.
 - Elke entry in `devices` wordt een card.
 - Gebruik een uniek `id`, zet `label` + `group`, en definieer `commands.on/off`.
+- `buttonMode` bepaalt de knop: `toggle` (Aan/Uit in 1 knop), `dual` (Aan + Uit), `single` (1 actie).
 
 Minimal voorbeeld:
 ```ts
 {
-  id: 'scene-screen-lokalen',
-  label: 'Screen lokalen',
+  id: 'scene-kantine',
+  label: 'Kantine',
   group: 'Scene',
   buttonMode: 'toggle',
   commands: {

@@ -324,7 +324,6 @@
       if (!payload?.ok || !payload.states) return;
       applyDeviceStates(payload.states);
     } catch {
-      // ignore
     }
   }
 
@@ -341,7 +340,6 @@
           applyDeviceStates(payload);
         }
       } catch {
-        // ignore malformed payloads
       }
     });
 
@@ -357,7 +355,6 @@
           applyDeviceStateUpdate(payload.deviceId, payload.state.lastCommand);
         }
       } catch {
-        // ignore malformed payloads
       }
     });
 
@@ -544,24 +541,6 @@
         <h1 class="text-3xl font-semibold tracking-tight text-slate-900">HFD</h1>
       </div>
       <div class="flex flex-wrap items-center gap-3">
-        <!--
-        <button
-          type="button"
-          class="rounded-2xl border border-emerald-500 bg-emerald-500 px-6 py-4 text-sm font-semibold uppercase tracking-[0.25em] text-white shadow-lg shadow-emerald-200/70 transition hover:bg-emerald-600 disabled:opacity-50"
-          on:click={() => handleBulkCommand('on')}
-          disabled={loadingCommandKey !== null}
-        >
-          Alles aan
-        </button>
-        <button
-          type="button"
-          class="rounded-2xl border border-rose-500 bg-rose-500 px-6 py-4 text-sm font-semibold uppercase tracking-[0.25em] text-white shadow-lg shadow-rose-200/70 transition hover:bg-rose-600 disabled:opacity-50"
-          on:click={() => handleBulkCommand('off')}
-          disabled={loadingCommandKey !== null}
-        >
-          Alles uit
-        </button>
-        -->
       </div>
     </div>
   </header>
@@ -786,9 +765,7 @@
           </button>
         </div>
       </header>
-      <!-- Two-column layout keeps device controls scrollable and diagnostics stable. -->
       <div class="flex min-h-0 flex-1 flex-col gap-6 px-6 py-6 lg:flex-row">
-        <!-- Left column: advanced device controls (scrollable). -->
         <section class="flex min-h-0 flex-1 flex-col">
           <div class="mb-3 flex items-center justify-between">
             <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Advanced devices</p>
@@ -874,7 +851,6 @@
           </div>
         </section>
 
-        <!-- Right column: system diagnostics and actions. -->
         <aside class="w-full space-y-4 lg:w-[400px] lg:flex-shrink-0">
           <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">System actions</p>

@@ -226,7 +226,6 @@ function buildShellyError(status: number, body: string): ShellyHttpError {
 	try {
 		payload = body ? JSON.parse(body) : undefined;
 	} catch {
-		// ignore JSON parse failures; we fall back to raw body
 	}
 
 	let code: ShellyErrorCode = 'HTTP_ERROR';
@@ -295,7 +294,7 @@ export async function sendDeviceCommand(device: ShellyDevice, commandKey: Device
 		const resolvedTarget = sceneCommand
 			? {
 					...target,
-					// Shelly scenes require form-encoded auth; JSON silently fails.
+					// Scenes require form-encoded auth.
 					encoding: 'form' as const,
 					headers: stripHeaderKeys(target.headers, ['content-type', 'authorization'])
 				}

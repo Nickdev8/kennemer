@@ -40,7 +40,6 @@ const buildSwitchDevice = ({
 	}
 });
 
-// Populate this list with devices that should only be visible to advanced users.
 export const advancedDevices: ShellyDevice[] = [
 	buildSwitchDevice({ id: 'voordeur', label: 'Voordeur', group: 'Techniek' }),
 	buildSwitchDevice({

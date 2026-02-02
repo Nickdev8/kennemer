@@ -160,7 +160,6 @@
 		const trimmed = color.trim();
 		if (!hexColorRegex.test(trimmed)) return null;
 		if (trimmed.length === 4) {
-			// Expand #abc to #aabbcc
 			const [, r, g, b] = trimmed.split('');
 			return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
 		}
@@ -168,7 +167,6 @@
 	}
 
 function getTextColor(hexColor: string): string {
-	// Compute perceived brightness to pick a readable text color
 	const r = parseInt(hexColor.slice(1, 3), 16);
 	const g = parseInt(hexColor.slice(3, 5), 16);
 	const b = parseInt(hexColor.slice(5, 7), 16);
@@ -290,7 +288,6 @@ function getTextColor(hexColor: string): string {
 		const accentBorderStyle =
 			stateCommand === 'on' ? `border-color:${borderColor}` : undefined;
 		const mergedStyle = [visual.style, accentBorderStyle].filter(Boolean).join(';');
-		// Toggle labels describe the action, and the button stays neutral when state is on.
 		const actionLabel = actionCommand === 'on' ? 'Zet aan' : 'Zet uit';
 		return {
 			key,

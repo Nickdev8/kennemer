@@ -229,7 +229,6 @@ async function writeDeviceListCache(payload: ShellyDeviceListPayload): Promise<v
 	try {
 		await writeFile(IP_CACHE_PATH, JSON.stringify(cachePayload, null, 2), 'utf-8');
 	} catch {
-		// ignore cache write errors; we'll fall back to live calls when needed
 	}
 }
 
@@ -385,14 +384,11 @@ function resolveRoomLabel(rooms: ShellyDeviceListPayload['rooms'], roomId: numbe
 
 async function fetchDeviceWattage(target: ShellyDeviceTarget): Promise<WattageDeviceSummary> {
 	const now = Date.now();
-	// Capability is derived from cloud metadata or explicit RPC hints.
 	const metadataCapability = inferCapabilityFromMetadata(target);
-	// LAN wattage is best-effort; cloud is the reliable fallback.
 	const lanReading = useLanWattage ? await fetchLanReading(target) : null;
 	const capability = resolveCapability(metadataCapability, lanReading?.capabilityHint ?? null);
 
 	if (lanReading && isValidReading(lanReading)) {
-		// Any valid power reading implies a metered device.
 		const summary = buildSummary(target, lanReading, 'metered', 'ok');
 		if (summary.capability === 'metered') {
 			rememberReading(target.deviceId, summary);
@@ -414,7 +410,6 @@ async function fetchDeviceWattage(target: ShellyDeviceTarget): Promise<WattageDe
 		return summary;
 	}
 
-	// Only cache and count devices that are expected to report watts.
 	if (capability !== 'not-metered') {
 		const cached = readCachedReading(target, now);
 		if (cached) {
@@ -522,12 +517,10 @@ function inferCapabilityFromMetadata(target: ShellyDeviceTarget): WattageCapabil
 
 	if (!haystack) return 'unknown';
 
-	// Covers and rollers never expose power metering.
 	if (category.includes('roller') || haystack.includes('cover') || haystack.includes('roller')) {
 		return 'not-metered';
 	}
 
-	// Obvious non-metering devices.
 	if (
 		haystack.includes('wall display') ||
 		haystack.includes('walldisplay') ||
@@ -538,7 +531,6 @@ function inferCapabilityFromMetadata(target: ShellyDeviceTarget): WattageCapabil
 		return 'not-metered';
 	}
 
-	// Devices without PM/EM in the model are considered non-metered.
 	if (model) {
 		if (model.includes('pm') || model.includes('em')) {
 			return 'metered';
@@ -553,7 +545,6 @@ function resolveCapability(
 	metadata: WattageCapability,
 	hint: WattageCapability | null
 ): WattageCapability {
-	// RPC hint is authoritative: if it exposes apower, it's metered; if it exposes only output, it's not-metered.
 	if (hint) return hint;
 	return metadata;
 }

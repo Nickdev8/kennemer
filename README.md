@@ -35,6 +35,9 @@ Minimal example:
 ## Scripts
 - `restart`: restarts the `odroid-kiosk` systemd service (double restart).
 - `screen`: starts/stops the kiosk stack (Xorg + window manager + Brave kiosk) with a watchdog.
+On the Kennemer Odroid:
+- `update`: pulls the latest git commits.
+- `restart`: reloads the screen to pick up updates.
 
 ## .env (app/.env)
 Put runtime settings here (not committed).

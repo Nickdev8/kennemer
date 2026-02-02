@@ -1,18 +1,18 @@
 ## Kennemer Device Panel
-Minimal SvelteKit dashboard for Shelly devices.
+Minimal SvelteKit-dashboard voor Shelly-apparaten.
 
-## Quick URLs
-Update visible device state (no real device call):
+## Snelle URL's
+Alleen de zichtbare status bijwerken (geen echte device-call):
 ```url
 http://localhost/api/device-state/callback?deviceId=scene-screen-lokalen&state=off
 ```
 
-## Add or Edit Devices (Cards)
-Edit `app/src/lib/config/devices.ts`.
-- Each entry in `devices` becomes a card.
-- Use a unique `id`, set `label` + `group`, then define `commands.on/off`.
+## Devices (Cards) toevoegen of aanpassen
+Bewerk `app/src/lib/config/devices.ts`.
+- Elke entry in `devices` wordt een card.
+- Gebruik een uniek `id`, zet `label` + `group`, en definieer `commands.on/off`.
 
-Minimal example:
+Minimal voorbeeld:
 ```ts
 {
   id: 'scene-screen-lokalen',
@@ -33,19 +33,20 @@ Minimal example:
 ```
 
 ## Scripts
-- `restart`: restarts the `odroid-kiosk` systemd service (double restart).
-- `screen`: starts/stops the kiosk stack (Xorg + window manager + Brave kiosk) with a watchdog.
-On the Kennemer Odroid:
-- `update`: pulls the latest git commits.
-- `restart`: reloads the screen to pick up updates.
+- `restart`: herstart de `odroid-kiosk` systemd-service (dubbele restart).
+- `screen`: start/stop de kiosk-stack (Xorg + window manager + Brave kiosk) met watchdog.
+Op de Kennemer Odroid:
+- `update`: haalt de laatste git-commits op.
+- `restart`: herlaadt het scherm zodat updates zichtbaar zijn.
 
 ## .env (app/.env)
-Put runtime settings here (not committed).
-Common keys:
+Hier staan runtime-instellingen (niet committen).
+Meest gebruikt:
 - `SHELLY_AUTH_KEY` = Shelly cloud API key
-- `SHELLY_SIMULATE_DEVICES=1` to avoid touching real hardware
-- `USE_LAN=1` to prefer LAN calls
-- `PUBLIC_ADVANCED_PATTERN` or `PUBLIC_ADVANCED_PIN` for the advanced panel unlock
+- `SHELLY_SIMULATE_DEVICES=1` om hardware te simuleren
+- `USE_LAN_DEVICES=1` om LAN te prefereren
+- `USE_LAN_WATTAGE=1` voor LAN wattage
+- `PUBLIC_ADVANCED_PATTERN` of `PUBLIC_ADVANCED_PIN` voor advanced toegang
 
 
 

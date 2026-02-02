@@ -32,6 +32,11 @@ Minimal voorbeeld:
 }
 ```
 
+## Advanced devices
+Advanced cards staan in `app/src/lib/config/advanced.ts`.
+- Werkt hetzelfde als gewone devices, maar ze zijn alleen zichtbaar na de advanced unlock.
+- Gebruik dit voor beheer‑only apperaten.
+
 ## Scripts
 - `restart`: herstart de `odroid-kiosk` systemd-service (dubbele restart).
 - `screen`: start/stop de kiosk-stack (Xorg + window manager + Brave kiosk) met watchdog.

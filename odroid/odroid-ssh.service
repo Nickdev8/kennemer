@@ -1,0 +1,34 @@
+/etc/systemd/system/reverse-ssh.service
+
+
+[Unit]
+Description=Reverse SSH tunnel to home server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=root
+
+# autossh should reconnect immediately, not wait
+Environment="AUTOSSH_GATETIME=0"
+Environment="AUTOSSH_POLL=10"
+Environment="AUTOSSH_FIRST_POLL=10"
+
+ExecStart=/usr/bin/autossh \
+  -M 0 \
+  -N \
+  -o ExitOnForwardFailure=yes \
+  -o ServerAliveInterval=15 \
+  -o ServerAliveCountMax=3 \
+  -o TCPKeepAlive=yes \
+  -o StrictHostKeyChecking=yes \
+  -o UserKnownHostsFile=/root/.ssh/known_hosts \
+  -R 127.0.0.1:2201:localhost:22 \
+  -p 443 \
+  odroidtunnel@ssh.nickesselman.nl
+
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

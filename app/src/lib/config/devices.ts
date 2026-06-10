@@ -35,7 +35,6 @@ export const gangColorDevice: ShellyDevice = {
 	}
 };
 
-export const devices: ShellyDevice[] = [
 	// {
 	// 	id: 'scene-2de',
 	// 	label: '2de',
@@ -62,6 +61,8 @@ export const devices: ShellyDevice[] = [
 	// 		}
 	// 	}
 	// },
+	
+export const devices: ShellyDevice[] = [
 	{
 		id: 'push-1',
 		label: 'Push Panel 1',

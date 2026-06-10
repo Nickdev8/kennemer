@@ -36,18 +36,45 @@ export const gangColorDevice: ShellyDevice = {
 };
 
 export const devices: ShellyDevice[] = [
+	// {
+	// 	id: 'scene-2de',
+	// 	label: '2de',
+	// 	group: 'Scene',
+	// 	buttonMode: 'toggle',
+	// 	commands: {
+	// 		on: {
+	// 			label: 'Aan',
+	// 			cloud: {
+	// 				endpoint: shellySceneEndpoint,
+	// 				method: 'POST',
+	// 				payload: { id: '1761824228559', channel: 0, turn: 'on' },
+	// 				requiresAuthKey: true
+	// 			}
+	// 		},
+	// 		off: {
+	// 			label: 'Uit',
+	// 			cloud: {
+	// 				endpoint: shellySceneEndpoint,
+	// 				method: 'POST',
+	// 				payload: { id: '1761824279482', channel: 0, turn: 'off' },
+	// 				requiresAuthKey: true
+	// 			}
+	// 		}
+	// 	}
+	// },
 	{
-		id: 'scene-2de',
-		label: '2de',
-		group: 'Scene',
+		id: 'push-1',
+		label: 'Push Panel 1',
+		group: 'Group',
 		buttonMode: 'toggle',
+		statusdeviceid:'ecc9ff4a9c38',
 		commands: {
 			on: {
 				label: 'Aan',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
-					payload: { id: '1761824228559', channel: 0, turn: 'on' },
+					payload: { id: 'ecc9ff4a9c38', channel: 0, turn: 'on' },
 					requiresAuthKey: true
 				}
 			},
@@ -56,7 +83,7 @@ export const devices: ShellyDevice[] = [
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
-					payload: { id: '1761824279482', channel: 0, turn: 'off' },
+					payload: { id: 'ecc9ff4a9c38', channel: 0, turn: 'off' },
 					requiresAuthKey: true
 				}
 			}

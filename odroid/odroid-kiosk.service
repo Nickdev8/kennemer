@@ -13,7 +13,6 @@ User=root
 Environment=KIOSK_USER=kiosk
 Environment=DISPLAY=:0
 ExecStart=/usr/local/sbin/kennemer-kiosk start
-ExecStop=/usr/local/sbin/kennemer-kiosk stop
 Restart=on-failure
 RestartSec=10
 KillMode=control-group

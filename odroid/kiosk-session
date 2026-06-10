@@ -8,16 +8,55 @@ PROFILE_DIR="${KIOSK_PROFILE_DIR:-$HOME/.config/kennemer-kiosk}"
 WM_PID=""
 BROWSER_PID=""
 
+terminate_process() {
+	local pid="${1:-}"
+	local name="${2:-process}"
+
+	[[ -n "$pid" ]] || return 0
+	kill -0 "$pid" 2>/dev/null || return 0
+
+	kill -TERM "$pid" 2>/dev/null || true
+	for _ in $(seq 1 48); do
+		kill -0 "$pid" 2>/dev/null || return 0
+		sleep 0.25
+	done
+
+	echo "$name did not stop cleanly; sending SIGKILL" >&2
+	kill -KILL "$pid" 2>/dev/null || true
+}
+
 cleanup() {
 	trap - EXIT INT TERM
-	[[ -z "$BROWSER_PID" ]] || kill -TERM "$BROWSER_PID" 2>/dev/null || true
-	[[ -z "$WM_PID" ]] || kill -TERM "$WM_PID" 2>/dev/null || true
+	terminate_process "$BROWSER_PID" "Brave"
+	terminate_process "$WM_PID" "Openbox"
 	wait "$BROWSER_PID" "$WM_PID" 2>/dev/null || true
 }
 
 trap cleanup EXIT INT TERM
 
-mkdir -p "$PROFILE_DIR"
+mkdir -p "$PROFILE_DIR/Default"
+
+# Brave's own sidebar is separate from Chromium's side panel. Enforce "Never"
+# before every launch so a browser update or interrupted shutdown cannot restore it.
+PROFILE_DIR="$PROFILE_DIR" python3 <<'PY'
+import json
+import os
+from pathlib import Path
+
+preferences = Path(os.environ["PROFILE_DIR"]) / "Default" / "Preferences"
+try:
+    data = json.loads(preferences.read_text()) if preferences.exists() else {}
+except (json.JSONDecodeError, OSError):
+    data = {}
+
+if not isinstance(data, dict):
+    data = {}
+
+data.setdefault("brave", {}).setdefault("sidebar", {})["sidebar_show_option"] = 3
+temporary = preferences.with_suffix(".tmp")
+temporary.write_text(json.dumps(data, separators=(",", ":")))
+temporary.replace(preferences)
+PY
 
 openbox --sm-disable &
 WM_PID=$!

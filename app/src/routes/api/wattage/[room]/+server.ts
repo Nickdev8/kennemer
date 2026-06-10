@@ -19,6 +19,7 @@ type ShellyDeviceListEntry = {
 	category?: string;
 	model?: string;
 	type?: string;
+	cloud_online?: boolean;
 };
 
 type ShellyRoomEntry = {
@@ -74,6 +75,7 @@ type WattageResponse = {
 	label: string;
 	devices: WattageDeviceSummary[];
 	totalWatts: number;
+	inventory: DeviceInventorySummary;
 	summary: {
 		unavailableCount: number;
 		notMeteredCount: number;
@@ -84,6 +86,13 @@ type WattageResponse = {
 		lanRpcCount: number;
 		lanStatusCount: number;
 	};
+};
+
+type DeviceInventorySummary = {
+	totalCount: number;
+	onlineCount: number;
+	offlineCount: number;
+	unknownStatusCount: number;
 };
 
 type ErrorResponse = {
@@ -125,7 +134,7 @@ export const GET: RequestHandler = async ({ params, url }) => {
 
 	try {
 		const forceRefresh = url.searchParams.has('refresh');
-		const { label, devices } = await resolveRoomDevices(roomId, { forceRefresh });
+		const { label, devices, inventory } = await resolveRoomDevices(roomId, { forceRefresh });
 		if (devices.length === 0) {
 			const empty: WattageResponse = {
 				ok: true,
@@ -133,6 +142,7 @@ export const GET: RequestHandler = async ({ params, url }) => {
 				label,
 				devices: [],
 				totalWatts: 0,
+				inventory,
 				summary: {
 					unavailableCount: 0,
 					notMeteredCount: 0,
@@ -170,6 +180,7 @@ export const GET: RequestHandler = async ({ params, url }) => {
 			label,
 			devices: summaries,
 			totalWatts: totals.totalWatts,
+			inventory,
 			summary: totals.summary
 		};
 
@@ -183,14 +194,19 @@ export const GET: RequestHandler = async ({ params, url }) => {
 async function resolveRoomDevices(
 	roomId: number,
 	options: { forceRefresh?: boolean } = {}
-): Promise<{ label: string; devices: ShellyDeviceTarget[] }> {
+): Promise<{
+	label: string;
+	devices: ShellyDeviceTarget[];
+	inventory: DeviceInventorySummary;
+}> {
 	const list = await loadDeviceListPayload(options.forceRefresh ?? false);
 	const ignoreRoomFilter = roomId === -1;
 	const label =
 		ignoreRoomFilter ? 'Alle ruimtes' : resolveRoomLabel(list?.rooms, roomId) ?? `Room ${roomId}`;
 	const devices = collectRoomDeviceTargets(list?.devices, roomId, { ignoreRoomFilter });
+	const inventory = summariseInventory(list?.devices, roomId, { ignoreRoomFilter });
 
-	return { label, devices };
+	return { label, devices, inventory };
 }
 
 async function loadDeviceListPayload(forceRefresh: boolean): Promise<ShellyDeviceListPayload | null> {
@@ -316,6 +332,33 @@ function toDeviceEntries(
 	}
 
 	return entries;
+}
+
+function summariseInventory(
+	devices: ShellyDeviceListPayload['devices'],
+	roomId: number,
+	options: { ignoreRoomFilter?: boolean } = {}
+): DeviceInventorySummary {
+	let totalCount = 0;
+	let onlineCount = 0;
+	let offlineCount = 0;
+	let unknownStatusCount = 0;
+
+	for (const [, entry] of toDeviceEntries(devices)) {
+		const entryRoom = parseNumber(entry.room_id);
+		if (!options.ignoreRoomFilter && entryRoom !== roomId) continue;
+
+		totalCount += 1;
+		if (entry.cloud_online === true) {
+			onlineCount += 1;
+		} else if (entry.cloud_online === false) {
+			offlineCount += 1;
+		} else {
+			unknownStatusCount += 1;
+		}
+	}
+
+	return { totalCount, onlineCount, offlineCount, unknownStatusCount };
 }
 
 function pickDeviceIp(entry: ShellyDeviceListEntry): string {
@@ -566,10 +609,11 @@ function rememberReading(deviceId: string, reading: {
 	watts: number | null;
 	output: boolean | null;
 	source: WattageSource;
-	timestamp: number;
+	timestamp: number | null;
 	capability: WattageCapability;
 }) {
 	if (reading.watts === null || !Number.isFinite(reading.watts)) return;
+	if (reading.timestamp === null || !Number.isFinite(reading.timestamp)) return;
 	lastKnownWattage.set(deviceId, {
 		watts: reading.watts,
 		output: reading.output ?? null,

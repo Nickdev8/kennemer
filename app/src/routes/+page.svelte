@@ -97,7 +97,16 @@
   let wattageDevices: WattageDeviceSummary[] = [];
   let wattageError = '';
   let wattageLoading = false;
+  let wattageStale = false;
   let wattageUpdatedAt: number | null = null;
+  let wattageInventory:
+    | {
+        totalCount: number;
+        onlineCount: number;
+        offlineCount: number;
+        unknownStatusCount: number;
+      }
+    | null = null;
   let wattageSummary:
     | {
         unavailableCount: number;
@@ -110,6 +119,9 @@
         lanStatusCount: number;
       }
     | null = null;
+  let topWattageDevices: WattageDeviceSummary[] = [];
+  let topWattageMax = 1;
+  let availableWattageMeasurements = 0;
   let cacheMessage = '';
   let cacheClearing = false;
 
@@ -129,6 +141,24 @@
 
   const commandKey = (deviceId: string, command: DeviceCommandKey) => `${deviceId}:${command}`;
   const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+  const normalWattageRefreshMs = 5 * 60 * 1000;
+  const fastWattageRefreshMs = 2 * 60 * 1000;
+  const fastWattageWindowMs = 10 * 60 * 1000;
+
+  $: topWattageDevices = [...wattageDevices]
+    .filter(
+      (device) =>
+        device.state !== 'unavailable' &&
+        device.capability === 'metered' &&
+        Number.isFinite(device.watts) &&
+        device.watts > 0
+    )
+    .sort((left, right) => right.watts - left.watts)
+    .slice(0, 3);
+  $: topWattageMax = Math.max(1, ...topWattageDevices.map((device) => device.watts));
+  $: availableWattageMeasurements = wattageSummary
+    ? Math.max(0, wattageSummary.meteredCount - wattageSummary.unavailableCount)
+    : 0;
 
   function clearAdvancedIdleTimer() {
     if (advancedIdleTimeout) {
@@ -163,6 +193,8 @@
       wattageDevices = [];
       wattageUpdatedAt = null;
       wattageError = '';
+      wattageStale = false;
+      wattageInventory = null;
       wattageSummary = null;
       return;
     }
@@ -185,6 +217,12 @@
         label: string;
         totalWatts: number;
         devices: WattageDeviceSummary[];
+        inventory?: {
+          totalCount: number;
+          onlineCount: number;
+          offlineCount: number;
+          unknownStatusCount: number;
+        };
         summary?: {
           unavailableCount: number;
           notMeteredCount: number;
@@ -204,21 +242,25 @@
       wattageLabel = data.label;
       wattageTotal = data.totalWatts ?? 0;
       wattageDevices = data.devices ?? [];
+      wattageInventory = data.inventory ?? null;
       wattageSummary = data.summary ?? null;
       wattageUpdatedAt = Date.now();
+      wattageStale = false;
     } catch (error) {
       wattageError = error instanceof Error ? error.message : 'Kon vermogen niet ophalen';
-      wattageDevices = [];
-      wattageTotal = 0;
-      wattageUpdatedAt = null;
-      wattageSummary = null;
+      wattageStale = wattageUpdatedAt !== null;
     } finally {
       wattageLoading = false;
+      scheduleAutomaticWattageRefresh();
     }
   }
 
   function formatWatts(value: number) {
     return `${value.toFixed(1)} W`;
+  }
+
+  function formatTotalWatts(value: number) {
+    return `${Math.round(value)} W`;
   }
 
   function formatDeviceState(device: WattageDeviceSummary) {
@@ -240,13 +282,40 @@
   type PressOptions = { suppressRefresh?: boolean; stateless?: boolean };
 
   let wattageRefreshTimeout: ReturnType<typeof setTimeout> | null = null;
+  let wattageAutomaticRefreshTimeout: ReturnType<typeof setTimeout> | null = null;
+  let fastWattageRefreshUntil = 0;
+
+  function scheduleAutomaticWattageRefresh() {
+    if (wattageDisabled || typeof window === 'undefined') return;
+    if (wattageAutomaticRefreshTimeout) {
+      clearTimeout(wattageAutomaticRefreshTimeout);
+    }
+
+    const delay =
+      Date.now() < fastWattageRefreshUntil ? fastWattageRefreshMs : normalWattageRefreshMs;
+    wattageAutomaticRefreshTimeout = setTimeout(() => {
+      wattageAutomaticRefreshTimeout = null;
+      void refreshWattage(true);
+    }, delay);
+  }
+
+  function startFastWattageRefreshWindow() {
+    fastWattageRefreshUntil = Date.now() + fastWattageWindowMs;
+    scheduleAutomaticWattageRefresh();
+  }
+
+  function handleManualWattageRefresh() {
+    startFastWattageRefreshWindow();
+    void refreshWattage(true);
+  }
 
   function requestWattageRefresh() {
     if (wattageDisabled) return;
+    startFastWattageRefreshWindow();
     if (wattageRefreshTimeout) clearTimeout(wattageRefreshTimeout);
     wattageRefreshTimeout = setTimeout(() => {
       wattageRefreshTimeout = null;
-      refreshWattage(true);
+      void refreshWattage(true);
     }, 150);
   }
 
@@ -494,8 +563,10 @@
   async function handleTriggerPress(triggerId: string) {
     loadingTriggerId = triggerId;
     advancedErrorMsg = '';
+    let succeeded = false;
     try {
       await triggerAction(triggerId);
+      succeeded = true;
       if (advancedUnlocked && showAdvancedPanel) {
         markAdvancedActivity();
       }
@@ -503,6 +574,9 @@
       advancedErrorMsg = err instanceof Error ? err.message : 'Unknown error';
     } finally {
       loadingTriggerId = null;
+      if (succeeded) {
+        requestWattageRefresh();
+      }
     }
   }
 
@@ -511,7 +585,7 @@
       window.addEventListener('contextmenu', preventContextMenu);
       loadDeviceStates().finally(() => {
         if (!wattageDisabled) {
-          refreshWattage();
+          void refreshWattage(true);
         }
       });
       startStateStream();
@@ -524,6 +598,9 @@
     }
     if (wattageRefreshTimeout) {
       clearTimeout(wattageRefreshTimeout);
+    }
+    if (wattageAutomaticRefreshTimeout) {
+      clearTimeout(wattageAutomaticRefreshTimeout);
     }
     if (stateStream) {
       stateStream.close();
@@ -546,52 +623,133 @@
   </header>
 
   <div class="flex min-h-0 flex-1 gap-4 overflow-hidden px-4 pb-4 pt-4">
-    <section class="flex w-full max-w-xs flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div class="space-y-4">
+    <section class="flex w-[26rem] shrink-0 flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div class="flex items-start justify-between gap-4">
         <div>
-          <p class="text-xs uppercase tracking-wide text-slate-500">Wattage</p>
-          <p class="text-lg font-semibold text-slate-900">{wattageLabel}</p>
-          <p class="text-xs text-slate-500">
+          <p class="text-xs font-semibold uppercase text-slate-500">Energie & apparaten</p>
+          <h2 class="mt-1 text-xl font-semibold text-slate-900">{wattageLabel}</h2>
+          <p class={`mt-1 text-xs ${wattageStale ? 'font-semibold text-amber-700' : 'text-slate-500'}`}>
             {#if wattageDisabled}
-              Wattage uitgeschakeld
+              Metingen uitgeschakeld
             {:else if wattageUpdatedAt}
-              Laatste update {new Date(wattageUpdatedAt).toLocaleTimeString()}
+              {wattageStale ? 'Verouderde data van' : 'Bijgewerkt om'}
+              {new Date(wattageUpdatedAt).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
+            {:else if wattageLoading}
+              Gegevens ophalen...
             {:else}
-              Nog geen data
-            {/if}
-          </p>
-        </div>
-        <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
-          <p class="text-xs uppercase tracking-wide text-slate-500">Totaal</p>
-          <p class="text-2xl font-bold text-slate-900">
-            {#if wattageDisabled}
-              Uit
-            {:else if wattageError}
-              -
-            {:else}
-              {formatWatts(wattageTotal)}
+              Nog geen gegevens
             {/if}
           </p>
         </div>
         <button
           type="button"
-          class="inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-300 text-slate-700 transition hover:bg-slate-100 disabled:opacity-50"
-          on:click={() => refreshWattage(true)}
+          class="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-slate-300 text-slate-700 transition hover:bg-slate-100 active:bg-slate-200 disabled:opacity-50"
+          on:click={handleManualWattageRefresh}
           disabled={wattageLoading || wattageDisabled}
         >
-          <RefreshCw class={`h-8 w-8 ${wattageLoading ? 'animate-spin' : ''}`} />
-          <span class="sr-only">Ververs wattage</span>
+          <RefreshCw class={`h-6 w-6 ${wattageLoading ? 'animate-spin' : ''}`} />
+          <span class="sr-only">Ververs energiegegevens</span>
         </button>
-        {#if wattageError}
-          <p class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
-            {wattageError}
+      </div>
+
+      <div class="mt-5 border-y border-slate-200 py-4">
+        <p class="text-xs font-semibold uppercase text-slate-500">Huidig gemeten vermogen</p>
+        <p class="mt-1 text-5xl font-bold text-slate-950">
+          {#if wattageDisabled}
+            Uit
+          {:else if wattageUpdatedAt}
+            {formatTotalWatts(wattageTotal)}
+          {:else}
+            —
+          {/if}
+        </p>
+      </div>
+
+      <div class="mt-4 overflow-hidden rounded-lg border border-slate-200">
+        <div class="grid grid-cols-2">
+          <div class="border-b border-r border-slate-200 px-4 py-3">
+            <p class="text-xs font-medium text-slate-500">Alle apparaten</p>
+            <p class="mt-1 text-2xl font-semibold text-slate-900">
+              {wattageInventory?.totalCount ?? '—'}
+            </p>
+          </div>
+          <div class="border-b border-slate-200 px-4 py-3">
+            <p class="text-xs font-medium text-emerald-700">Online</p>
+            <p class="mt-1 text-2xl font-semibold text-emerald-700">
+              {wattageInventory?.onlineCount ?? '—'}
+            </p>
+          </div>
+          <div class="border-r border-slate-200 px-4 py-3">
+            <p class="text-xs font-medium text-amber-700">Offline</p>
+            <p class="mt-1 text-2xl font-semibold text-amber-700">
+              {wattageInventory?.offlineCount ?? '—'}
+            </p>
+          </div>
+          <div class="px-4 py-3">
+            <p class="text-xs font-medium text-slate-500">Status onbekend</p>
+            <p class="mt-1 text-2xl font-semibold text-slate-700">
+              {wattageInventory?.unknownStatusCount ?? '—'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-4 flex items-center justify-between border-b border-slate-200 pb-4">
+        <span class="text-sm text-slate-600">Vermogensmetingen</span>
+        <span class="text-sm font-semibold text-slate-900">
+          {#if wattageSummary}
+            {availableWattageMeasurements} van {wattageSummary.meteredCount} beschikbaar
+          {:else}
+            —
+          {/if}
+        </span>
+      </div>
+
+      <div class="mt-4">
+        <div class="flex items-baseline justify-between gap-3">
+          <h3 class="text-sm font-semibold text-slate-900">Topverbruikers</h3>
+          <span class="text-xs text-slate-500">Nu</span>
+        </div>
+        {#if topWattageDevices.length > 0}
+          <ol class="mt-3 space-y-3">
+            {#each topWattageDevices as device, index}
+              <li>
+                <div class="flex items-center justify-between gap-4 text-sm">
+                  <div class="flex min-w-0 items-center gap-2">
+                    <span class="w-4 shrink-0 text-xs font-semibold text-slate-400">{index + 1}</span>
+                    <span class="truncate font-medium text-slate-700">{device.name}</span>
+                  </div>
+                  <span class="shrink-0 font-semibold text-slate-900">{formatWatts(device.watts)}</span>
+                </div>
+                <div class="ml-6 mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    class="h-full rounded-full bg-emerald-500 transition-[width] duration-500"
+                    style={`width: ${Math.max(4, (device.watts / topWattageMax) * 100)}%`}
+                  ></div>
+                </div>
+              </li>
+            {/each}
+          </ol>
+        {:else}
+          <p class="mt-3 text-sm text-slate-500">
+            {wattageLoading ? 'Verbruikers ophalen...' : 'Geen actief verbruik gemeten'}
           </p>
         {/if}
       </div>
+
+      {#if wattageError}
+        <p class="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+          {wattageStale ? 'Vernieuwen mislukt. De vorige gegevens blijven zichtbaar.' : wattageError}
+        </p>
+      {/if}
+
       <div class="mt-auto pt-4">
         <button
           type="button"
-          class="flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-300 px-4 py-4 text-sm font-semibold uppercase tracking-[0.2em] text-slate-700 transition hover:bg-slate-100"
+          class="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 py-3 text-sm font-semibold uppercase text-slate-700 transition hover:bg-slate-100 active:bg-slate-200"
           on:click={openAdvancedAccess}
         >
           <span>Advanced gebruikers</span>

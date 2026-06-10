@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+BROWSER="/opt/brave.com/brave/brave"
+URL="${KIOSK_URL:-http://127.0.0.1/}"
+PROFILE_DIR="${KIOSK_PROFILE_DIR:-$HOME/.config/kennemer-kiosk}"
+
+WM_PID=""
+BROWSER_PID=""
+
+cleanup() {
+	trap - EXIT INT TERM
+	[[ -z "$BROWSER_PID" ]] || kill -TERM "$BROWSER_PID" 2>/dev/null || true
+	[[ -z "$WM_PID" ]] || kill -TERM "$WM_PID" 2>/dev/null || true
+	wait "$BROWSER_PID" "$WM_PID" 2>/dev/null || true
+}
+
+trap cleanup EXIT INT TERM
+
+mkdir -p "$PROFILE_DIR"
+
+openbox --sm-disable &
+WM_PID=$!
+sleep 1
+kill -0 "$WM_PID"
+
+"$BROWSER" \
+	--kiosk \
+	--new-window \
+	--no-first-run \
+	--no-default-browser-check \
+	--disable-session-crashed-bubble \
+	--disable-extensions \
+	--disable-background-networking \
+	--disable-component-update \
+	--disable-sync \
+	--noerrdialogs \
+	--password-store=basic \
+	--user-data-dir="$PROFILE_DIR" \
+	--disable-gpu \
+	--use-gl=swiftshader \
+	--ozone-platform=x11 \
+	--in-process-gpu \
+	--disable-features=BraveSidebar,Sidebar,SidePanel,SidePanelPinning,BookmarksBar,BraveWallet \
+	"$URL" &
+BROWSER_PID=$!
+
+set +e
+wait -n "$WM_PID" "$BROWSER_PID"
+set -e
+
+echo "Openbox or Brave exited; requesting a clean kiosk restart" >&2
+exit 1

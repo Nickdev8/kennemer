@@ -6,11 +6,24 @@ import process from 'node:process';
 import { handler } from './build/handler.js';
 import { env } from './build/env.js';
 
+function requestHandler(request, response) {
+	if (request.url === '/healthz') {
+		response.writeHead(200, {
+			'cache-control': 'no-store',
+			'content-type': 'text/plain; charset=utf-8'
+		});
+		response.end('ok\n');
+		return;
+	}
+
+	handler(request, response);
+}
+
 const socketPath = env('SOCKET_PATH', undefined);
 const host = env('HOST', '0.0.0.0');
 const httpPort = socketPath ? undefined : Number(env('PORT', '80'));
 
-const httpServer = http.createServer(handler);
+const httpServer = http.createServer(requestHandler);
 
 if (socketPath) {
 	httpServer.listen({ path: socketPath }, () => {
@@ -44,7 +57,7 @@ if (httpsKeyPath && httpsCertPath) {
 			httpsOptions.passphrase = httpsPassphrase;
 		}
 
-		const httpsServer = https.createServer(httpsOptions, handler);
+		const httpsServer = https.createServer(httpsOptions, requestHandler);
 		httpsServer.listen({ host: httpsHost, port: httpsPort }, () => {
 			console.log(`Serving HTTPS on https://${httpsHost}:${httpsPort}`);
 		});

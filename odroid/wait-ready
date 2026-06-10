@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+TIMEOUT="${KENNEMER_READY_TIMEOUT:-120}"
+DEADLINE=$((SECONDS + TIMEOUT))
+
+while ((SECONDS < DEADLINE)); do
+	container_id="$(docker compose -f /opt/kennemer/docker-compose.yml ps -q web 2>/dev/null || true)"
+	if [[ -n "$container_id" ]]; then
+		status="$(docker inspect --format '{{.State.Status}}' "$container_id" 2>/dev/null || true)"
+		health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container_id" 2>/dev/null || true)"
+
+		if [[ "$status" == "running" ]] &&
+			[[ "$health" == "healthy" || "$health" == "none" ]] &&
+			curl --fail --silent --show-error --max-time 5 http://127.0.0.1/healthz >/dev/null; then
+			echo "Kennemer application is ready"
+			exit 0
+		fi
+	fi
+
+	sleep 2
+done
+
+echo "Kennemer application did not become ready within ${TIMEOUT}s" >&2
+docker compose -f /opt/kennemer/docker-compose.yml ps >&2 || true
+exit 1

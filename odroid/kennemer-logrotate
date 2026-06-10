@@ -1,0 +1,9 @@
+/var/log/screen.log /opt/kennemer/update.log {
+	weekly
+	rotate 4
+	size 5M
+	compress
+	missingok
+	notifempty
+	copytruncate
+}

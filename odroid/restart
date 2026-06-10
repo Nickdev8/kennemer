@@ -1,13 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -Eeuo pipefail
 
-echo "Restarting kiosk service (first pass)..."
-sudo systemctl restart odroid-kiosk
-
-echo "Waiting for completion..."
-sleep 1
-
-echo "Restarting kiosk service (second pass)..."
-sudo systemctl restart odroid-kiosk
-
-echo "Done."
+sudo systemctl restart odroid-kiosk.service
+sudo systemctl --no-pager --full status odroid-kiosk.service

@@ -1,0 +1,13 @@
+[Unit]
+Description=Deploy a new Kennemer commit when available
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/flock --nonblock /run/lock/kennemer-update.lock /usr/local/sbin/kennemer-update
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+TimeoutStartSec=30min

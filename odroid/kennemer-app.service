@@ -1,0 +1,21 @@
+[Unit]
+Description=Kennemer Docker application
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+NotifyAccess=all
+WorkingDirectory=/opt/kennemer
+ExecStart=/usr/local/sbin/kennemer-app-supervisor
+ExecReload=/usr/bin/docker compose restart web
+ExecStop=/usr/bin/docker compose stop
+Restart=on-failure
+RestartSec=5
+KillMode=control-group
+TimeoutStartSec=180
+TimeoutStopSec=45
+
+[Install]
+WantedBy=multi-user.target

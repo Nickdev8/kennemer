@@ -1,26 +1,26 @@
 [Unit]
-Description=ODROID Kiosk Session
-After=multi-user.target network-online.target getty@tty7.service
-Wants=network-online.target getty@tty7.service
-
+Description=Kennemer HDMI kiosk
+Requires=kennemer-app.service
+After=kennemer-app.service systemd-user-sessions.service
+Conflicts=getty@tty7.service
 ConditionPathExists=/dev/fb0
+StartLimitIntervalSec=120
+StartLimitBurst=5
 
 [Service]
 Type=simple
 User=root
 Environment=KIOSK_USER=kiosk
 Environment=DISPLAY=:0
-
-ExecStartPre=/bin/sleep 3
-
-# START IN FOREGROUND — DO NOT EXIT
-ExecStart=/usr/local/bin/screen start
-# Keep service alive
-Restart=always
-RestartSec=5
-
-# Prevent systemd from killing Xorg when ExecStart ends
-KillMode=process
+ExecStart=/usr/local/sbin/kennemer-kiosk start
+ExecStop=/usr/local/sbin/kennemer-kiosk stop
+Restart=on-failure
+RestartSec=10
+KillMode=control-group
+TimeoutStartSec=90
+TimeoutStopSec=20
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target

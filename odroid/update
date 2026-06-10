@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+REPO=/opt/kennemer
+BRANCH=main
+IMAGE=kennemer:prod
+ROLLBACK_IMAGE=kennemer:rollback
+MIN_FREE_MB=2048
+CANDIDATE_DIR=/var/lib/kennemer/candidate
+
+cd "$REPO"
+
+log() {
+	printf '[%s] %s\n' "$(date --iso-8601=seconds)" "$*"
+}
+
+restore_image() {
+	log "Restoring previous image"
+	docker image tag "$ROLLBACK_IMAGE" "$IMAGE"
+	docker compose up -d --no-build --force-recreate
+	/usr/local/sbin/kennemer-wait-ready
+}
+
+cleanup() {
+	if [[ -d "$CANDIDATE_DIR" ]]; then
+		git worktree remove --force "$CANDIDATE_DIR" >/dev/null 2>&1 || true
+		rm -rf "$CANDIDATE_DIR"
+	fi
+}
+
+trap cleanup EXIT
+
+git fetch --prune origin "$BRANCH"
+current_commit="$(git rev-parse HEAD)"
+target_commit="$(git rev-parse "origin/$BRANCH")"
+
+if [[ "$current_commit" == "$target_commit" ]]; then
+	log "No new commit; nothing to deploy"
+	exit 0
+fi
+
+if ! git merge-base --is-ancestor "$current_commit" "$target_commit"; then
+	log "Refusing non-fast-forward deployment: $current_commit -> $target_commit"
+	exit 1
+fi
+
+if ! git cat-file -e "$target_commit:odroid/app-supervisor" ||
+	! git grep -q /healthz "$target_commit" -- app/server.js; then
+	log "Refusing commit without the stabilized kiosk deployment files"
+	exit 1
+fi
+
+free_mb="$(df --output=avail -BM "$REPO" | tail -n 1 | tr -dc '0-9')"
+if ((free_mb < MIN_FREE_MB)); then
+	log "Refusing deployment with only ${free_mb}MB free"
+	exit 1
+fi
+
+docker image inspect "$IMAGE" >/dev/null
+docker image tag "$IMAGE" "$ROLLBACK_IMAGE"
+
+cleanup
+git worktree add --detach "$CANDIDATE_DIR" "$target_commit"
+if [[ -f "$REPO/app/.env" ]]; then
+	cp "$REPO/app/.env" "$CANDIDATE_DIR/app/.env"
+fi
+
+log "Building candidate $target_commit"
+if ! docker compose -f "$CANDIDATE_DIR/docker-compose.yml" build --pull; then
+	log "Build failed; current container remains active"
+	docker image tag "$ROLLBACK_IMAGE" "$IMAGE"
+	exit 1
+fi
+
+if ! docker compose -f "$CANDIDATE_DIR/docker-compose.yml" up -d --remove-orphans ||
+	! /usr/local/sbin/kennemer-wait-ready; then
+	log "Candidate failed health validation"
+	restore_image
+	exit 1
+fi
+
+git reset --hard "$target_commit"
+printf '%s\n' "$target_commit" > /var/lib/kennemer/last-successful-commit
+docker builder prune --force --filter 'until=168h'
+docker image prune --force --filter 'until=168h'
+log "Deployment completed successfully"

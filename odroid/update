@@ -21,6 +21,12 @@ restore_image() {
 	/usr/local/sbin/kennemer-wait-ready
 }
 
+restart_screen() {
+	log "Restarting kiosk screen"
+	systemctl restart odroid-kiosk.service
+	systemctl --no-pager --full status odroid-kiosk.service
+}
+
 cleanup() {
 	if [[ -d "$CANDIDATE_DIR" ]]; then
 		git worktree remove --force "$CANDIDATE_DIR" >/dev/null 2>&1 || true
@@ -36,6 +42,8 @@ target_commit="$(git rev-parse "origin/$BRANCH")"
 
 if [[ "$current_commit" == "$target_commit" ]]; then
 	log "No new commit; nothing to deploy"
+	/usr/local/sbin/kennemer-wait-ready
+	restart_screen
 	exit 0
 fi
 
@@ -83,4 +91,5 @@ git reset --hard "$target_commit"
 printf '%s\n' "$target_commit" > /var/lib/kennemer/last-successful-commit
 docker builder prune --force --filter 'until=168h'
 docker image prune --force --filter 'until=168h'
+restart_screen
 log "Deployment completed successfully"

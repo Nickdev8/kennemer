@@ -46,8 +46,8 @@ Advanced cards staan in `app/config/advanced.ts`.
 - `screen`: start/stop de kiosk-stack (Xorg + window manager + Brave kiosk) met watchdog.
 Op de Kennemer Odroid:
 - `/opt/kennemer/odroid/` is de bron voor de kiosk-scripts; de terminalcommando's zijn symlinks naar deze bestanden.
-- `update`: haalt de laatste git-commits op.
-- `restart`: herlaadt het scherm zodat updates zichtbaar zijn.
+- `update`: haalt de laatste git-commits op, deployt de app en herstart daarna het scherm.
+- `restart`: herlaadt alleen het scherm zodat updates zichtbaar zijn.
 - The folder is located `cd /opt/kennemer/`
 
 ## .env (app/.env)

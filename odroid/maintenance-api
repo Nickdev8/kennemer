@@ -95,6 +95,21 @@ def update_status():
 
 
 def start_update():
+    status = update_status()
+    if not status["updateAvailable"]:
+        return {
+            **status,
+            "updateStarted": False,
+            "message": "already up to date",
+        }
+    if not status["fastForward"]:
+        return {
+            **status,
+            "ok": False,
+            "updateStarted": False,
+            "message": "update is not a fast-forward",
+        }
+
     result = subprocess.run(
         ["systemctl", "start", "--no-block", UPDATE_SERVICE],
         text=True,

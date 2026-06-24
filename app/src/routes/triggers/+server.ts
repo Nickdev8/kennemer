@@ -35,7 +35,7 @@ export const POST: RequestHandler = async ({ request, fetch, url }) => {
 					cloud: {
 						endpoint: shellySceneEndpoint,
 						method: 'POST',
-						payload: { id: trigger.sceneId, channel: 0, turn: 'on' },
+						payload: { id: trigger.sceneId },
 						requiresAuthKey: true
 					}
 				},
@@ -43,7 +43,7 @@ export const POST: RequestHandler = async ({ request, fetch, url }) => {
 					cloud: {
 						endpoint: shellySceneEndpoint,
 						method: 'POST',
-						payload: { id: trigger.sceneId, channel: 0, turn: 'on' },
+						payload: { id: trigger.sceneId },
 						requiresAuthKey: true
 					}
 				}

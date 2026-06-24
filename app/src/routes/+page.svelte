@@ -35,20 +35,24 @@
 		return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 	}
 
+	function readAdvancedPatterns(...values: Array<string | undefined>) {
+		return values
+			.flatMap((value) => value?.split(/[,\s;|]+/) ?? [])
+			.map((value) => value.replace(/[^0-9]/g, '').trim())
+			.filter(Boolean);
+	}
+
 	const wattageDisabled = readBooleanFlag(publicEnv.PUBLIC_DISABLE_WATTAGE);
 	const displayDimTimeoutMs = readPositiveNumber(
 		publicEnv.PUBLIC_DISPLAY_DIM_TIMEOUT_MS,
 		10 * 60 * 1000
 	);
 
-	const expectedAdvancedPattern = (
-		publicEnv.PUBLIC_ADVANCED_PATTERN ??
-		publicEnv.PUBLIC_ADVANCED_PIN ??
-		''
-	)
-		.replace(/[^0-9]/g, '')
-		.trim();
-	const advancedPatternConfigured = expectedAdvancedPattern.length > 0;
+	const acceptedAdvancedPatterns = readAdvancedPatterns(
+		publicEnv.PUBLIC_ADVANCED_PATTERN,
+		publicEnv.PUBLIC_ADVANCED_PIN
+	);
+	const advancedPatternConfigured = acceptedAdvancedPatterns.length > 0;
 	const patternNodes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
 	const wattageDebug = readBooleanFlag(publicEnv.PUBLIC_DEBUG_WATTAGE);
 
@@ -645,7 +649,7 @@
 		const submitted = patternSequence.join('');
 		patternActive = false;
 
-		if (submitted === expectedAdvancedPattern) {
+		if (acceptedAdvancedPatterns.includes(submitted)) {
 			advancedUnlocked = true;
 			showAdvancedPrompt = false;
 			advancedAccessError = '';

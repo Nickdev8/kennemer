@@ -27,6 +27,11 @@ restart_screen() {
 	systemctl --no-pager --full status odroid-kiosk.service
 }
 
+install_maintenance_links() {
+	log "Refreshing host maintenance links"
+	"$REPO/odroid/install-maintenance-links"
+}
+
 cleanup() {
 	if [[ -d "$CANDIDATE_DIR" ]]; then
 		git worktree remove --force "$CANDIDATE_DIR" >/dev/null 2>&1 || true
@@ -88,6 +93,7 @@ if ! docker compose -f "$CANDIDATE_DIR/docker-compose.yml" up -d --remove-orphan
 fi
 
 git reset --hard "$target_commit"
+install_maintenance_links
 printf '%s\n' "$target_commit" > /var/lib/kennemer/last-successful-commit
 docker builder prune --force --filter 'until=168h'
 docker image prune --force --filter 'until=168h'

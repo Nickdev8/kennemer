@@ -1,0 +1,167 @@
+#!/usr/bin/env python3
+import json
+import os
+import subprocess
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+REPO = os.environ.get("KENNEMER_REPO", "/opt/kennemer")
+BRANCH = os.environ.get("KENNEMER_BRANCH", "main")
+HOST = os.environ.get("KENNEMER_MAINTENANCE_HOST", "0.0.0.0")
+PORT = int(os.environ.get("KENNEMER_MAINTENANCE_PORT", "8787"))
+TOKEN = os.environ.get("KENNEMER_MAINTENANCE_TOKEN", "")
+UPDATE_SERVICE = os.environ.get("KENNEMER_UPDATE_SERVICE", "kennemer-update.service")
+
+
+def run(command, timeout=20):
+    return subprocess.run(
+        command,
+        cwd=REPO,
+        text=True,
+        capture_output=True,
+        timeout=timeout,
+        check=False,
+    )
+
+
+def command_output(command, timeout=20):
+    result = run(command, timeout=timeout)
+    if result.returncode != 0:
+        message = (result.stderr or result.stdout or "command failed").strip()
+        raise RuntimeError(message)
+    return result.stdout.strip()
+
+
+def is_update_active():
+    result = subprocess.run(
+        ["systemctl", "is-active", "--quiet", UPDATE_SERVICE],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def service_state():
+    result = subprocess.run(
+        ["systemctl", "show", UPDATE_SERVICE, "--property=ActiveState,SubState,Result", "--value"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return {"activeState": "unknown", "subState": "unknown", "result": "unknown"}
+
+    values = result.stdout.strip().splitlines()
+    return {
+        "activeState": values[0] if len(values) > 0 else "unknown",
+        "subState": values[1] if len(values) > 1 else "unknown",
+        "result": values[2] if len(values) > 2 else "unknown",
+    }
+
+
+def update_status():
+    if not os.path.isdir(os.path.join(REPO, ".git")):
+        raise RuntimeError(f"repository not found at {REPO}")
+
+    fetch = run(["git", "fetch", "--prune", "origin", BRANCH], timeout=45)
+    fetch_ok = fetch.returncode == 0
+
+    current = command_output(["git", "rev-parse", "HEAD"])
+    target = command_output(["git", "rev-parse", f"origin/{BRANCH}"])
+    current_short = command_output(["git", "rev-parse", "--short", "HEAD"])
+    target_short = command_output(["git", "rev-parse", "--short", f"origin/{BRANCH}"])
+    update_available = current != target
+
+    fast_forward = True
+    if update_available:
+        merge_base = run(["git", "merge-base", "--is-ancestor", current, target])
+        fast_forward = merge_base.returncode == 0
+
+    return {
+        "ok": True,
+        "repo": REPO,
+        "branch": BRANCH,
+        "current": current,
+        "target": target,
+        "currentShort": current_short,
+        "targetShort": target_short,
+        "updateAvailable": update_available,
+        "fastForward": fast_forward,
+        "fetchOk": fetch_ok,
+        "fetchError": "" if fetch_ok else (fetch.stderr or fetch.stdout).strip(),
+        "updating": is_update_active(),
+        "service": service_state(),
+    }
+
+
+def start_update():
+    result = subprocess.run(
+        ["systemctl", "start", "--no-block", UPDATE_SERVICE],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        message = (result.stderr or result.stdout or "could not start update service").strip()
+        raise RuntimeError(message)
+    return {
+        "ok": True,
+        "updateStarted": True,
+        "updating": True,
+        "service": service_state(),
+    }
+
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, fmt, *args):
+        print(f"{self.address_string()} - {fmt % args}")
+
+    def write_json(self, status, payload):
+        body = json.dumps(payload).encode("utf-8")
+        self.send_response(status)
+        self.send_header("content-type", "application/json")
+        self.send_header("content-length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def authorized(self):
+        if not TOKEN:
+            self.write_json(503, {"ok": False, "message": "maintenance token is not configured"})
+            return False
+
+        provided = self.headers.get("x-kennemer-maintenance-token", "")
+        if provided != TOKEN:
+            self.write_json(403, {"ok": False, "message": "unauthorized"})
+            return False
+
+        return True
+
+    def do_GET(self):
+        if self.path != "/status":
+            self.write_json(404, {"ok": False, "message": "not found"})
+            return
+        if not self.authorized():
+            return
+
+        try:
+            self.write_json(200, update_status())
+        except Exception as exc:
+            self.write_json(500, {"ok": False, "message": str(exc)})
+
+    def do_POST(self):
+        if self.path != "/update":
+            self.write_json(404, {"ok": False, "message": "not found"})
+            return
+        if not self.authorized():
+            return
+
+        try:
+            self.write_json(202, start_update())
+        except Exception as exc:
+            self.write_json(500, {"ok": False, "message": str(exc)})
+
+
+if __name__ == "__main__":
+    server = ThreadingHTTPServer((HOST, PORT), Handler)
+    print(f"Kennemer maintenance API listening on {HOST}:{PORT}")
+    server.serve_forever()

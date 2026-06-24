@@ -1,0 +1,16 @@
+[Unit]
+Description=Kennemer host maintenance API
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/kennemer
+EnvironmentFile=/opt/kennemer/app/.env
+ExecStart=/opt/kennemer/odroid/maintenance-api
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

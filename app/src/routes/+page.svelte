@@ -23,6 +23,24 @@
 		state?: 'ok' | 'unavailable';
 	};
 
+	type UpdateStatus = {
+		ok: boolean;
+		message?: string;
+		branch?: string;
+		currentShort?: string;
+		targetShort?: string;
+		updateAvailable?: boolean;
+		fastForward?: boolean;
+		updating?: boolean;
+		fetchOk?: boolean;
+		fetchError?: string;
+		service?: {
+			activeState?: string;
+			subState?: string;
+			result?: string;
+		};
+	};
+
 	function readBooleanFlag(value: string | undefined) {
 		if (!value) return false;
 		const normalised = value.trim().toLowerCase();
@@ -144,6 +162,10 @@
 	let availableWattageMeasurements = 0;
 	let cacheMessage = '';
 	let cacheClearing = false;
+	let updateStatus: UpdateStatus | null = null;
+	let updateChecking = false;
+	let updateRunning = false;
+	let updateMessage = '';
 
 	let showAdvancedPrompt = false;
 	let showAdvancedPanel = false;
@@ -576,6 +598,7 @@
 		if (advancedUnlocked) {
 			showAdvancedPanel = true;
 			markAdvancedActivity();
+			void checkGitUpdate();
 			return;
 		}
 		advancedAccessError = '';
@@ -656,6 +679,7 @@
 			patternStatus = 'success';
 			showAdvancedPanel = true;
 			markAdvancedActivity();
+			void checkGitUpdate();
 		} else {
 			patternStatus = 'error';
 			advancedAccessError = 'Onjuist patroon. Probeer het opnieuw.';
@@ -691,6 +715,57 @@
 			cacheMessage = error instanceof Error ? error.message : 'Kon cache niet legen';
 		} finally {
 			cacheClearing = false;
+		}
+	}
+
+	function updateStatusText() {
+		if (!updateStatus) return updateMessage || 'Nog niet gecontroleerd.';
+		if (!updateStatus.ok) return updateStatus.message ?? 'Update status niet beschikbaar.';
+		if (updateStatus.updating || updateRunning) return 'Update draait op de ODROID.';
+		if (updateStatus.updateAvailable && updateStatus.fastForward === false) {
+			return 'Update gevonden, maar niet automatisch veilig te installeren.';
+		}
+		if (updateStatus.updateAvailable) return 'Nieuwe update beschikbaar.';
+		return 'Deze kiosk is up-to-date.';
+	}
+
+	async function checkGitUpdate() {
+		if (updateChecking) return;
+		updateChecking = true;
+		updateMessage = '';
+		try {
+			const res = await fetch('/api/update', { cache: 'no-store' });
+			const payload = (await res.json().catch(() => ({}))) as UpdateStatus;
+			updateStatus = payload;
+			if (!res.ok || !payload.ok) {
+				updateMessage = payload.message ?? 'Kon update status niet ophalen';
+			}
+		} catch (error) {
+			updateStatus = { ok: false, message: error instanceof Error ? error.message : 'Update check mislukt' };
+			updateMessage = updateStatus.message ?? '';
+		} finally {
+			updateChecking = false;
+		}
+	}
+
+	async function runGitUpdate() {
+		if (updateRunning) return;
+		updateRunning = true;
+		updateMessage = '';
+		try {
+			const res = await fetch('/api/update', { method: 'POST' });
+			const payload = (await res.json().catch(() => ({}))) as UpdateStatus;
+			updateStatus = payload;
+			if (!res.ok || !payload.ok) {
+				updateMessage = payload.message ?? 'Kon update niet starten';
+			} else {
+				updateMessage = 'Update gestart. Het scherm kan zo herladen.';
+				setTimeout(() => void checkGitUpdate(), 5000);
+			}
+		} catch (error) {
+			updateMessage = error instanceof Error ? error.message : 'Kon update niet starten';
+		} finally {
+			updateRunning = false;
 		}
 	}
 
@@ -1210,6 +1285,48 @@
 							System actions
 						</p>
 						<div class="mt-3 grid gap-2">
+							<div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+								<div class="flex items-start justify-between gap-3">
+									<div class="min-w-0">
+										<p class="text-sm font-semibold text-slate-800">Git update</p>
+										<p class="mt-1 text-xs text-slate-500">{updateStatusText()}</p>
+										{#if updateStatus?.currentShort || updateStatus?.targetShort}
+											<p class="mt-2 font-mono text-xs text-slate-400">
+												{updateStatus.currentShort ?? 'unknown'} -> {updateStatus.targetShort ?? 'unknown'}
+											</p>
+										{/if}
+									</div>
+									<button
+										type="button"
+										class="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-600 transition-colors duration-150 ease-out hover:bg-white disabled:opacity-60"
+										on:click={checkGitUpdate}
+										disabled={updateChecking || updateRunning}
+									>
+										{#if updateChecking}
+											Checking
+										{:else}
+											Check
+										{/if}
+									</button>
+								</div>
+								{#if updateStatus?.updateAvailable && updateStatus.fastForward !== false}
+									<button
+										type="button"
+										class="mt-3 w-full rounded-lg bg-slate-800 px-4 py-3 text-xs font-semibold text-white transition-colors duration-150 ease-out hover:bg-slate-900 disabled:opacity-60"
+										on:click={runGitUpdate}
+										disabled={updateRunning || updateChecking || updateStatus.updating}
+									>
+										{#if updateRunning || updateStatus.updating}
+											Update draait
+										{:else}
+											Update kiosk
+										{/if}
+									</button>
+								{/if}
+								{#if updateMessage}
+									<p class="mt-2 text-xs text-slate-500">{updateMessage}</p>
+								{/if}
+							</div>
 							<button
 								type="button"
 								class="w-full rounded-xl border border-slate-300 px-4 py-3 text-xs font-semibold tracking-[0.2em] text-slate-600 uppercase transition-colors duration-150 ease-out hover:bg-slate-100 disabled:opacity-60"

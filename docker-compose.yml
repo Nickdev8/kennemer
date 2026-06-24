@@ -22,6 +22,7 @@ services:
       NODE_ENV: production
       PORT: "80"
       HOST: "0.0.0.0"
+      KENNEMER_MAINTENANCE_URL: http://host.docker.internal:8787
       HTTPS_PORT: "443" # optional: remove or change if you don't need TLS
       HTTPS_KEY_PATH: /certs/server.key
       HTTPS_CERT_PATH: /certs/server.crt
@@ -30,6 +31,8 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     working_dir: /app
     env_file:
       - ./app/.env

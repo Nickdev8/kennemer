@@ -29,7 +29,17 @@
     return ['1', 'true', 'yes', 'on'].includes(normalised);
   }
 
+  function readPositiveNumber(value: string | undefined, fallback: number) {
+    if (!value) return fallback;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  }
+
   const wattageDisabled = readBooleanFlag(publicEnv.PUBLIC_DISABLE_WATTAGE);
+  const displayDimTimeoutMs = readPositiveNumber(
+    publicEnv.PUBLIC_DISPLAY_DIM_TIMEOUT_MS,
+    10 * 60 * 1000
+  );
 
   const expectedAdvancedPattern = (
     publicEnv.PUBLIC_ADVANCED_PATTERN ??
@@ -134,6 +144,8 @@
   let patternStatus: 'idle' | 'success' | 'error' = 'idle';
   let activePointerId: number | null = null;
   let advancedIdleTimeout: ReturnType<typeof setTimeout> | null = null;
+  let displayDimTimeout: ReturnType<typeof setTimeout> | null = null;
+  let displayDimmed = false;
   let stateStream: EventSource | null = null;
   let loadingTriggerId: string | null = null;
 
@@ -184,6 +196,33 @@
     } else if (showAdvancedPrompt) {
       startAdvancedIdleTimer('prompt');
     }
+  }
+
+  function clearDisplayDimTimer() {
+    if (displayDimTimeout) {
+      clearTimeout(displayDimTimeout);
+      displayDimTimeout = null;
+    }
+  }
+
+  function scheduleDisplayDim() {
+    clearDisplayDimTimer();
+    if (displayDimTimeoutMs <= 0) return;
+    displayDimTimeout = setTimeout(() => {
+      displayDimmed = true;
+      displayDimTimeout = null;
+    }, displayDimTimeoutMs);
+  }
+
+  function markDisplayActivity() {
+    displayDimmed = false;
+    scheduleDisplayDim();
+  }
+
+  function wakeDisplay(event?: Event) {
+    event?.preventDefault();
+    event?.stopPropagation();
+    markDisplayActivity();
   }
 
   async function refreshWattage(forceRefresh = false) {
@@ -583,6 +622,9 @@
   onMount(() => {
     if (typeof window !== 'undefined') {
       window.addEventListener('contextmenu', preventContextMenu);
+      window.addEventListener('pointerdown', markDisplayActivity, { passive: true });
+      window.addEventListener('keydown', markDisplayActivity);
+      scheduleDisplayDim();
       loadDeviceStates().finally(() => {
         if (!wattageDisabled) {
           void refreshWattage(true);
@@ -595,6 +637,8 @@
   onDestroy(() => {
     if (typeof window !== 'undefined') {
       window.removeEventListener('contextmenu', preventContextMenu);
+      window.removeEventListener('pointerdown', markDisplayActivity);
+      window.removeEventListener('keydown', markDisplayActivity);
     }
     if (wattageRefreshTimeout) {
       clearTimeout(wattageRefreshTimeout);
@@ -607,6 +651,7 @@
       stateStream = null;
     }
     clearAdvancedIdleTimer();
+    clearDisplayDimTimer();
   });
 </script>
 
@@ -788,6 +833,17 @@
       </div>
     </section>
   </div>
+
+  {#if displayDimmed}
+    <button
+      type="button"
+      class="fixed inset-0 z-[70] cursor-default bg-slate-950/65 transition-opacity duration-500"
+      aria-label="Scherm actief maken"
+      on:click={wakeDisplay}
+      on:pointerdown={wakeDisplay}
+      on:keydown={wakeDisplay}
+    ></button>
+  {/if}
 </main>
 
 {#if showAdvancedPrompt}
@@ -945,7 +1001,7 @@
             {#if advancedDeviceCount === 0}
               <p class="text-sm text-slate-600">
                 Geen geavanceerde apparaten geconfigureerd in
-                <code class="rounded bg-slate-100 px-2 py-0.5 text-xs">app/src/lib/config/advanced.ts</code>.
+                <code class="rounded bg-slate-100 px-2 py-0.5 text-xs">app/config/advanced.ts</code>.
               </p>
             {:else}
               <div class="flex flex-col gap-6 pb-4">

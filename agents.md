@@ -10,7 +10,7 @@
 - SvelteKit (adapter-node) with TypeScript & Tailwind.
 - Server-side utilities in `app/src/lib/server/shelly-http.ts` handle HTTP dispatch, retries, and status parsing.
 - Gen2 LAN power reads use the RPC helper in `app/src/lib/server/shelly-rpc.ts`.
-- Config-driven actions: `app/src/lib/config/devices.ts` defines buttons; `schema.ts` types; config is LAN-first with `.local` hostnames.
+- Config-driven actions: `app/config/devices.ts` defines buttons; `schema.ts` types; config is LAN-first with `.local` hostnames.
 - Button visuals configurable via `type` (`on/off`, `none`, or hex) and optional `typeBorder`; cards mirror custom hex colors.
 - Dockerfile builds via `svelte-kit build`, runtime uses built output (`node build/index.js`).
 
@@ -21,7 +21,7 @@
 
 ## Common Tasks
 1. Updating button actions / adding devices:
-   - Edit `app/src/lib/config/devices.ts`; each `cloud`/`lan` entry can be a single target or an array for fan-out.
+   - Edit `app/config/devices.ts`; each `cloud`/`lan` entry can be a single target or an array for fan-out.
    - Optional visuals per command: set `type` (`on`, `off`, `none`, or hex) and `typeBorder` (hex) to style buttons/cards.
 2. Adjusting Shelly HTTP/RPC logic: `app/src/lib/server/shelly-http.ts` for cloud/lan calls, `app/src/lib/server/shelly-rpc.ts` for Gen2 RPC reads.
 3. Styling/UX changes: `app/src/routes/+page.svelte` for layout, advanced panel structure, and unlock flows (idle timers, outside-click close).

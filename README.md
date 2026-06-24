@@ -8,7 +8,7 @@ http://localhost/api/device-state/callback?deviceId=scene-screen-lokalen&state=o
 ```
 
 ## Devices (Cards) toevoegen of aanpassen
-Bewerk `app/src/lib/config/devices.ts`.
+Bewerk `app/config/devices.ts`.
 - Elke entry in `devices` wordt een card.
 - Gebruik een uniek `id`, zet `label` + `group`, en definieer `commands.on/off`.
 - `buttonMode` bepaalt de knop: 
@@ -37,7 +37,7 @@ Minimal voorbeeld:
 ```
 
 ## Advanced devices
-Advanced cards staan in `app/src/lib/config/advanced.ts`.
+Advanced cards staan in `app/config/advanced.ts`.
 - Werkt hetzelfde als gewone devices, maar ze zijn alleen zichtbaar na de advanced unlock.
 - Gebruik dit voor beheer‑only apperaten.
 

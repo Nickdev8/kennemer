@@ -77,6 +77,10 @@ wait_for_x() {
 	return 1
 }
 
+keep_display_awake() {
+	DISPLAY="$DISPLAY_NUM" xset s off s noblank -dpms dpms force on >/dev/null 2>&1 || true
+}
+
 start_xorg() {
 	log "Starting Xorg on $DISPLAY_NUM using $VT"
 	"$XORG_BIN" "$DISPLAY_NUM" "$VT" -nolisten tcp \
@@ -89,6 +93,7 @@ start_xorg() {
 		return 1
 	fi
 
+	keep_display_awake
 	DISPLAY="$DISPLAY_NUM" xhost "+SI:localuser:$KIOSK_USER" >/dev/null
 	for _ in $(seq 1 40); do
 		if runuser -u "$KIOSK_USER" -- env DISPLAY="$DISPLAY_NUM" \
@@ -120,6 +125,7 @@ watch_session() {
 		kill -0 "$SESSION_PID" 2>/dev/null; do
 		if xdpyinfo -display "$DISPLAY_NUM" >/dev/null 2>&1 &&
 			curl --fail --silent --show-error --max-time 5 "$APP_URL" >/dev/null; then
+			keep_display_awake
 			failures=0
 		else
 			failures=$((failures + 1))

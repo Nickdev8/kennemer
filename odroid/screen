@@ -78,7 +78,7 @@ wait_for_x() {
 }
 
 keep_display_awake() {
-	DISPLAY="$DISPLAY_NUM" xset s off s noblank -dpms dpms force on >/dev/null 2>&1 || true
+	DISPLAY="$DISPLAY_NUM" xset s off s noblank dpms force on -dpms >/dev/null 2>&1 || true
 }
 
 start_xorg() {

@@ -2,13 +2,12 @@ import { env } from '$env/dynamic/public';
 import type { ShellyDevice } from '../src/lib/config/schema';
 
 const shellySceneEndpoint =
-	env.PUBLIC_SHELLY_SCENE_ENDPOINT ??
-	'https://shelly-115-eu.shelly.cloud/scene/manual_run';
+	env.PUBLIC_SHELLY_SCENE_ENDPOINT ?? 'https://shelly-115-eu.shelly.cloud/scene/manual_run';
 
 export const gangColorDevice: ShellyDevice = {
 	id: 'gang-color',
 	label: 'Gang kleur',
-	group: 'Advanced',
+	type: 'Advanced',
 	buttonMode: 'toggle',
 	commands: {
 		on: {
@@ -35,40 +34,40 @@ export const gangColorDevice: ShellyDevice = {
 	}
 };
 
-	// {
-	// 	id: 'scene-2de',
-	// 	label: '2de',
-	// 	group: 'Scene',
-	// 	buttonMode: 'toggle',
-	// 	commands: {
-	// 		on: {
-	// 			label: 'Aan',
-	// 			cloud: {
-	// 				endpoint: shellySceneEndpoint,
-	// 				method: 'POST',
-	// 				payload: { id: '1761824228559', channel: 0, turn: 'on' },
-	// 				requiresAuthKey: true
-	// 			}
-	// 		},
-	// 		off: {
-	// 			label: 'Uit',
-	// 			cloud: {
-	// 				endpoint: shellySceneEndpoint,
-	// 				method: 'POST',
-	// 				payload: { id: '1761824279482', channel: 0, turn: 'off' },
-	// 				requiresAuthKey: true
-	// 			}
-	// 		}
-	// 	}
-	// },
+// {
+// 	id: 'scene-2de',
+// 	label: '2de',
+// 	type: 'Scene',
+// 	buttonMode: 'toggle',
+// 	commands: {
+// 		on: {
+// 			label: 'Aan',
+// 			cloud: {
+// 				endpoint: shellySceneEndpoint,
+// 				method: 'POST',
+// 				payload: { id: '1761824228559', channel: 0, turn: 'on' },
+// 				requiresAuthKey: true
+// 			}
+// 		},
+// 		off: {
+// 			label: 'Uit',
+// 			cloud: {
+// 				endpoint: shellySceneEndpoint,
+// 				method: 'POST',
+// 				payload: { id: '1761824279482', channel: 0, turn: 'off' },
+// 				requiresAuthKey: true
+// 			}
+// 		}
+// 	}
+// },
 
 export const devices: ShellyDevice[] = [
 	{
 		id: 'push-1',
 		label: 'Push Panel 1',
-		group: 'Group',
+		type: 'Scene',
 		buttonMode: 'toggle',
-		statusdeviceid:'ecc9ff4a9c38',
+		statusdeviceid: 'ecc9ff4a9c38',
 		commands: {
 			on: {
 				label: 'Aan',
@@ -93,7 +92,7 @@ export const devices: ShellyDevice[] = [
 	{
 		id: 'scene-aula-plafond',
 		label: 'Aula plafond',
-		group: 'Scene',
+		type: 'Scene',
 		buttonMode: 'toggle',
 		commands: {
 			on: {
@@ -119,7 +118,7 @@ export const devices: ShellyDevice[] = [
 	{
 		id: 'scene-gang-entree',
 		label: 'Gang + entree',
-		group: 'Scene',
+		type: 'Scene',
 		buttonMode: 'toggle',
 		commands: {
 			on: {
@@ -145,7 +144,7 @@ export const devices: ShellyDevice[] = [
 	{
 		id: 'scene-1ste',
 		label: '1ste',
-		group: 'Scene',
+		type: 'Scene',
 		buttonMode: 'toggle',
 		commands: {
 			on: {
@@ -171,7 +170,7 @@ export const devices: ShellyDevice[] = [
 	{
 		id: 'scene-screen-lokalen',
 		label: 'Screen lokalen',
-		group: 'Scene',
+		type: 'Scene',
 		buttonMode: 'single',
 		stateless: true,
 		commands: {
@@ -189,7 +188,7 @@ export const devices: ShellyDevice[] = [
 	{
 		id: 'scene-kantine',
 		label: 'Kantine',
-		group: 'Scene',
+		type: 'Scene',
 		buttonMode: 'toggle',
 		commands: {
 			on: {
@@ -215,7 +214,7 @@ export const devices: ShellyDevice[] = [
 	{
 		id: 'scene-parterre',
 		label: 'Parterre',
-		group: 'Scene',
+		type: 'Scene',
 		buttonMode: 'toggle',
 		commands: {
 			on: {
@@ -241,7 +240,7 @@ export const devices: ShellyDevice[] = [
 	{
 		id: 'scene-aula-vide',
 		label: 'Aula vide',
-		group: 'Scene',
+		type: 'Scene',
 		buttonMode: 'toggle',
 		commands: {
 			on: {
@@ -267,7 +266,7 @@ export const devices: ShellyDevice[] = [
 	{
 		id: 'scene-kopje-gang',
 		label: 'Kopje gang',
-		group: 'Scene',
+		type: 'Scene',
 		buttonMode: 'toggle',
 		commands: {
 			on: {

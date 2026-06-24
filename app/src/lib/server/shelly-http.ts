@@ -69,7 +69,7 @@ function resolveCommandTargets(
 }
 
 function isSceneCommand(device: ShellyDevice, target: ShellyHttpTarget) {
-	if (device.group.trim().toLowerCase() === 'scene') return true;
+	if (device.type.trim().toLowerCase() === 'scene') return true;
 	return target.endpoint.includes('/scene/manual_run');
 }
 
@@ -225,8 +225,7 @@ function buildShellyError(status: number, body: string): ShellyHttpError {
 	let payload: unknown = body;
 	try {
 		payload = body ? JSON.parse(body) : undefined;
-	} catch {
-	}
+	} catch {}
 
 	let code: ShellyErrorCode = 'HTTP_ERROR';
 	let message = `Shelly HTTP error ${status}`;
@@ -284,7 +283,7 @@ export async function sendDeviceCommand(device: ShellyDevice, commandKey: Device
 	}
 
 	const preferLanDevices = readBooleanFlag('USE_LAN_DEVICES', 'USE_LAN', 'USE_LOCAL');
-	const forceCloud = device.group.trim().toLowerCase() === 'scene';
+	const forceCloud = device.type.trim().toLowerCase() === 'scene';
 	const targets = resolveCommandTargets(command, {
 		preferLan: forceCloud ? false : preferLanDevices
 	});

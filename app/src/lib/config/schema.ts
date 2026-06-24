@@ -23,7 +23,7 @@ export interface ShellyDeviceCommand {
 export interface ShellyDevice {
 	id: string;
 	label: string;
-	group: string;
+	type: string;
 	buttonMode?: DeviceButtonMode;
 	statusdeviceid?: string;
 	stateless?: boolean;

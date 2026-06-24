@@ -12,18 +12,14 @@
 
 	const baseButtonClass =
 		'relative flex w-full items-center justify-center rounded-2xl px-5 py-6 text-xl font-semibold transition duration-150 ease-out active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 max-h-32 min-h-[4rem]';
-	const buttonOnIdleClass =
-		'border border-emerald-500 bg-white text-slate-700';
-	const buttonOffIdleClass =
-		'border border-rose-500 bg-white text-slate-700';
+	const buttonOnIdleClass = 'border border-emerald-500 bg-white text-slate-700';
+	const buttonOffIdleClass = 'border border-rose-500 bg-white text-slate-700';
 	const buttonOnProminentClass =
 		'border border-emerald-500 bg-emerald-500 text-white shadow-lg shadow-emerald-200/70';
 	const buttonOffProminentClass =
 		'border border-rose-500 bg-rose-500 text-white shadow-lg shadow-rose-200/70';
-	const buttonNeutralClass =
-		'border border-slate-300 bg-white text-slate-700';
-	const buttonCustomClass =
-		'border text-white shadow-lg shadow-slate-200/70';
+	const buttonNeutralClass = 'border border-slate-300 bg-white text-slate-700';
+	const buttonCustomClass = 'border text-white shadow-lg shadow-slate-200/70';
 
 	export let device: ShellyDevice;
 	export let commandOrder: DeviceCommandKey[];
@@ -31,7 +27,7 @@
 	export let commandLabel: (device: ShellyDevice, command: DeviceCommandKey) => string;
 	export let loadingCommandKey: string | null;
 	export let initialStatus: DeviceCommandKey | null = null;
-	export let showGroup = false;
+	export let showType = false;
 	export let resolveToggleCommand: (status: DeviceCommandKey | null) => DeviceCommandKey = (
 		status
 	) => (status === 'on' ? 'off' : 'on');
@@ -69,8 +65,7 @@
 	$: commandGridClass = isToggle || isSingle ? 'grid-cols-1' : 'grid-cols-2';
 
 	$: {
-		hasTransientOn =
-			isSingle && isStateless && device.group === 'Scene' && initialStatus === 'on';
+		hasTransientOn = isSingle && isStateless && device.type === 'Scene' && initialStatus === 'on';
 		if (optimisticStatus === 'on') {
 			statusLabel = 'Aan';
 			statusDotClass = 'bg-emerald-500';
@@ -112,9 +107,7 @@
 			const onCommand = device.commands.on;
 			const hexColor = onCommand ? normalizeHexColor(onCommand.type ?? '') : null;
 			const borderHex =
-				onCommand && onCommand.typeBorder
-					? normalizeHexColor(onCommand.typeBorder)
-					: hexColor;
+				onCommand && onCommand.typeBorder ? normalizeHexColor(onCommand.typeBorder) : hexColor;
 
 			if (hexColor) {
 				const borderColor = borderHex ?? hexColor;
@@ -166,13 +159,13 @@
 		return trimmed.toLowerCase();
 	}
 
-function getTextColor(hexColor: string): string {
-	const r = parseInt(hexColor.slice(1, 3), 16);
-	const g = parseInt(hexColor.slice(3, 5), 16);
-	const b = parseInt(hexColor.slice(5, 7), 16);
-	const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-	return brightness > 150 ? '#0f172a' : '#ffffff';
-}
+	function getTextColor(hexColor: string): string {
+		const r = parseInt(hexColor.slice(1, 3), 16);
+		const g = parseInt(hexColor.slice(3, 5), 16);
+		const b = parseInt(hexColor.slice(5, 7), 16);
+		const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+		return brightness > 150 ? '#0f172a' : '#ffffff';
+	}
 
 	function lightenHex(hexColor: string, weight = 0.9): string {
 		const r = parseInt(hexColor.slice(1, 3), 16);
@@ -198,11 +191,7 @@ function getTextColor(hexColor: string): string {
 		const config = device.commands[command];
 		const typeValue = config?.type;
 		const typeString =
-			typeof typeValue === 'string'
-				? typeValue
-				: typeValue === undefined
-					? ''
-					: String(typeValue);
+			typeof typeValue === 'string' ? typeValue : typeValue === undefined ? '' : String(typeValue);
 		const rawType = typeString.trim().toLowerCase();
 		const hexColor = normalizeHexColor(typeString);
 		const borderHex = normalizeHexColor(config?.typeBorder ?? '') ?? hexColor;
@@ -247,23 +236,24 @@ function getTextColor(hexColor: string): string {
 		};
 	}
 
-	$: commandVisualStates = isToggle || isSingle
-		? {}
-		: commandOrder.reduce(
-				(acc, command) => {
-					if (!device.commands[command]) return acc;
-					const key = commandKey(device.id, command);
-					const visual = computeButtonClass(command, key);
-					acc[command] = {
-						key,
-						className: visual.className,
-						style: visual.style,
-						ariaPressed: optimisticStatus === command
-					};
-					return acc;
-				},
-				{} as Partial<Record<DeviceCommandKey, CommandVisualState>>
-			);
+	$: commandVisualStates =
+		isToggle || isSingle
+			? {}
+			: commandOrder.reduce(
+					(acc, command) => {
+						if (!device.commands[command]) return acc;
+						const key = commandKey(device.id, command);
+						const visual = computeButtonClass(command, key);
+						acc[command] = {
+							key,
+							className: visual.className,
+							style: visual.style,
+							ariaPressed: optimisticStatus === command
+						};
+						return acc;
+					},
+					{} as Partial<Record<DeviceCommandKey, CommandVisualState>>
+				);
 
 	$: toggleState = (() => {
 		if (!isToggle) return null;
@@ -281,12 +271,9 @@ function getTextColor(hexColor: string): string {
 		const onCommand = device.commands.on;
 		const onHexColor = onCommand ? normalizeHexColor(onCommand.type ?? '') : null;
 		const onBorderHex =
-			onCommand && onCommand.typeBorder
-				? normalizeHexColor(onCommand.typeBorder)
-				: onHexColor;
+			onCommand && onCommand.typeBorder ? normalizeHexColor(onCommand.typeBorder) : onHexColor;
 		const borderColor = onBorderHex ?? '#10b981';
-		const accentBorderStyle =
-			stateCommand === 'on' ? `border-color:${borderColor}` : undefined;
+		const accentBorderStyle = stateCommand === 'on' ? `border-color:${borderColor}` : undefined;
 		const mergedStyle = [visual.style, accentBorderStyle].filter(Boolean).join(';');
 		const actionLabel = actionCommand === 'on' ? 'Zet aan' : 'Zet uit';
 		return {
@@ -301,7 +288,7 @@ function getTextColor(hexColor: string): string {
 
 	$: singleState = (() => {
 		if (!isSingle) return null;
-		const forceNeutral = isStateless && device.group === 'Scene' && !hasTransientOn;
+		const forceNeutral = isStateless && device.type === 'Scene' && !hasTransientOn;
 		const command: DeviceCommandKey = 'on';
 		if (!device.commands.on) return null;
 		const key = commandKey(device.id, command);
@@ -326,7 +313,6 @@ function getTextColor(hexColor: string): string {
 		}
 		dispatch('command', { deviceId: device.id, command });
 	}
-
 </script>
 
 <section class={cardClassName} style={cardStyle}>
@@ -335,12 +321,14 @@ function getTextColor(hexColor: string): string {
 			<h3 class="truncate text-lg font-semibold tracking-tight text-slate-800 sm:text-xl">
 				{device.label}
 			</h3>
-			{#if showGroup}
-				<p class="text-xs uppercase tracking-wide text-slate-400">{device.group}</p>
+			{#if showType}
+				<p class="text-xs tracking-wide text-slate-400 uppercase">{device.type}</p>
 			{/if}
 		</div>
 		{#if !isStateless && !isSingle}
-			<div class={`flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${statusTextClass}`}>
+			<div
+				class={`flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-xs font-semibold tracking-[0.2em] uppercase ${statusTextClass}`}
+			>
 				{#if hasKnownStatus}
 					<span class={`h-2.5 w-2.5 rounded-full ${statusDotClass}`}></span>
 					<span>{statusLabel}</span>
@@ -363,7 +351,9 @@ function getTextColor(hexColor: string): string {
 				>
 					<span class="pointer-events-none text-center">{singleState.label}</span>
 					{#if loadingCommandKey === singleState.key}
-						<span class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl bg-slate-900/40 text-sm font-semibold uppercase tracking-wide text-white">
+						<span
+							class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl bg-slate-900/40 text-sm font-semibold tracking-wide text-white uppercase"
+						>
 							Bezig…
 						</span>
 					{/if}
@@ -380,7 +370,9 @@ function getTextColor(hexColor: string): string {
 				>
 					<span class="pointer-events-none text-center">{toggleState.label}</span>
 					{#if loadingCommandKey === toggleState.key}
-						<span class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl bg-slate-900/40 text-sm font-semibold uppercase tracking-wide text-white">
+						<span
+							class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl bg-slate-900/40 text-sm font-semibold tracking-wide text-white uppercase"
+						>
 							Bezig…
 						</span>
 					{/if}
@@ -400,7 +392,9 @@ function getTextColor(hexColor: string): string {
 						>
 							<span class="pointer-events-none text-center">{commandLabel(device, cmd)}</span>
 							{#if loadingCommandKey === state.key}
-								<span class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl bg-slate-900/40 text-sm font-semibold uppercase tracking-wide text-white">
+								<span
+									class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl bg-slate-900/40 text-sm font-semibold tracking-wide text-white uppercase"
+								>
 									Bezig…
 								</span>
 							{/if}

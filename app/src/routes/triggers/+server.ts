@@ -28,7 +28,7 @@ export const POST: RequestHandler = async ({ request, fetch, url }) => {
 		const sceneDevice: ShellyDevice = {
 			id: `trigger-${trigger.id}`,
 			label: trigger.label,
-			group: 'Trigger',
+			type: 'Trigger',
 			stateless: true,
 			commands: {
 				on: {
@@ -70,10 +70,9 @@ export const POST: RequestHandler = async ({ request, fetch, url }) => {
 		return new Response(JSON.stringify({ ok: true }));
 	} catch (err) {
 		if (err instanceof ShellyHttpError) {
-			return new Response(
-				JSON.stringify({ error: err.message, errorCode: err.code }),
-				{ status: err.status || 502 }
-			);
+			return new Response(JSON.stringify({ error: err.message, errorCode: err.code }), {
+				status: err.status || 502
+			});
 		}
 
 		const msg = err instanceof Error ? err.message : 'Trigger failed';

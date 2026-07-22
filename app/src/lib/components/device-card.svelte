@@ -17,6 +17,7 @@
 		'border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-700';
 	const buttonOffProminentClass = 'border-rose-700 bg-rose-600 text-white hover:bg-rose-700';
 	const buttonNeutralClass = 'border-slate-800 bg-slate-800 text-white hover:bg-slate-700';
+	const buttonToggleNeutralClass = 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100';
 	const buttonCustomClass = 'text-white';
 
 	export let device: ShellyDevice;
@@ -180,7 +181,7 @@
 	function computeButtonClass(
 		command: DeviceCommandKey,
 		key: string,
-		options: { forceProminent?: boolean; forceNeutral?: boolean } = {}
+		options: { forceProminent?: boolean; forceNeutral?: boolean; forceToggleNeutral?: boolean } = {}
 	): ButtonVisual {
 		const config = device.commands[command];
 		const typeValue = config?.type;
@@ -193,7 +194,9 @@
 		const classes = [baseButtonClass];
 		let style: string | undefined;
 
-		if (options.forceNeutral) {
+		if (options.forceToggleNeutral) {
+			classes.push(buttonToggleNeutralClass);
+		} else if (options.forceNeutral) {
 			classes.push(buttonNeutralClass);
 		} else if (hexColor) {
 			const textColor = getTextColor(hexColor);
@@ -250,7 +253,12 @@
 		if (!device.commands[stateCommand] || !device.commands[actionCommand]) return null;
 		const actionKey = commandKey(device.id, actionCommand);
 		const key = deviceLoading && loadingCommandKey ? loadingCommandKey : actionKey;
-		const visual = computeButtonClass(actionCommand, key, { forceProminent: true });
+		const showGreenAction = actionCommand === 'off';
+		const visualCommand: DeviceCommandKey = showGreenAction ? 'on' : actionCommand;
+		const visual = computeButtonClass(visualCommand, key, {
+			forceProminent: showGreenAction,
+			forceToggleNeutral: !showGreenAction
+		});
 		const actionLabel = actionCommand === 'on' ? 'Zet aan' : 'Zet uit';
 		return {
 			key,

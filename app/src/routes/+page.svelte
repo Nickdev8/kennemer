@@ -181,6 +181,7 @@
 	let displayDimTimeout: ReturnType<typeof setTimeout> | null = null;
 	let displayDimmed = false;
 	let stateStream: EventSource | null = null;
+	let stateStreamReconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 	let loadingTriggerId: string | null = null;
 	let browserOnline = true;
 	let cloudReachable = true;
@@ -477,18 +478,22 @@
 		);
 	}
 
-	function resolveCardStatus(device: ShellyDevice) {
+	function resolveCardStatus(
+		device: ShellyDevice,
+		knownDeviceStates: Map<string, DeviceCommandKey>,
+		knownStatusDeviceStates: Map<string, DeviceCommandKey>
+	) {
 		const statusDeviceId = device.statusdeviceid?.trim();
 		if (statusDeviceId) {
 			return (
-				statusDeviceStates.get(statusDeviceId) ??
-				deviceStates.get(statusDeviceId) ??
-				deviceStates.get(device.id) ??
+				knownStatusDeviceStates.get(statusDeviceId) ??
+				knownDeviceStates.get(statusDeviceId) ??
+				knownDeviceStates.get(device.id) ??
 				null
 			);
 		}
 
-		return deviceStates.get(device.id) ?? null;
+		return knownDeviceStates.get(device.id) ?? null;
 	}
 
 	async function handlePress(
@@ -602,6 +607,11 @@
 		stream.addEventListener('error', () => {
 			stream.close();
 			stateStream = null;
+			if (stateStreamReconnectTimeout) clearTimeout(stateStreamReconnectTimeout);
+			stateStreamReconnectTimeout = setTimeout(() => {
+				stateStreamReconnectTimeout = null;
+				startStateStream();
+			}, 3000);
 		});
 
 		stateStream = stream;
@@ -755,7 +765,10 @@
 				updateMessage = payload.message ?? 'Kon update status niet ophalen';
 			}
 		} catch (error) {
-			updateStatus = { ok: false, message: error instanceof Error ? error.message : 'Update check mislukt' };
+			updateStatus = {
+				ok: false,
+				message: error instanceof Error ? error.message : 'Update check mislukt'
+			};
 			updateMessage = updateStatus.message ?? '';
 		} finally {
 			updateChecking = false;
@@ -913,6 +926,10 @@
 		if (stateStream) {
 			stateStream.close();
 			stateStream = null;
+		}
+		if (stateStreamReconnectTimeout) {
+			clearTimeout(stateStreamReconnectTimeout);
+			stateStreamReconnectTimeout = null;
 		}
 		clearAdvancedIdleTimer();
 		clearDisplayDimTimer();
@@ -1133,7 +1150,7 @@
 						{commandLabel}
 						{resolveToggleCommand}
 						{loadingCommandKey}
-						initialStatus={resolveCardStatus(device)}
+						initialStatus={resolveCardStatus(device, deviceStates, statusDeviceStates)}
 						on:command={({ detail }) =>
 							handlePress(detail.deviceId, detail.command, { stateless: device.stateless })}
 					/>
@@ -1356,7 +1373,11 @@
 													{commandLabel}
 													{resolveToggleCommand}
 													{loadingCommandKey}
-													initialStatus={resolveCardStatus(device)}
+													initialStatus={resolveCardStatus(
+														device,
+														deviceStates,
+														statusDeviceStates
+													)}
 													on:command={({ detail }) =>
 														handlePress(detail.deviceId, detail.command, {
 															stateless: device.stateless
@@ -1407,7 +1428,8 @@
 										<p class="mt-1 text-xs text-slate-500">{updateStatusText()}</p>
 										{#if updateStatus?.currentShort || updateStatus?.targetShort}
 											<p class="mt-2 font-mono text-xs text-slate-400">
-												{updateStatus.currentShort ?? 'unknown'} -> {updateStatus.targetShort ?? 'unknown'}
+												{updateStatus.currentShort ?? 'unknown'} -> {updateStatus.targetShort ??
+													'unknown'}
 											</p>
 										{/if}
 									</div>

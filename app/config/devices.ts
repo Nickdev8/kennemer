@@ -64,7 +64,7 @@ export const gangColorDevice: ShellyDevice = {
 export const devices: ShellyDevice[] = [
 	{
 		id: 'push-1',
-		label: 'Push Panel 1',
+		label: '1ste etage',
 		type: 'Scene',
 		buttonMode: 'toggle',
 		statusdeviceid: '2043a80ac3e4',

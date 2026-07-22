@@ -2,6 +2,7 @@
 import json
 import os
 import subprocess
+from glob import glob
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 REPO = os.environ.get("KENNEMER_REPO", "/opt/kennemer")
@@ -10,6 +11,8 @@ HOST = os.environ.get("KENNEMER_MAINTENANCE_HOST", "0.0.0.0")
 PORT = int(os.environ.get("KENNEMER_MAINTENANCE_PORT", "8787"))
 TOKEN = os.environ.get("KENNEMER_MAINTENANCE_TOKEN", "")
 UPDATE_SERVICE = os.environ.get("KENNEMER_UPDATE_SERVICE", "kennemer-update.service")
+TOUCHSCREEN_VENDOR_ID = os.environ.get("KENNEMER_TOUCHSCREEN_VENDOR_ID", "2a94").lower()
+TOUCHSCREEN_PRODUCT_ID = os.environ.get("KENNEMER_TOUCHSCREEN_PRODUCT_ID", "1804").lower()
 
 
 def run(command, timeout=20):
@@ -56,6 +59,34 @@ def service_state():
         "activeState": values[0] if len(values) > 0 else "unknown",
         "subState": values[1] if len(values) > 1 else "unknown",
         "result": values[2] if len(values) > 2 else "unknown",
+    }
+
+
+def hardware_status():
+    connected = False
+    for vendor_path in glob("/sys/bus/usb/devices/*/idVendor"):
+        device_path = os.path.dirname(vendor_path)
+        product_path = os.path.join(device_path, "idProduct")
+        try:
+            with open(vendor_path, encoding="ascii") as vendor_file:
+                vendor_id = vendor_file.read().strip().lower()
+            with open(product_path, encoding="ascii") as product_file:
+                product_id = product_file.read().strip().lower()
+        except (FileNotFoundError, OSError):
+            continue
+
+        if vendor_id == TOUCHSCREEN_VENDOR_ID and product_id == TOUCHSCREEN_PRODUCT_ID:
+            connected = True
+            break
+
+    return {
+        "ok": True,
+        "touchscreen": {
+            "connected": connected,
+            "name": "G2Touch Multi-Touch by G2TSP",
+            "vendorId": TOUCHSCREEN_VENDOR_ID,
+            "productId": TOUCHSCREEN_PRODUCT_ID,
+        },
     }
 
 
@@ -152,14 +183,15 @@ class Handler(BaseHTTPRequestHandler):
         return True
 
     def do_GET(self):
-        if self.path != "/status":
+        if self.path not in ("/status", "/hardware"):
             self.write_json(404, {"ok": False, "message": "not found"})
             return
         if not self.authorized():
             return
 
         try:
-            self.write_json(200, update_status())
+            payload = hardware_status() if self.path == "/hardware" else update_status()
+            self.write_json(200, payload)
         except Exception as exc:
             self.write_json(500, {"ok": False, "message": str(exc)})
 

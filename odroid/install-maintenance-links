@@ -20,7 +20,8 @@ ln -sfn "$REPO/odroid/kiosk-session" /usr/local/libexec/kennemer-kiosk-session
 ln -sfn "$REPO/odroid/kennemer-maintenance-api.service" /etc/systemd/system/kennemer-maintenance-api.service
 
 systemctl daemon-reload
-systemctl enable --now kennemer-maintenance-api.service
+systemctl enable kennemer-maintenance-api.service
+systemctl restart kennemer-maintenance-api.service
 
 echo "Installed repository-backed kiosk maintenance commands:"
 readlink -f \

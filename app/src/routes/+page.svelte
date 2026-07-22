@@ -9,6 +9,7 @@
 	import { triggerAction, triggerDeviceCommand } from '$lib/api';
 	import type { PageData } from './$types';
 	import RefreshCw from 'lucide-svelte/icons/refresh-cw';
+	import TouchpadOff from 'lucide-svelte/icons/touchpad-off';
 	import WifiOff from 'lucide-svelte/icons/wifi-off';
 
 	type WattageDeviceSummary = {
@@ -186,6 +187,9 @@
 	let connectivityChecked = false;
 	let connectivityChecking = false;
 	let connectivityInterval: ReturnType<typeof setInterval> | null = null;
+	let touchscreenConnected: boolean | null = null;
+	let hardwareChecking = false;
+	let hardwareInterval: ReturnType<typeof setInterval> | null = null;
 
 	const commandOrder: DeviceCommandKey[] = ['on', 'off'];
 
@@ -197,6 +201,7 @@
 	const liveStatusRefreshMs = 5_000;
 	const statusFollowupDelaysMs = [1200, 2500, 5000, 10000, 20000, 45000, 90000];
 	const connectivityRefreshMs = 15000;
+	const hardwareRefreshMs = 15000;
 
 	$: connectionOffline = connectivityChecked && (!browserOnline || !cloudReachable);
 
@@ -814,6 +819,25 @@
 		connectivityChecked = true;
 	}
 
+	async function checkHardware() {
+		if (hardwareChecking) return;
+		hardwareChecking = true;
+		try {
+			const res = await fetch('/api/hardware', { cache: 'no-store' });
+			const payload = (await res.json().catch(() => null)) as {
+				ok?: boolean;
+				touchscreen?: { connected?: boolean };
+			} | null;
+			if (res.ok && payload?.ok && typeof payload.touchscreen?.connected === 'boolean') {
+				touchscreenConnected = payload.touchscreen.connected;
+			}
+		} catch {
+			// Keep the last known hardware state when host diagnostics are unavailable.
+		} finally {
+			hardwareChecking = false;
+		}
+	}
+
 	async function handleTriggerPress(triggerId: string) {
 		loadingTriggerId = triggerId;
 		advancedErrorMsg = '';
@@ -847,6 +871,8 @@
 			}
 			void checkConnectivity();
 			connectivityInterval = setInterval(() => void checkConnectivity(), connectivityRefreshMs);
+			void checkHardware();
+			hardwareInterval = setInterval(() => void checkHardware(), hardwareRefreshMs);
 			scheduleDisplayDim();
 			loadDeviceStates().finally(() => {
 				void refreshStatusDevices();
@@ -869,6 +895,10 @@
 		if (connectivityInterval) {
 			clearInterval(connectivityInterval);
 			connectivityInterval = null;
+		}
+		if (hardwareInterval) {
+			clearInterval(hardwareInterval);
+			hardwareInterval = null;
 		}
 		if (wattageRefreshTimeout) {
 			clearTimeout(wattageRefreshTimeout);
@@ -910,6 +940,20 @@
 			<div>
 				<p class="text-base font-bold">Geen internetverbinding</p>
 				<p class="text-sm text-red-100">Shelly-bediening is tijdelijk niet beschikbaar.</p>
+			</div>
+		</div>
+	{/if}
+
+	{#if touchscreenConnected === false}
+		<div
+			class="flex items-center justify-center gap-3 bg-amber-600 px-6 py-3 text-white"
+			role="status"
+			aria-live="assertive"
+		>
+			<TouchpadOff class="h-6 w-6 shrink-0" aria-hidden="true" />
+			<div>
+				<p class="text-base font-bold">Touchscreen niet gevonden</p>
+				<p class="text-sm text-amber-50">Bediening via aanraking is niet beschikbaar.</p>
 			</div>
 		</div>
 	{/if}

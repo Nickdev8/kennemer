@@ -3,23 +3,21 @@
 	import type { DeviceCommandKey, ShellyDevice } from '$lib/config/schema';
 
 	const baseCardClass =
-		'flex h-full max-h-[18rem] min-h-[12rem] flex-col gap-3 rounded-3xl border-l-8 border-slate-200 bg-white px-5 py-5 shadow-sm transition duration-200 ease-out';
-	const cardNeutralClass = 'border-slate-200 border-l-slate-200 bg-white';
-	const cardOnClass =
-		'border-emerald-300 bg-emerald-50 shadow-lg shadow-emerald-100/70 ring-2 ring-emerald-200';
-	const cardOffClass = 'border-slate-200 bg-slate-50 shadow-inner';
-	const cardCustomClass = 'shadow-lg';
+		'flex h-full max-h-[18rem] min-h-[12rem] flex-col gap-3 rounded-lg border border-slate-300 bg-white px-5 py-5 transition-colors duration-150';
+	const cardNeutralClass = 'bg-white';
+	const cardOnClass = 'border-emerald-500 bg-emerald-50';
+	const cardOffClass = 'bg-slate-50';
+	const cardCustomClass = 'bg-white';
 
 	const baseButtonClass =
-		'relative flex w-full items-center justify-center rounded-2xl px-5 py-6 text-xl font-semibold transition duration-150 ease-out active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 max-h-32 min-h-[4rem]';
+		'relative flex w-full items-center justify-center rounded-lg border px-5 py-6 text-xl font-semibold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 max-h-32 min-h-[4rem]';
 	const buttonOnIdleClass = 'border border-emerald-500 bg-white text-slate-700';
 	const buttonOffIdleClass = 'border border-rose-500 bg-white text-slate-700';
 	const buttonOnProminentClass =
-		'border border-emerald-500 bg-emerald-500 text-white shadow-lg shadow-emerald-200/70';
-	const buttonOffProminentClass =
-		'border border-rose-500 bg-rose-500 text-white shadow-lg shadow-rose-200/70';
-	const buttonNeutralClass = 'border border-slate-300 bg-white text-slate-700';
-	const buttonCustomClass = 'border text-white shadow-lg shadow-slate-200/70';
+		'border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-700';
+	const buttonOffProminentClass = 'border-rose-700 bg-rose-600 text-white hover:bg-rose-700';
+	const buttonNeutralClass = 'border-slate-800 bg-slate-800 text-white hover:bg-slate-700';
+	const buttonCustomClass = 'text-white';
 
 	export let device: ShellyDevice;
 	export let commandOrder: DeviceCommandKey[];
@@ -112,11 +110,7 @@
 			if (hexColor) {
 				const borderColor = borderHex ?? hexColor;
 				const background = lightenHex(hexColor, 0.9);
-				cardStyle = [
-					`border-color:${borderColor}`,
-					`border-left-color:${borderColor}`,
-					`background:${background}`
-				].join(';');
+				cardStyle = [`border-color:${borderColor}`, `background:${background}`].join(';');
 				return `${baseCardClass} ${cardCustomClass}`;
 			}
 
@@ -205,15 +199,9 @@
 			const textColor = getTextColor(hexColor);
 			const borderColor = borderHex ?? hexColor;
 			classes.push(buttonCustomClass);
-			style = [
-				`--btn-color:${hexColor}`,
-				`--btn-text:${textColor}`,
-				`--btn-border:${borderColor}`,
-				'background:var(--btn-color)',
-				'border-color:var(--btn-border)',
-				'color:var(--btn-text)',
-				'box-shadow:0 0 0 2px var(--btn-border)'
-			].join(';');
+			style = [`background:${hexColor}`, `border-color:${borderColor}`, `color:${textColor}`].join(
+				';'
+			);
 		} else if (rawType === 'none' || rawType === 'neutral') {
 			classes.push(buttonNeutralClass);
 		} else if (rawType === 'off') {
@@ -227,7 +215,7 @@
 		}
 
 		if (loadingCommandKey === key) {
-			classes.push('ring-2 ring-blue-200 ring-offset-2 ring-offset-white');
+			classes.push('opacity-70');
 		}
 
 		return {
@@ -243,7 +231,7 @@
 					(acc, command) => {
 						if (!device.commands[command]) return acc;
 						const key = commandKey(device.id, command);
-						const visual = computeButtonClass(command, key);
+						const visual = computeButtonClass(command, key, { forceProminent: true });
 						acc[command] = {
 							key,
 							className: visual.className,
@@ -262,24 +250,12 @@
 		if (!device.commands[stateCommand] || !device.commands[actionCommand]) return null;
 		const actionKey = commandKey(device.id, actionCommand);
 		const key = deviceLoading && loadingCommandKey ? loadingCommandKey : actionKey;
-		const showGreenAction = actionCommand === 'off';
-		const visualCommand: DeviceCommandKey = showGreenAction ? 'on' : actionCommand;
-		const visual = computeButtonClass(visualCommand, key, {
-			forceNeutral: !showGreenAction,
-			forceProminent: showGreenAction
-		});
-		const onCommand = device.commands.on;
-		const onHexColor = onCommand ? normalizeHexColor(onCommand.type ?? '') : null;
-		const onBorderHex =
-			onCommand && onCommand.typeBorder ? normalizeHexColor(onCommand.typeBorder) : onHexColor;
-		const borderColor = onBorderHex ?? '#10b981';
-		const accentBorderStyle = stateCommand === 'on' ? `border-color:${borderColor}` : undefined;
-		const mergedStyle = [visual.style, accentBorderStyle].filter(Boolean).join(';');
+		const visual = computeButtonClass(actionCommand, key, { forceProminent: true });
 		const actionLabel = actionCommand === 'on' ? 'Zet aan' : 'Zet uit';
 		return {
 			key,
 			className: visual.className,
-			style: mergedStyle || undefined,
+			style: visual.style,
 			ariaPressed: stateCommand === 'on',
 			command: actionCommand,
 			label: actionLabel
@@ -326,14 +302,12 @@
 			{/if}
 		</div>
 		{#if !isStateless && !isSingle}
-			<div
-				class={`flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-xs font-semibold tracking-[0.2em] uppercase ${statusTextClass}`}
-			>
+			<div class={`flex items-center gap-2 text-sm font-semibold ${statusTextClass}`}>
 				{#if hasKnownStatus}
-					<span class={`h-2.5 w-2.5 rounded-full ${statusDotClass}`}></span>
-					<span>{statusLabel}</span>
+					<span class={`h-2.5 w-2.5 rounded-full ${statusDotClass}`} aria-hidden="true"></span>
+					<span>Status: {statusLabel}</span>
 				{:else}
-					<span>{statusLabel}</span>
+					<span>Status onbekend</span>
 				{/if}
 			</div>
 		{/if}
@@ -352,7 +326,7 @@
 					<span class="pointer-events-none text-center">{singleState.label}</span>
 					{#if loadingCommandKey === singleState.key}
 						<span
-							class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl bg-slate-900/40 text-sm font-semibold tracking-wide text-white uppercase"
+							class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-slate-900/60 text-sm font-semibold text-white"
 						>
 							Bezig…
 						</span>
@@ -371,7 +345,7 @@
 					<span class="pointer-events-none text-center">{toggleState.label}</span>
 					{#if loadingCommandKey === toggleState.key}
 						<span
-							class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl bg-slate-900/40 text-sm font-semibold tracking-wide text-white uppercase"
+							class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-slate-900/60 text-sm font-semibold text-white"
 						>
 							Bezig…
 						</span>
@@ -393,7 +367,7 @@
 							<span class="pointer-events-none text-center">{commandLabel(device, cmd)}</span>
 							{#if loadingCommandKey === state.key}
 								<span
-									class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl bg-slate-900/40 text-sm font-semibold tracking-wide text-white uppercase"
+									class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-slate-900/60 text-sm font-semibold text-white"
 								>
 									Bezig…
 								</span>

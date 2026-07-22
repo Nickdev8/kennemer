@@ -3,13 +3,12 @@
 	import type { ShellyTrigger } from '$lib/config/schema';
 
 	const baseCardClass =
-		'flex h-full max-h-[18rem] min-h-[12rem] flex-col gap-3 rounded-3xl border-l-8 border-t-2 border-slate-200 bg-white px-5 py-5 shadow-sm transition duration-200 ease-out';
-	const cardNeutralClass = 'border-slate-200 border-l-slate-200 border-t-transparent bg-white';
+		'flex h-full max-h-[18rem] min-h-[12rem] flex-col gap-3 rounded-lg border border-slate-300 bg-white px-5 py-5';
+	const cardNeutralClass = 'bg-white';
 
 	const baseButtonClass =
-		'relative flex w-full items-center justify-center rounded-2xl px-5 py-6 text-xl font-semibold transition duration-150 ease-out active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 max-h-32 min-h-[4rem]';
-	const buttonNeutralClass =
-		'border border-slate-300 bg-white text-slate-700';
+		'relative flex w-full items-center justify-center rounded-lg border px-5 py-6 text-xl font-semibold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 max-h-32 min-h-[4rem]';
+	const buttonNeutralClass = 'border-slate-800 bg-slate-800 text-white hover:bg-slate-700';
 
 	export let trigger: ShellyTrigger;
 	export let loadingTriggerId: string | null = null;
@@ -41,24 +40,22 @@
 
 	$: buttonVisual = (() => {
 		const typeValue = trigger.type ?? '';
-		const typeString =
-			typeof typeValue === 'string' ? typeValue : String(typeValue ?? '');
+		const typeString = typeof typeValue === 'string' ? typeValue : String(typeValue ?? '');
 		const rawType = typeString.trim().toLowerCase();
 		const hexColor = normalizeHexColor(typeString);
 		const borderHex = normalizeHexColor(trigger.typeBorder ?? '') ?? hexColor;
 		const accentColor =
-			borderHex ??
-			(rawType === 'on' ? '#10b981' : rawType === 'off' ? '#f43f5e' : undefined);
+			borderHex ?? (rawType === 'on' ? '#10b981' : rawType === 'off' ? '#f43f5e' : undefined);
 
 		const classes = [baseButtonClass];
 		let style: string | undefined;
 
-		cardStyle = accentColor ? `border-top-color:${accentColor}` : undefined;
+		cardStyle = accentColor ? `border-color:${accentColor}` : undefined;
 
 		classes.push(buttonNeutralClass);
 
 		if (isLoading) {
-			classes.push('ring-2 ring-blue-200 ring-offset-2 ring-offset-white');
+			classes.push('opacity-70');
 		}
 
 		return {
@@ -73,7 +70,7 @@
 </script>
 
 <section class={`${baseCardClass} ${cardNeutralClass}`} style={cardStyle}>
-	<p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Trigger</p>
+	<p class="text-sm font-semibold text-slate-700">Actie</p>
 	<button
 		type="button"
 		class={buttonVisual.className}
@@ -83,7 +80,9 @@
 	>
 		<span class="pointer-events-none text-center">{trigger.label}</span>
 		{#if isLoading}
-			<span class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl bg-slate-900/40 text-sm font-semibold uppercase tracking-wide text-white">
+			<span
+				class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-slate-900/60 text-sm font-semibold text-white"
+			>
 				Bezig…
 			</span>
 		{/if}

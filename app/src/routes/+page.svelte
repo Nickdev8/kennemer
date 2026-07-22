@@ -936,12 +936,11 @@
 	});
 </script>
 
-<main class="flex h-screen flex-col overflow-hidden bg-slate-100 text-slate-900">
-	<header class="border-b border-slate-200 bg-white/90 px-6 py-4 shadow-sm">
+<main class="flex h-screen flex-col overflow-hidden bg-slate-50 text-slate-900">
+	<header class="border-b border-slate-300 bg-white px-6 py-4">
 		<div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
 			<div>
-				<p class="text-xs tracking-wide text-slate-500 uppercase">Dashboard</p>
-				<h1 class="text-3xl font-semibold tracking-tight text-slate-900">HFD</h1>
+				<h1 class="text-2xl font-semibold text-slate-900">HFD bediening</h1>
 			</div>
 			<div class="flex flex-wrap items-center gap-3"></div>
 		</div>
@@ -977,11 +976,11 @@
 
 	<div class="flex min-h-0 flex-1 gap-4 overflow-hidden px-4 pt-4 pb-4">
 		<section
-			class="flex w-[26rem] shrink-0 flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+			class="flex w-[26rem] shrink-0 flex-col rounded-lg border border-slate-300 bg-white p-5"
 		>
 			<div class="flex items-start justify-between gap-4">
 				<div>
-					<p class="text-xs font-semibold text-slate-500 uppercase">Energie & apparaten</p>
+					<p class="text-sm font-semibold text-slate-700">Energie en apparaten</p>
 					<h2 class="mt-1 text-xl font-semibold text-slate-900">{wattageLabel}</h2>
 					<p
 						class={`mt-1 text-xs ${wattageStale ? 'font-semibold text-amber-700' : 'text-slate-500'}`}
@@ -1013,7 +1012,7 @@
 			</div>
 
 			<div class="mt-5 border-y border-slate-200 py-4">
-				<p class="text-xs font-semibold text-slate-500 uppercase">Huidig gemeten vermogen</p>
+				<p class="text-sm font-medium text-slate-600">Huidig gemeten vermogen</p>
 				<p class="mt-1 text-5xl font-bold text-slate-950">
 					{#if wattageDisabled}
 						Uit
@@ -1085,9 +1084,9 @@
 										>{formatWatts(device.watts)}</span
 									>
 								</div>
-								<div class="mt-1.5 ml-6 h-1.5 overflow-hidden rounded-full bg-slate-100">
+								<div class="mt-1.5 ml-6 h-1.5 overflow-hidden rounded-sm bg-slate-100">
 									<div
-										class="h-full rounded-full bg-emerald-500 transition-[width] duration-500"
+										class="h-full bg-emerald-600 transition-[width] duration-500"
 										style={`width: ${Math.max(4, (device.watts / topWattageMax) * 100)}%`}
 									></div>
 								</div>
@@ -1114,25 +1113,20 @@
 			<div class="mt-auto pt-4">
 				<button
 					type="button"
-					class="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 uppercase transition hover:bg-slate-100 active:bg-slate-200"
+					class="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 active:bg-slate-200"
 					on:click={openAdvancedAccess}
 				>
-					<span>Advanced gebruikers</span>
+					<span>Geavanceerde bediening</span>
 				</button>
 			</div>
 		</section>
 
-		<section
-			class="flex min-h-0 flex-1 flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
-		>
+		<section class="flex min-h-0 flex-1 flex-col rounded-lg border border-slate-300 bg-white p-4">
 			<header class="mb-4 flex items-center justify-between">
 				<div>
-					<p class="text-xs tracking-wide text-slate-500 uppercase">Scènes</p>
-					<h2 class="text-2xl font-semibold text-slate-900">Scene bediening</h2>
+					<h2 class="text-2xl font-semibold text-slate-900">Bediening</h2>
 				</div>
-				<span class="text-xs tracking-wide text-slate-400 uppercase"
-					>{primaryDeviceCount} knoppen</span
-				>
+				<span class="text-sm text-slate-500">{primaryDeviceCount} knoppen</span>
 			</header>
 			{#if errorMsg}
 				<p

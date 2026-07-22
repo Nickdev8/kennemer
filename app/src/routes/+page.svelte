@@ -9,6 +9,7 @@
 	import { triggerAction, triggerDeviceCommand } from '$lib/api';
 	import type { PageData } from './$types';
 	import RefreshCw from 'lucide-svelte/icons/refresh-cw';
+	import WifiOff from 'lucide-svelte/icons/wifi-off';
 
 	type WattageDeviceSummary = {
 		deviceId: string;
@@ -180,6 +181,11 @@
 	let displayDimmed = false;
 	let stateStream: EventSource | null = null;
 	let loadingTriggerId: string | null = null;
+	let browserOnline = true;
+	let cloudReachable = true;
+	let connectivityChecked = false;
+	let connectivityChecking = false;
+	let connectivityInterval: ReturnType<typeof setInterval> | null = null;
 
 	const commandOrder: DeviceCommandKey[] = ['on', 'off'];
 
@@ -190,6 +196,9 @@
 	const fastWattageWindowMs = 10 * 60 * 1000;
 	const normalStatusRefreshMs = normalWattageRefreshMs;
 	const statusFollowupDelaysMs = [1200, 2500, 5000, 10000, 20000, 45000, 90000];
+	const connectivityRefreshMs = 15000;
+
+	$: connectionOffline = connectivityChecked && (!browserOnline || !cloudReachable);
 
 	$: topWattageDevices = [...wattageDevices]
 		.filter(
@@ -771,6 +780,40 @@
 
 	const preventContextMenu = (evt: Event) => evt.preventDefault();
 
+	async function checkConnectivity() {
+		if (connectivityChecking || typeof navigator === 'undefined') return;
+
+		browserOnline = navigator.onLine;
+		if (!browserOnline) {
+			cloudReachable = false;
+			connectivityChecked = true;
+			return;
+		}
+
+		connectivityChecking = true;
+		try {
+			const res = await fetch('/api/connectivity', { cache: 'no-store' });
+			const payload = (await res.json().catch(() => null)) as { online?: boolean } | null;
+			cloudReachable = res.ok && payload?.online === true;
+		} catch {
+			cloudReachable = false;
+		} finally {
+			connectivityChecked = true;
+			connectivityChecking = false;
+		}
+	}
+
+	function handleBrowserOnline() {
+		browserOnline = true;
+		void checkConnectivity();
+	}
+
+	function handleBrowserOffline() {
+		browserOnline = false;
+		cloudReachable = false;
+		connectivityChecked = true;
+	}
+
 	async function handleTriggerPress(triggerId: string) {
 		loadingTriggerId = triggerId;
 		advancedErrorMsg = '';
@@ -796,6 +839,14 @@
 			window.addEventListener('contextmenu', preventContextMenu);
 			window.addEventListener('pointerdown', markDisplayActivity, { passive: true });
 			window.addEventListener('keydown', markDisplayActivity);
+			window.addEventListener('online', handleBrowserOnline);
+			window.addEventListener('offline', handleBrowserOffline);
+			browserOnline = navigator.onLine;
+			if (!browserOnline) {
+				handleBrowserOffline();
+			}
+			void checkConnectivity();
+			connectivityInterval = setInterval(() => void checkConnectivity(), connectivityRefreshMs);
 			scheduleDisplayDim();
 			loadDeviceStates().finally(() => {
 				void refreshStatusDevices();
@@ -812,6 +863,12 @@
 			window.removeEventListener('contextmenu', preventContextMenu);
 			window.removeEventListener('pointerdown', markDisplayActivity);
 			window.removeEventListener('keydown', markDisplayActivity);
+			window.removeEventListener('online', handleBrowserOnline);
+			window.removeEventListener('offline', handleBrowserOffline);
+		}
+		if (connectivityInterval) {
+			clearInterval(connectivityInterval);
+			connectivityInterval = null;
 		}
 		if (wattageRefreshTimeout) {
 			clearTimeout(wattageRefreshTimeout);
@@ -842,6 +899,20 @@
 			<div class="flex flex-wrap items-center gap-3"></div>
 		</div>
 	</header>
+
+	{#if connectionOffline}
+		<div
+			class="flex items-center justify-center gap-3 bg-red-700 px-6 py-3 text-white"
+			role="status"
+			aria-live="assertive"
+		>
+			<WifiOff class="h-6 w-6 shrink-0" aria-hidden="true" />
+			<div>
+				<p class="text-base font-bold">Geen internetverbinding</p>
+				<p class="text-sm text-red-100">Shelly-bediening is tijdelijk niet beschikbaar.</p>
+			</div>
+		</div>
+	{/if}
 
 	<div class="flex min-h-0 flex-1 gap-4 overflow-hidden px-4 pt-4 pb-4">
 		<section

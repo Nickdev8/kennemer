@@ -1,5 +1,5 @@
-codex resume 019eb0de-650d-7e42-b2fb-8691df88dca7
 
+codex resume 019eb0de-650d-7e42-b2fb-8691df88dca7
 ssh -f -N kennemer-http
 
 

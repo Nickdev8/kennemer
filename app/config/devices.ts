@@ -67,7 +67,7 @@ export const devices: ShellyDevice[] = [
 		label: 'Push Panel 1',
 		type: 'Scene',
 		buttonMode: 'toggle',
-		statusdeviceid: '3494546b08a0',
+		statusdeviceid: '2043a80ac3e4',
 		commands: {
 			on: {
 				label: 'Aan',

@@ -231,11 +231,24 @@ function buildShellyError(status: number, body: string): ShellyHttpError {
 	let message = `Shelly HTTP error ${status}`;
 
 	if (payload && typeof payload === 'object') {
-		const maybeErrors = (payload as { errors?: Record<string, string> }).errors;
+		const response = payload as {
+			error?: string;
+			errors?: Record<string, string>;
+		};
+		const maybeErrors = response.errors;
 		if (maybeErrors && typeof maybeErrors.max_req === 'string') {
 			code = 'RATE_LIMIT';
 			message = 'Shelly request limit reached';
 		}
+		if (response.error === 'TOO_MANY_REQUESTS') {
+			code = 'RATE_LIMIT';
+			message = 'Shelly request limit reached';
+		}
+	}
+
+	if (status === 429) {
+		code = 'RATE_LIMIT';
+		message = 'Shelly request limit reached';
 	}
 
 	if (code === 'HTTP_ERROR' && body) {

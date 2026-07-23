@@ -6,7 +6,7 @@ import type {
 	ShellyTargetConfig
 } from './schema';
 
-const shellyDeviceIdPattern = /^[0-9a-f]{12}$/i;
+const shellyDeviceIdPattern = /^[0-9a-f]{12}(?:_\d+)?$/i;
 
 function toTargets(config?: ShellyTargetConfig): ShellyHttpTarget[] {
 	if (!config) return [];

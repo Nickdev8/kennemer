@@ -40,7 +40,7 @@ export const devices: ShellyDevice[] = [
 		label: '1ste etage',
 		type: 'Scene',
 		buttonMode: 'toggle',
-		statusdeviceid: '8813bfd6d300', //push 1
+		statusdeviceid: '2cbcbb3d9af0_1', //push 1
 		commands: {
 			on: {
 				label: 'Aan',
@@ -67,7 +67,7 @@ export const devices: ShellyDevice[] = [
 		label: 'Aula plafond',
 		type: 'Scene',
 		buttonMode: 'toggle',
-		statusdeviceid: '8813bfd6d300',  //push 2
+		statusdeviceid: '2043a80ac3e4', //push 2
 		commands: {
 			on: {
 				label: 'Aan',
@@ -94,7 +94,7 @@ export const devices: ShellyDevice[] = [
 		label: 'Gang + entree',
 		type: 'Scene',
 		buttonMode: 'toggle',
-		statusdeviceid: '2043a80ac3e4',  //push 3
+		statusdeviceid: '2043a80ac3e4_1', //push 3
 		commands: {
 			on: {
 				label: 'Aan',
@@ -121,7 +121,7 @@ export const devices: ShellyDevice[] = [
 		label: '1ste',
 		type: 'Scene',
 		buttonMode: 'toggle',
-		statusdeviceid: '30c92276c1d4',  //push 4
+		statusdeviceid: '2cbcbb3d9af0', //push 4
 		commands: {
 			on: {
 				label: 'Aan',
@@ -166,7 +166,7 @@ export const devices: ShellyDevice[] = [
 		label: 'Kantine',
 		type: 'Scene',
 		buttonMode: 'toggle',
-		statusdeviceid: '2043a80ac3e4`',  //push 6
+		statusdeviceid: '30c92276c1d4_1', //push 6
 		commands: {
 			on: {
 				label: 'Aan',
@@ -193,7 +193,7 @@ export const devices: ShellyDevice[] = [
 		label: 'Parterre',
 		type: 'Scene',
 		buttonMode: 'toggle',
-		statusdeviceid: '30c92276c1d4',  //push 7
+		statusdeviceid: '8813bfd6d300', //push 7
 		commands: {
 			on: {
 				label: 'Aan',
@@ -220,7 +220,7 @@ export const devices: ShellyDevice[] = [
 		label: 'Aula vide',
 		type: 'Scene',
 		buttonMode: 'toggle',
-		statusdeviceid: '2cbcbb3d9af0',  //push 8
+		statusdeviceid: '8813bfd6d300_1', //push 8
 		commands: {
 			on: {
 				label: 'Aan',
@@ -247,7 +247,7 @@ export const devices: ShellyDevice[] = [
 		label: 'Kopje gang',
 		type: 'Scene',
 		buttonMode: 'toggle',
-		statusdeviceid: '2cbcbb3d9af0',  //push 9
+		statusdeviceid: '30c92276c1d4', //push 9
 		commands: {
 			on: {
 				label: 'Aan',

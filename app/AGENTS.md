@@ -47,7 +47,12 @@ rate limits before shortening it.
 
 - On is green; off is neutral. Do not invert the labels or colors.
 - Toggle labels are Dutch: `Aan` turns on and `Uit` turns off.
-- The initial unresolved status text is `Pingen...`, not `Status onbekend`.
+- Only the initial unresolved status briefly shows `Pingen...`; permanent
+  `Status: Aan/Uit` text is intentionally hidden because card color carries the
+  state.
+- A newly unreachable status device produces one temporary warning at the top
+  right. Do not renew it on every polling cycle while the same device remains
+  unavailable.
 - Offline status does not disable a configured scene action.
 - Missing command payloads do disable the corresponding action.
 - Advanced controls auto-close after inactivity unless pinned.

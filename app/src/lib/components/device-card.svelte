@@ -28,7 +28,6 @@
 	export let commandLabel: (device: ShellyDevice, command: DeviceCommandKey) => string;
 	export let loadingCommandKey: string | null;
 	export let initialStatus: DeviceCommandKey | null = null;
-	export let statusEnabled = true;
 	export let statusPending = false;
 	export let showType = false;
 	export let resolveToggleCommand: (status: DeviceCommandKey | null) => DeviceCommandKey = (
@@ -47,10 +46,6 @@
 	let isSingle = false;
 	let isStateless = false;
 	let commandGridClass = 'grid-cols-2';
-	let statusLabel = 'Uit';
-	let statusDotClass = 'bg-slate-400';
-	let statusTextClass = 'text-slate-600';
-	let hasKnownStatus = false;
 	let hasTransientOn = false;
 
 	const currentOptimisticKey = () =>
@@ -69,22 +64,6 @@
 
 	$: {
 		hasTransientOn = isSingle && isStateless && device.type === 'Scene' && initialStatus === 'on';
-		if (optimisticStatus === 'on') {
-			statusLabel = 'Aan';
-			statusDotClass = 'bg-emerald-500';
-			statusTextClass = 'text-emerald-700';
-			hasKnownStatus = true;
-		} else if (optimisticStatus === 'off') {
-			statusLabel = 'Uit';
-			statusDotClass = 'bg-slate-400';
-			statusTextClass = 'text-slate-600';
-			hasKnownStatus = true;
-		} else {
-			statusLabel = '—';
-			statusDotClass = 'bg-slate-300';
-			statusTextClass = 'text-slate-400';
-			hasKnownStatus = false;
-		}
 	}
 
 	$: {
@@ -330,19 +309,8 @@
 				<p class="text-xs tracking-wide text-slate-400 uppercase">{device.type}</p>
 			{/if}
 		</div>
-		{#if !isStateless && !isSingle}
-			<div class={`flex items-center gap-2 text-sm font-semibold ${statusTextClass}`}>
-				{#if !statusEnabled}
-					<span>Status niet ingesteld</span>
-				{:else if statusPending}
-					<span>Pingen…</span>
-				{:else if hasKnownStatus}
-					<span class={`h-2.5 w-2.5 rounded-full ${statusDotClass}`} aria-hidden="true"></span>
-					<span>Status: {statusLabel}</span>
-				{:else}
-					<span>Status onbekend</span>
-				{/if}
-			</div>
+		{#if !isStateless && !isSingle && statusPending}
+			<p class="text-sm font-semibold text-slate-500" role="status">Pingen…</p>
 		{/if}
 	</div>
 

@@ -10,13 +10,13 @@
 	import {
 		getDeviceConfigurationIssues,
 		isDeviceCommandConfigured,
-		isDeviceStatusConfigured,
 		isValidStatusDeviceId
 	} from '$lib/config/device-validation';
 	import { triggerAction, triggerDeviceCommand } from '$lib/api';
 	import type { PageData } from './$types';
 	import RefreshCw from 'lucide-svelte/icons/refresh-cw';
 	import Pin from 'lucide-svelte/icons/pin';
+	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
 	import TouchpadOff from 'lucide-svelte/icons/touchpad-off';
 	import WifiOff from 'lucide-svelte/icons/wifi-off';
 
@@ -228,6 +228,10 @@
 	let touchscreenConnected: boolean | null = null;
 	let hardwareChecking = false;
 	let hardwareInterval: ReturnType<typeof setInterval> | null = null;
+	let statusDeviceWarningVisible = false;
+	let statusDeviceWarningTimeout: ReturnType<typeof setTimeout> | null = null;
+	let unavailableStatusDeviceIds = new Set<string>();
+	let initialStatusDisplayTimeout: ReturnType<typeof setTimeout> | null = null;
 
 	const commandOrder: DeviceCommandKey[] = ['on', 'off'];
 
@@ -237,6 +241,8 @@
 	const fastWattageRefreshMs = 2 * 60 * 1000;
 	const fastWattageWindowMs = 10 * 60 * 1000;
 	const liveStatusRefreshMs = 5_000;
+	const initialStatusDisplayMaxMs = 8_000;
+	const statusDeviceWarningDurationMs = 7_000;
 	const statusFollowupDelaysMs = [1200, 2500, 5000, 10000, 20000, 45000, 90000];
 	const connectivityRefreshMs = 15000;
 	const hardwareRefreshMs = 15000;
@@ -555,18 +561,42 @@
 	) {
 		const nextStatusStates = new Map(statusDeviceStates);
 		const nextDeviceStates = new Map(deviceStates);
+		const nextUnavailableIds = new Set(unavailableStatusDeviceIds);
+		const hasNewUnavailableDevice = unavailableIds.some(
+			(id) => !unavailableStatusDeviceIds.has(id)
+		);
 
-		unavailableIds.forEach((id) => nextStatusStates.delete(id));
+		unavailableIds.forEach((id) => {
+			nextStatusStates.delete(id);
+			nextUnavailableIds.add(id);
+		});
 
 		Object.entries(states).forEach(([id, entry]) => {
 			if (entry?.lastCommand === 'on' || entry?.lastCommand === 'off') {
 				nextStatusStates.set(id, entry.lastCommand);
 				nextDeviceStates.set(id, entry.lastCommand);
+				nextUnavailableIds.delete(id);
 			}
 		});
 
 		statusDeviceStates = nextStatusStates;
 		deviceStates = nextDeviceStates;
+		unavailableStatusDeviceIds = nextUnavailableIds;
+
+		if (hasNewUnavailableDevice) {
+			showStatusDeviceWarning();
+		}
+	}
+
+	function showStatusDeviceWarning() {
+		if (statusDeviceWarningTimeout) {
+			clearTimeout(statusDeviceWarningTimeout);
+		}
+		statusDeviceWarningVisible = true;
+		statusDeviceWarningTimeout = setTimeout(() => {
+			statusDeviceWarningVisible = false;
+			statusDeviceWarningTimeout = null;
+		}, statusDeviceWarningDurationMs);
 	}
 
 	async function refreshStatusDevices(ids = statusDeviceIds) {
@@ -577,19 +607,31 @@
 		try {
 			const params = new URLSearchParams({ ids: uniqueIds.join(',') });
 			const res = await fetch(`/api/device-output?${params.toString()}`, { cache: 'no-store' });
-			if (!res.ok) return;
+			if (!res.ok) {
+				applyStatusDeviceStates({}, uniqueIds);
+				return;
+			}
 
 			const payload = (await res.json()) as {
 				ok: boolean;
 				states: Record<string, { lastCommand: DeviceCommandKey }>;
 				errors?: Record<string, string>;
 			};
-			if (!payload?.ok || !payload.states) return;
+			if (!payload?.ok || !payload.states) {
+				applyStatusDeviceStates({}, uniqueIds);
+				return;
+			}
 			applyStatusDeviceStates(payload.states, Object.keys(payload.errors ?? {}));
+		} catch {
+			applyStatusDeviceStates({}, uniqueIds);
 		} finally {
 			const nextPendingIds = new Set(initialStatusPendingIds);
 			uniqueIds.forEach((id) => nextPendingIds.delete(id));
 			initialStatusPendingIds = nextPendingIds;
+			if (nextPendingIds.size === 0 && initialStatusDisplayTimeout) {
+				clearTimeout(initialStatusDisplayTimeout);
+				initialStatusDisplayTimeout = null;
+			}
 			statusRefreshLoading = false;
 			scheduleAutomaticStatusRefresh();
 		}
@@ -1183,6 +1225,10 @@
 			void checkHardware();
 			hardwareInterval = setInterval(() => void checkHardware(), hardwareRefreshMs);
 			scheduleDisplayDim();
+			initialStatusDisplayTimeout = setTimeout(() => {
+				initialStatusPendingIds = new Set();
+				initialStatusDisplayTimeout = null;
+			}, initialStatusDisplayMaxMs);
 			void refreshStatusDevices();
 			loadDeviceStates().finally(() => {
 				if (!wattageDisabled) {
@@ -1208,6 +1254,14 @@
 		if (hardwareInterval) {
 			clearInterval(hardwareInterval);
 			hardwareInterval = null;
+		}
+		if (statusDeviceWarningTimeout) {
+			clearTimeout(statusDeviceWarningTimeout);
+			statusDeviceWarningTimeout = null;
+		}
+		if (initialStatusDisplayTimeout) {
+			clearTimeout(initialStatusDisplayTimeout);
+			initialStatusDisplayTimeout = null;
 		}
 		if (wattageRefreshTimeout) {
 			clearTimeout(wattageRefreshTimeout);
@@ -1243,6 +1297,22 @@
 			<RefreshCw class="h-20 w-20 animate-spin" aria-hidden="true" />
 			<p class="mt-8 text-4xl font-semibold">Bezig met updaten</p>
 			<p class="mt-3 text-xl text-slate-300">Even geduld. Het scherm start vanzelf opnieuw.</p>
+		</div>
+	</div>
+{/if}
+
+{#if statusDeviceWarningVisible}
+	<div
+		class="fixed top-4 right-4 z-[90] flex max-w-sm items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-950 shadow-sm transition-opacity duration-150"
+		role="status"
+		aria-live="polite"
+	>
+		<TriangleAlert class="mt-0.5 h-5 w-5 shrink-0 text-amber-700" aria-hidden="true" />
+		<div>
+			<p class="font-semibold">Pushknoppenpaneel niet gevonden</p>
+			<p class="mt-1 text-sm text-amber-900">
+				De actuele stand kan niet worden gecontroleerd. De bediening is daardoor minder betrouwbaar.
+			</p>
 		</div>
 	</div>
 {/if}
@@ -1444,7 +1514,6 @@
 						{commandLabel}
 						{resolveToggleCommand}
 						{loadingCommandKey}
-						statusEnabled={isDeviceStatusConfigured(device)}
 						statusPending={isInitialStatusPending(device)}
 						initialStatus={resolveCardStatus(device, deviceStates, statusDeviceStates)}
 						on:command={({ detail }) =>
@@ -1701,7 +1770,6 @@
 										{commandLabel}
 										{resolveToggleCommand}
 										{loadingCommandKey}
-										statusEnabled={isDeviceStatusConfigured(device)}
 										statusPending={isInitialStatusPending(device)}
 										initialStatus={resolveCardStatus(device, deviceStates, statusDeviceStates)}
 										on:command={({ detail }) =>
@@ -1900,6 +1968,11 @@
 					{/if}
 				</aside>
 			</div>
+			<footer
+				class="shrink-0 border-t border-slate-200 px-6 py-2 text-right text-xs text-slate-500"
+			>
+				© 2026 Nick Esselman en Kennemer Lyceum Haarlem. Alle rechten voorbehouden.
+			</footer>
 		</div>
 	</div>
 {/if}

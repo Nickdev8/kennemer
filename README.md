@@ -8,7 +8,9 @@ Kennemer. Het draait op een ODROID en bedient Shelly-scenes.
 Maak verbinding met de ODROID:
 
 ```bash
-ssh kennemer-cloudflare
+ssh root@10.10.80.50
+or
+ssh root@dashboard.local
 ```
 
 De belangrijkste commando's zijn:

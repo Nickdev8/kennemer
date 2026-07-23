@@ -15,8 +15,7 @@
 		'relative flex w-full items-center justify-center rounded-lg border px-5 py-6 text-xl font-semibold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 max-h-32 min-h-[4rem]';
 	const buttonOnIdleClass = 'border border-emerald-500 bg-white text-slate-700';
 	const buttonOffIdleClass = 'border border-rose-500 bg-white text-slate-700';
-	const buttonOnProminentClass =
-		'border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-700';
+	const buttonOnProminentClass = 'border-sky-400 bg-sky-300 text-slate-900 hover:bg-sky-400';
 	const buttonOffProminentClass = 'border-rose-700 bg-rose-600 text-white hover:bg-rose-700';
 	const buttonNeutralClass = 'border-slate-800 bg-slate-800 text-white hover:bg-slate-700';
 	const buttonToggleNeutralClass = 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100';

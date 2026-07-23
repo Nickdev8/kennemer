@@ -1178,6 +1178,20 @@
 	});
 </script>
 
+{#if updatePhase === 'starting' || updatePhase === 'running'}
+	<div
+		class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900 px-8 text-white"
+		role="status"
+		aria-live="assertive"
+	>
+		<div class="flex flex-col items-center text-center">
+			<RefreshCw class="h-20 w-20 animate-spin" aria-hidden="true" />
+			<p class="mt-8 text-4xl font-semibold">Bezig met updaten</p>
+			<p class="mt-3 text-xl text-slate-300">Even geduld. Het scherm start vanzelf opnieuw.</p>
+		</div>
+	</div>
+{/if}
+
 <main class="flex h-screen flex-col overflow-hidden bg-slate-50 text-slate-900">
 	<header class="border-b border-slate-300 bg-white px-6 py-4">
 		<div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">

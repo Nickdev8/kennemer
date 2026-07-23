@@ -46,7 +46,7 @@ def is_update_active():
 
 def service_state():
     result = subprocess.run(
-        ["systemctl", "show", UPDATE_SERVICE, "--property=ActiveState,SubState,Result", "--value"],
+        ["systemctl", "show", UPDATE_SERVICE, "--property=ActiveState,SubState,Result"],
         text=True,
         capture_output=True,
         check=False,
@@ -54,11 +54,16 @@ def service_state():
     if result.returncode != 0:
         return {"activeState": "unknown", "subState": "unknown", "result": "unknown"}
 
-    values = result.stdout.strip().splitlines()
+    properties = {}
+    for line in result.stdout.splitlines():
+        key, separator, value = line.partition("=")
+        if separator:
+            properties[key] = value
+
     return {
-        "activeState": values[0] if len(values) > 0 else "unknown",
-        "subState": values[1] if len(values) > 1 else "unknown",
-        "result": values[2] if len(values) > 2 else "unknown",
+        "activeState": properties.get("ActiveState", "unknown"),
+        "subState": properties.get("SubState", "unknown"),
+        "result": properties.get("Result", "unknown"),
     }
 
 

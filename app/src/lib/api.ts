@@ -1,5 +1,15 @@
 import type { DeviceCommandKey } from '$lib/config/schema';
 
+type DeviceCommandResponse = {
+	ok?: boolean;
+	skipped?: boolean;
+	activeUntil?: number;
+	state?: {
+		deviceId: string;
+		lastCommand: DeviceCommandKey;
+	};
+};
+
 export async function triggerDeviceCommand(deviceId: string, command: DeviceCommandKey) {
 	const res = await fetch('/actions', {
 		method: 'POST',
@@ -9,9 +19,7 @@ export async function triggerDeviceCommand(deviceId: string, command: DeviceComm
 
 	if (!res.ok) {
 		const payload = await res.json().catch(() => ({}));
-		const error = new Error(
-			typeof payload.error === 'string' ? payload.error : 'Request failed'
-		);
+		const error = new Error(typeof payload.error === 'string' ? payload.error : 'Request failed');
 		if (payload.errorCode) {
 			(error as Error & { code?: string }).code = payload.errorCode;
 		}
@@ -19,7 +27,7 @@ export async function triggerDeviceCommand(deviceId: string, command: DeviceComm
 		throw error;
 	}
 
-	return res.json().catch(() => ({}));
+	return res.json().catch(() => ({})) as Promise<DeviceCommandResponse>;
 }
 
 export async function triggerAction(triggerId: string) {
@@ -31,9 +39,7 @@ export async function triggerAction(triggerId: string) {
 
 	if (!res.ok) {
 		const payload = await res.json().catch(() => ({}));
-		const error = new Error(
-			typeof payload.error === 'string' ? payload.error : 'Request failed'
-		);
+		const error = new Error(typeof payload.error === 'string' ? payload.error : 'Request failed');
 		if (payload.errorCode) {
 			(error as Error & { code?: string }).code = payload.errorCode;
 		}

@@ -29,6 +29,7 @@
 	export let loadingCommandKey: string | null;
 	export let initialStatus: DeviceCommandKey | null = null;
 	export let statusPending = false;
+	export let transientActive = false;
 	export let showType = false;
 	export let resolveToggleCommand: (status: DeviceCommandKey | null) => DeviceCommandKey = (
 		status
@@ -63,7 +64,11 @@
 	$: commandGridClass = isToggle || isSingle ? 'grid-cols-1' : 'grid-cols-2';
 
 	$: {
-		hasTransientOn = isSingle && isStateless && device.type === 'Scene' && initialStatus === 'on';
+		hasTransientOn =
+			isSingle &&
+			isStateless &&
+			device.type === 'Scene' &&
+			(initialStatus === 'on' || transientActive);
 	}
 
 	$: {
@@ -265,21 +270,27 @@
 
 	$: singleState = (() => {
 		if (!isSingle) return null;
-		const forceNeutral = isStateless && device.type === 'Scene' && !hasTransientOn;
 		const command: DeviceCommandKey = 'on';
 		if (!device.commands.on) return null;
 		const key = commandKey(device.id, command);
 		const commandConfigured = isDeviceCommandConfigured(device, command);
-		const visual = computeButtonClass(command, key, {
-			forceNeutral,
-			forceProminent: !forceNeutral
-		});
+		const isTimedScene = isStateless && device.type === 'Scene';
+		const visual = isTimedScene
+			? {
+					className: [
+						baseButtonClass,
+						hasTransientOn
+							? 'border-emerald-500 bg-emerald-100 text-emerald-900 disabled:opacity-100'
+							: 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100'
+					].join(' ')
+				}
+			: computeButtonClass(command, key, { forceProminent: true });
 		return {
 			key,
 			className: visual.className,
 			style: visual.style,
-			ariaPressed: false,
-			disabled: !commandConfigured,
+			ariaPressed: hasTransientOn,
+			disabled: !commandConfigured || deviceLoading || hasTransientOn,
 			command,
 			label: commandConfigured
 				? (device.commands.on?.label ?? '')
@@ -290,7 +301,7 @@
 	})();
 
 	function handleCommand(command: DeviceCommandKey) {
-		if (!isDeviceCommandConfigured(device, command)) return;
+		if (!isDeviceCommandConfigured(device, command) || deviceLoading || hasTransientOn) return;
 		const key = commandKey(device.id, command);
 		if (!isStateless && !isSingle) {
 			optimisticStatus = command;

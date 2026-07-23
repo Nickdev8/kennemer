@@ -29,6 +29,7 @@ export interface ShellyDevice {
 	buttonMode?: DeviceButtonMode;
 	statusdeviceid?: string;
 	stateless?: boolean;
+	activeDurationMs?: number;
 	colorCapable?: boolean;
 	commands: Partial<Record<DeviceCommandKey, ShellyDeviceCommand>>;
 }

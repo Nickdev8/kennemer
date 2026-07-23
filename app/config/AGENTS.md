@@ -27,6 +27,10 @@ Set `stateless: true` for a trigger-like device whose persistent state cannot
 be inferred from the action. Do not attach a fake state to timed or momentary
 scenes.
 
+`activeDurationMs` gives a stateless single-action button a temporary active
+state and server-side repeat lock. Use it only when the physical action has a
+known cooldown or run time.
+
 For the main grid, `pushNumber` is the authoritative layout position:
 
 ```text
@@ -82,7 +86,9 @@ make a valid scene unclickable.
 ## Current special controls
 
 `Screen lokalen` is position 5, uses `buttonMode: 'single'`, is stateless, and
-shows the `arrow-up` icon with label `Screens omhoog`.
+shows the `arrow-up` icon with label `Screens omhoog`. Its
+`activeDurationMs: 60_000` keeps the button green and prevents the scene from
+running again for one minute.
 
 `energyDevicesTrigger` is the **ALLES UIT** scene. It is presented under the
 wattage section and requires a Dutch authorization confirmation in the UI.

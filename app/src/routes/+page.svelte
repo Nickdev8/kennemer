@@ -232,6 +232,8 @@
 	let statusDeviceWarningTimeout: ReturnType<typeof setTimeout> | null = null;
 	let unavailableStatusDeviceIds = new Set<string>();
 	let initialStatusDisplayTimeout: ReturnType<typeof setTimeout> | null = null;
+	let transientActiveUntilByDevice = new Map<string, number>();
+	const transientActiveTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 
 	const commandOrder: DeviceCommandKey[] = ['on', 'off'];
 
@@ -675,6 +677,30 @@
 		return Boolean(statusDeviceId && initialStatusPendingIds.has(statusDeviceId));
 	}
 
+	function isTransientDeviceActive(deviceId: string) {
+		return (transientActiveUntilByDevice.get(deviceId) ?? 0) > Date.now();
+	}
+
+	function setTransientDeviceActive(deviceId: string, activeUntil: number) {
+		const durationMs = Math.max(0, activeUntil - Date.now());
+		if (durationMs === 0) return;
+
+		const existingTimeout = transientActiveTimeouts.get(deviceId);
+		if (existingTimeout) clearTimeout(existingTimeout);
+
+		const nextActiveUntil = new Map(transientActiveUntilByDevice);
+		nextActiveUntil.set(deviceId, activeUntil);
+		transientActiveUntilByDevice = nextActiveUntil;
+
+		const timeout = setTimeout(() => {
+			const next = new Map(transientActiveUntilByDevice);
+			next.delete(deviceId);
+			transientActiveUntilByDevice = next;
+			transientActiveTimeouts.delete(deviceId);
+		}, durationMs);
+		transientActiveTimeouts.set(deviceId, timeout);
+	}
+
 	async function handlePress(
 		deviceId: string,
 		command: DeviceCommandKey,
@@ -690,10 +716,16 @@
 		errorMsg = '';
 		let succeeded = false;
 		try {
-			await triggerDeviceCommand(deviceId, command);
+			const response = await triggerDeviceCommand(deviceId, command);
 			const statusDeviceId = device.statusdeviceid?.trim();
 			if (!options.stateless) {
 				setDeviceState(deviceId, command);
+			} else if (
+				device.activeDurationMs &&
+				Number.isFinite(response.activeUntil) &&
+				Number(response.activeUntil) > Date.now()
+			) {
+				setTransientDeviceActive(deviceId, Number(response.activeUntil));
 			}
 			if (statusDeviceId) {
 				startStatusFollowup(statusDeviceId);
@@ -1263,6 +1295,8 @@
 			clearTimeout(initialStatusDisplayTimeout);
 			initialStatusDisplayTimeout = null;
 		}
+		transientActiveTimeouts.forEach((timeout) => clearTimeout(timeout));
+		transientActiveTimeouts.clear();
 		if (wattageRefreshTimeout) {
 			clearTimeout(wattageRefreshTimeout);
 		}
@@ -1515,6 +1549,7 @@
 						{resolveToggleCommand}
 						{loadingCommandKey}
 						statusPending={isInitialStatusPending(device)}
+						transientActive={isTransientDeviceActive(device.id)}
 						initialStatus={resolveCardStatus(device, deviceStates, statusDeviceStates)}
 						on:command={({ detail }) =>
 							handlePress(detail.deviceId, detail.command, { stateless: device.stateless })}
@@ -1771,6 +1806,7 @@
 										{resolveToggleCommand}
 										{loadingCommandKey}
 										statusPending={isInitialStatusPending(device)}
+										transientActive={isTransientDeviceActive(device.id)}
 										initialStatus={resolveCardStatus(device, deviceStates, statusDeviceStates)}
 										on:command={({ detail }) =>
 											handlePress(detail.deviceId, detail.command, {

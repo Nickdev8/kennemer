@@ -124,6 +124,7 @@ export const devices: ShellyDevice[] = [
 		pushNumber: 5,
 		buttonMode: 'single',
 		stateless: true,
+		activeDurationMs: 60_000,
 		commands: {
 			on: {
 				label: 'Screens omhoog',

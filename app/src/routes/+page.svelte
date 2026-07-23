@@ -58,6 +58,7 @@
 		updateAvailable?: boolean;
 		fastForward?: boolean;
 		updating?: boolean;
+		updateStarted?: boolean;
 		fetchOk?: boolean;
 		fetchError?: string;
 		service?: {
@@ -66,6 +67,16 @@
 			result?: string;
 		};
 	};
+
+	type UpdatePhase =
+		| 'idle'
+		| 'checking'
+		| 'available'
+		| 'blocked'
+		| 'starting'
+		| 'running'
+		| 'success'
+		| 'error';
 
 	function readBooleanFlag(value: string | undefined) {
 		if (!value) return false;
@@ -209,6 +220,10 @@
 	let updateChecking = false;
 	let updateRunning = false;
 	let updateMessage = '';
+	let updatePhase: UpdatePhase = 'idle';
+	let updateStartedAt = 0;
+	let updateWasObservedRunning = false;
+	let updatePollTimeout: ReturnType<typeof setTimeout> | null = null;
 
 	let showAdvancedPrompt = false;
 	let showAdvancedPanel = false;
@@ -244,6 +259,8 @@
 	const statusFollowupDelaysMs = [1200, 2500, 5000, 10000, 20000, 45000, 90000];
 	const connectivityRefreshMs = 15000;
 	const hardwareRefreshMs = 15000;
+	const updatePollIntervalMs = 4000;
+	const updatePollMaxMs = 35 * 60 * 1000;
 
 	$: connectionOffline = connectivityChecked && (!browserOnline || !cloudReachable);
 
@@ -857,26 +874,128 @@
 	}
 
 	function updateStatusText() {
-		if (!updateStatus) return updateMessage || 'Nog niet gecontroleerd.';
-		if (!updateStatus.ok) return updateStatus.message ?? 'Update status niet beschikbaar.';
-		if (updateStatus.updating || updateRunning) return 'Update draait op de ODROID.';
-		if (updateStatus.updateAvailable && updateStatus.fastForward === false) {
+		if (updatePhase === 'checking') return 'Controleren op updates…';
+		if (updatePhase === 'starting') return 'Update wordt gestart…';
+		if (updatePhase === 'running') {
+			return updateMessage || 'Update wordt geïnstalleerd. Dit kan enkele minuten duren.';
+		}
+		if (updatePhase === 'success') return updateMessage || 'Update voltooid.';
+		if (updatePhase === 'error') return updateMessage || 'Update mislukt.';
+		if (updatePhase === 'blocked') {
 			return 'Update gevonden, maar niet automatisch veilig te installeren.';
 		}
-		if (updateStatus.updateAvailable) return 'Nieuwe update beschikbaar.';
+		if (updatePhase === 'available') return 'Nieuwe update beschikbaar.';
+		if (!updateStatus) return 'Nog niet gecontroleerd.';
+		if (!updateStatus.ok) return updateStatus.message ?? 'Update status niet beschikbaar.';
 		return 'Deze kiosk is up-to-date.';
 	}
 
+	function clearUpdatePoll() {
+		if (!updatePollTimeout) return;
+		clearTimeout(updatePollTimeout);
+		updatePollTimeout = null;
+	}
+
+	function scheduleUpdatePoll(delay = updatePollIntervalMs) {
+		clearUpdatePoll();
+		updatePollTimeout = setTimeout(() => {
+			updatePollTimeout = null;
+			void pollUpdateProgress();
+		}, delay);
+	}
+
+	function serviceFailed(status: UpdateStatus) {
+		const result = status.service?.result?.toLowerCase();
+		const activeState = status.service?.activeState?.toLowerCase();
+		return activeState === 'failed' || Boolean(result && !['success', 'unknown'].includes(result));
+	}
+
+	function finishUpdateWithError(message: string) {
+		clearUpdatePoll();
+		updateRunning = false;
+		updatePhase = 'error';
+		updateMessage = message;
+	}
+
+	async function pollUpdateProgress() {
+		if (!updateRunning) return;
+		if (Date.now() - updateStartedAt > updatePollMaxMs) {
+			finishUpdateWithError('De update duurt te lang. Controleer de update opnieuw.');
+			return;
+		}
+
+		try {
+			const res = await fetch('/api/update', { cache: 'no-store' });
+			const payload = (await res.json().catch(() => ({}))) as UpdateStatus;
+			if (!res.ok || !payload.ok) {
+				updateMessage = 'De kiosk herstart mogelijk. Verbinding wordt opnieuw geprobeerd…';
+				scheduleUpdatePoll();
+				return;
+			}
+
+			updateStatus = payload;
+			if (payload.updating) {
+				updateWasObservedRunning = true;
+				updatePhase = 'running';
+				updateMessage = 'Update wordt geïnstalleerd. Laat de ODROID aan staan.';
+				scheduleUpdatePoll();
+				return;
+			}
+
+			if (payload.updateAvailable === false) {
+				clearUpdatePoll();
+				updateRunning = false;
+				updatePhase = 'success';
+				updateMessage = payload.currentShort
+					? `Update voltooid: versie ${payload.currentShort}.`
+					: 'Update voltooid.';
+				return;
+			}
+
+			if (
+				serviceFailed(payload) &&
+				(updateWasObservedRunning || Date.now() - updateStartedAt > 10_000)
+			) {
+				finishUpdateWithError('De update is mislukt. Probeer opnieuw of controleer de logs.');
+				return;
+			}
+
+			updatePhase = updateWasObservedRunning ? 'running' : 'starting';
+			updateMessage = updateWasObservedRunning
+				? 'Update wordt afgerond. Wachten op de nieuwe versie…'
+				: 'Update wordt gestart. Nogmaals drukken is niet nodig.';
+			scheduleUpdatePoll();
+		} catch {
+			updateMessage = 'De kiosk herstart mogelijk. Verbinding wordt opnieuw geprobeerd…';
+			scheduleUpdatePoll();
+		}
+	}
+
 	async function checkGitUpdate() {
-		if (updateChecking) return;
+		if (updateChecking || updateRunning) return;
 		updateChecking = true;
 		updateMessage = '';
+		updatePhase = 'checking';
 		try {
 			const res = await fetch('/api/update', { cache: 'no-store' });
 			const payload = (await res.json().catch(() => ({}))) as UpdateStatus;
 			updateStatus = payload;
 			if (!res.ok || !payload.ok) {
 				updateMessage = payload.message ?? 'Kon update status niet ophalen';
+				updatePhase = 'error';
+			} else if (payload.updating) {
+				updateRunning = true;
+				updateStartedAt = Date.now();
+				updateWasObservedRunning = true;
+				updatePhase = 'running';
+				updateMessage = 'Update wordt geïnstalleerd. Laat de ODROID aan staan.';
+				scheduleUpdatePoll();
+			} else if (payload.updateAvailable && payload.fastForward === false) {
+				updatePhase = 'blocked';
+			} else if (payload.updateAvailable) {
+				updatePhase = 'available';
+			} else {
+				updatePhase = 'idle';
 			}
 		} catch (error) {
 			updateStatus = {
@@ -884,6 +1003,7 @@
 				message: error instanceof Error ? error.message : 'Update check mislukt'
 			};
 			updateMessage = updateStatus.message ?? '';
+			updatePhase = 'error';
 		} finally {
 			updateChecking = false;
 		}
@@ -891,22 +1011,30 @@
 
 	async function runGitUpdate() {
 		if (updateRunning) return;
+		clearUpdatePoll();
 		updateRunning = true;
+		updateStartedAt = Date.now();
+		updateWasObservedRunning = false;
+		updatePhase = 'starting';
 		updateMessage = '';
 		try {
 			const res = await fetch('/api/update', { method: 'POST' });
 			const payload = (await res.json().catch(() => ({}))) as UpdateStatus;
-			updateStatus = payload;
 			if (!res.ok || !payload.ok) {
-				updateMessage = payload.message ?? 'Kon update niet starten';
+				updateStatus = payload;
+				finishUpdateWithError(payload.message ?? 'Kon update niet starten');
+			} else if (payload.updateStarted === false) {
+				updateStatus = payload;
+				updateRunning = false;
+				updatePhase = 'success';
+				updateMessage = 'De kiosk was al up-to-date.';
 			} else {
-				updateMessage = 'Update gestart. Het scherm kan zo herladen.';
-				setTimeout(() => void checkGitUpdate(), 5000);
+				updatePhase = 'running';
+				updateMessage = 'Update wordt geïnstalleerd. Laat de ODROID aan staan.';
+				scheduleUpdatePoll(1500);
 			}
 		} catch (error) {
-			updateMessage = error instanceof Error ? error.message : 'Kon update niet starten';
-		} finally {
-			updateRunning = false;
+			finishUpdateWithError(error instanceof Error ? error.message : 'Kon update niet starten');
 		}
 	}
 
@@ -1045,6 +1173,7 @@
 			clearTimeout(stateStreamReconnectTimeout);
 			stateStreamReconnectTimeout = null;
 		}
+		clearUpdatePoll();
 		clearAdvancedIdleTimer();
 		clearDisplayDimTimer();
 	});
@@ -1526,57 +1655,65 @@
 				</section>
 
 				<aside class="w-full space-y-4 overflow-y-auto pr-1 lg:w-[400px] lg:flex-shrink-0">
-					<div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-						<p class="text-xs font-semibold tracking-wide text-slate-500 uppercase">
-							System actions
-						</p>
-						<div class="mt-3 grid gap-2">
-							<div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
-								<div class="flex items-start justify-between gap-3">
-									<div class="min-w-0">
-										<p class="text-sm font-semibold text-slate-800">Git update</p>
-										<p class="mt-1 text-xs text-slate-500">{updateStatusText()}</p>
-										{#if updateStatus?.currentShort || updateStatus?.targetShort}
-											<p class="mt-2 font-mono text-xs text-slate-400">
-												{updateStatus.currentShort ?? 'unknown'} -> {updateStatus.targetShort ??
-													'unknown'}
-											</p>
-										{/if}
-									</div>
+					<div class="rounded-lg border border-slate-300 bg-white p-4">
+						<h3 class="text-base font-semibold text-slate-900">Systeem</h3>
+						<div class="mt-3 grid gap-4">
+							<div class="border-t border-slate-200 pt-3">
+								<div class="flex items-center justify-between gap-3">
+									<p class="text-sm font-semibold text-slate-800">Software-update</p>
 									<button
 										type="button"
-										class="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-600 transition-colors duration-150 ease-out hover:bg-white disabled:opacity-60"
+										class="inline-flex shrink-0 items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 transition-colors duration-150 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
 										on:click={checkGitUpdate}
 										disabled={updateChecking || updateRunning}
 									>
-										{#if updateChecking}
-											Checking
-										{:else}
-											Check
-										{/if}
+										<RefreshCw class={`h-4 w-4 ${updateChecking ? 'animate-spin' : ''}`} />
+										{updateChecking ? 'Controleren…' : 'Controleren'}
 									</button>
 								</div>
-								{#if updateStatus?.updateAvailable && updateStatus.fastForward !== false}
+								<p
+									class={`mt-2 text-sm ${
+										updatePhase === 'success'
+											? 'font-semibold text-emerald-700'
+											: updatePhase === 'error'
+												? 'font-semibold text-red-700'
+												: updatePhase === 'blocked'
+													? 'font-semibold text-amber-700'
+													: 'text-slate-600'
+									}`}
+								>
+									{updateStatusText()}
+								</p>
+								{#if updateStatus?.currentShort || updateStatus?.targetShort}
+									<p class="mt-2 font-mono text-xs text-slate-500">
+										{updateStatus.currentShort ?? 'onbekend'} → {updateStatus.targetShort ??
+											'onbekend'}
+									</p>
+								{/if}
+
+								{#if updatePhase === 'starting' || updatePhase === 'running'}
 									<button
 										type="button"
-										class="mt-3 w-full rounded-lg bg-slate-800 px-4 py-3 text-xs font-semibold text-white transition-colors duration-150 ease-out hover:bg-slate-900 disabled:opacity-60"
-										on:click={runGitUpdate}
-										disabled={updateRunning || updateChecking || updateStatus.updating}
+										class="mt-3 flex w-full cursor-wait items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-700 px-4 py-3 text-sm font-semibold text-white"
+										disabled
 									>
-										{#if updateRunning || updateStatus.updating}
-											Update draait
-										{:else}
-											Update kiosk
-										{/if}
+										<RefreshCw class="h-4 w-4 animate-spin" />
+										{updatePhase === 'starting' ? 'Update starten…' : 'Update installeren…'}
 									</button>
-								{/if}
-								{#if updateMessage}
-									<p class="mt-2 text-xs text-slate-500">{updateMessage}</p>
+								{:else if updatePhase === 'available' || (updatePhase === 'error' && updateStatus?.updateAvailable && updateStatus.fastForward !== false)}
+									<button
+										type="button"
+										class="mt-3 w-full rounded-lg bg-slate-800 px-4 py-3 text-sm font-semibold text-white transition-colors duration-150 hover:bg-slate-900 disabled:opacity-60"
+										on:click={runGitUpdate}
+										disabled={updateChecking}
+									>
+										{updatePhase === 'error' ? 'Opnieuw proberen' : 'Update installeren'}
+									</button>
 								{/if}
 							</div>
 							<button
 								type="button"
-								class="w-full rounded-xl border border-slate-300 px-4 py-3 text-xs font-semibold tracking-[0.2em] text-slate-600 uppercase transition-colors duration-150 ease-out hover:bg-slate-100 disabled:opacity-60"
+								class="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 transition-colors duration-150 hover:bg-slate-100 disabled:opacity-60"
 								on:click={clearDeviceCache}
 								disabled={cacheClearing}
 							>

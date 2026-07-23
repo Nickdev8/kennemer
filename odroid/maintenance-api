@@ -94,8 +94,11 @@ def update_status():
     if not os.path.isdir(os.path.join(REPO, ".git")):
         raise RuntimeError(f"repository not found at {REPO}")
 
-    fetch = run(["git", "fetch", "--prune", "origin", BRANCH], timeout=45)
-    fetch_ok = fetch.returncode == 0
+    updating = is_update_active()
+    fetch = None
+    if not updating:
+        fetch = run(["git", "fetch", "--prune", "origin", BRANCH], timeout=45)
+    fetch_ok = fetch is None or fetch.returncode == 0
 
     current = command_output(["git", "rev-parse", "HEAD"])
     target = command_output(["git", "rev-parse", f"origin/{BRANCH}"])
@@ -119,8 +122,8 @@ def update_status():
         "updateAvailable": update_available,
         "fastForward": fast_forward,
         "fetchOk": fetch_ok,
-        "fetchError": "" if fetch_ok else (fetch.stderr or fetch.stdout).strip(),
-        "updating": is_update_active(),
+        "fetchError": "" if fetch_ok or fetch is None else (fetch.stderr or fetch.stdout).strip(),
+        "updating": updating,
         "service": service_state(),
     }
 

@@ -13,8 +13,12 @@ or
 ssh root@dashboard.local
 
 
+
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.ssh"
+
 @"
-Host dashboard.local
+Host dashboard
+    HostName dashboard.local
     User root
     IdentityFile ~/.ssh/dashboard_ed25519
     IdentitiesOnly yes

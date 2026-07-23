@@ -41,7 +41,7 @@ export const devices: ShellyDevice[] = [
 		type: 'Scene',
 		pushNumber: 1,
 		buttonMode: 'toggle',
-		statusdeviceid: '30c92276c1d4',
+		statusdeviceid: '8813bfd6d300_1',
 		commands: {
 			on: {
 				label: 'Aan',
@@ -69,7 +69,7 @@ export const devices: ShellyDevice[] = [
 		type: 'Scene',
 		pushNumber: 2,
 		buttonMode: 'toggle',
-		statusdeviceid: '2043a80ac3e4_1',
+		statusdeviceid: '8813bfd6d300',
 		commands: {
 			on: {
 				label: 'Aan',
@@ -125,7 +125,7 @@ export const devices: ShellyDevice[] = [
 		type: 'Scene',
 		pushNumber: 4,
 		buttonMode: 'toggle',
-		statusdeviceid: '2cbcbb3d9af0',
+		statusdeviceid: '30c92276c1d4',
 		commands: {
 			on: {
 				label: 'Aan',
@@ -173,7 +173,7 @@ export const devices: ShellyDevice[] = [
 		type: 'Scene',
 		pushNumber: 6,
 		buttonMode: 'toggle',
-		statusdeviceid: '30c92276c1d4_1',
+		statusdeviceid: '2043a80ac3e4_1',
 		commands: {
 			on: {
 				label: 'Aan',
@@ -201,7 +201,7 @@ export const devices: ShellyDevice[] = [
 		type: 'Scene',
 		pushNumber: 7,
 		buttonMode: 'toggle',
-		statusdeviceid: '8813bfd6d300',
+		statusdeviceid: '30c92276c1d4_1',
 		commands: {
 			on: {
 				label: 'Aan',
@@ -229,7 +229,7 @@ export const devices: ShellyDevice[] = [
 		type: 'Scene',
 		pushNumber: 8,
 		buttonMode: 'toggle',
-		statusdeviceid: '8813bfd6d300_1',
+		statusdeviceid: '2cbcbb3d9af0',
 		commands: {
 			on: {
 				label: 'Aan',

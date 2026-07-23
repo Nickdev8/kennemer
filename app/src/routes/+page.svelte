@@ -1242,7 +1242,7 @@
 	<header class="border-b border-slate-300 bg-white px-6 py-4">
 		<div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
 			<div>
-				<h1 class="text-2xl font-semibold text-slate-900">HFD bediening</h1>
+				<h1 class="text-2xl font-semibold text-slate-900">Shelly bediening</h1>
 			</div>
 			<div class="flex flex-wrap items-center gap-3"></div>
 		</div>

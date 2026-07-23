@@ -9,21 +9,10 @@ Maak verbinding met de ODROID, kans is dat geen wachtwoord nodig is, dat komt om
 
 ```bash
 ssh root@10.10.80.50
+```
 or
+```bash
 ssh root@dashboard.local
-
-
-
-New-Item -ItemType Directory -Force "$env:USERPROFILE\.ssh"
-
-@"
-Host dashboard
-    HostName dashboard.local
-    User root
-    IdentityFile ~/.ssh/dashboard_ed25519
-    IdentitiesOnly yes
-"@ | Add-Content -Encoding ascii "$env:USERPROFILE\.ssh\config"
-
 ```
 
 De belangrijkste commando's zijn:

@@ -169,6 +169,10 @@ provides a LAN target.
 - The physical display is deliberately kept awake. After the configured idle
   timeout, the web UI draws a black overlay (zero visible brightness). The
   first touch only wakes the UI and must never activate the control underneath.
+  While the overlay is active, device-status, cloud-connectivity, wattage, and
+  touchscreen polling plus the local SSE stream pause. Waking performs one
+  immediate refresh, reconnects the stream, and restarts the normal schedules.
+  Active update-progress polling remains active.
 
 ## Update path
 

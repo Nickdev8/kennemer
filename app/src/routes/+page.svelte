@@ -388,6 +388,7 @@
 		displayDimTimeout = setTimeout(() => {
 			displayDimmed = true;
 			displayDimTimeout = null;
+			pauseIdleSensitivePolling();
 		}, displayDimTimeoutMs);
 	}
 
@@ -402,6 +403,7 @@
 		event?.stopPropagation();
 		displayDimmed = false;
 		scheduleDisplayDim();
+		startIdleSensitivePolling(true);
 	}
 
 	async function refreshWattage(forceRefresh = false) {
@@ -416,7 +418,7 @@
 			wattageSummary = null;
 			return;
 		}
-		if (wattageLoading) return;
+		if (displayDimmed || wattageLoading) return;
 		wattageLoading = true;
 		wattageError = '';
 		try {
@@ -510,10 +512,11 @@
 	let fastWattageRefreshUntil = 0;
 
 	function scheduleAutomaticWattageRefresh() {
-		if (wattageDisabled || typeof window === 'undefined') return;
 		if (wattageAutomaticRefreshTimeout) {
 			clearTimeout(wattageAutomaticRefreshTimeout);
+			wattageAutomaticRefreshTimeout = null;
 		}
+		if (wattageDisabled || displayDimmed || typeof window === 'undefined') return;
 
 		const delay =
 			Date.now() < fastWattageRefreshUntil ? fastWattageRefreshMs : normalWattageRefreshMs;
@@ -535,7 +538,7 @@
 	}
 
 	function requestWattageRefresh() {
-		if (wattageDisabled) return;
+		if (wattageDisabled || displayDimmed) return;
 		startFastWattageRefreshWindow();
 		if (wattageRefreshTimeout) clearTimeout(wattageRefreshTimeout);
 		wattageRefreshTimeout = setTimeout(() => {
@@ -545,10 +548,11 @@
 	}
 
 	function scheduleAutomaticStatusRefresh() {
-		if (typeof window === 'undefined' || statusDeviceIds.length === 0) return;
 		if (statusAutomaticRefreshTimeout) {
 			clearTimeout(statusAutomaticRefreshTimeout);
+			statusAutomaticRefreshTimeout = null;
 		}
+		if (displayDimmed || typeof window === 'undefined' || statusDeviceIds.length === 0) return;
 
 		statusAutomaticRefreshTimeout = setTimeout(() => {
 			statusAutomaticRefreshTimeout = null;
@@ -610,12 +614,13 @@
 
 	async function refreshStatusDevices(ids = statusDeviceIds) {
 		const uniqueIds = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
-		if (uniqueIds.length === 0 || statusRefreshLoading) return;
+		if (displayDimmed || uniqueIds.length === 0 || statusRefreshLoading) return;
 
 		statusRefreshLoading = true;
 		try {
 			const params = new URLSearchParams({ ids: uniqueIds.join(',') });
 			const res = await fetch(`/api/device-output?${params.toString()}`, { cache: 'no-store' });
+			if (displayDimmed) return;
 			if (!res.ok) {
 				applyStatusDeviceStates({}, uniqueIds);
 				return;
@@ -632,7 +637,9 @@
 			}
 			applyStatusDeviceStates(payload.states, Object.keys(payload.errors ?? {}));
 		} catch {
-			applyStatusDeviceStates({}, uniqueIds);
+			if (!displayDimmed) {
+				applyStatusDeviceStates({}, uniqueIds);
+			}
 		} finally {
 			statusRefreshLoading = false;
 			scheduleAutomaticStatusRefresh();
@@ -646,7 +653,7 @@
 
 	function startStatusFollowup(statusDeviceId: string) {
 		const cleanDeviceId = statusDeviceId.trim();
-		if (!cleanDeviceId) return;
+		if (!cleanDeviceId || displayDimmed) return;
 		clearStatusFollowups();
 
 		statusFollowupTimeouts = statusFollowupDelaysMs.map((delay) =>
@@ -794,7 +801,7 @@
 	}
 
 	function startStateStream() {
-		if (typeof window === 'undefined' || stateStream) return;
+		if (displayDimmed || typeof window === 'undefined' || stateStream) return;
 		const stream = new EventSource('/api/device-state/stream');
 
 		stream.addEventListener('init', (event) => {
@@ -826,9 +833,12 @@
 			stream.close();
 			stateStream = null;
 			if (stateStreamReconnectTimeout) clearTimeout(stateStreamReconnectTimeout);
+			if (displayDimmed) return;
 			stateStreamReconnectTimeout = setTimeout(() => {
 				stateStreamReconnectTimeout = null;
-				startStateStream();
+				if (!displayDimmed) {
+					startStateStream();
+				}
 			}, 3000);
 		});
 
@@ -1137,7 +1147,7 @@
 	const preventContextMenu = (evt: Event) => evt.preventDefault();
 
 	async function checkConnectivity() {
-		if (connectivityChecking || typeof navigator === 'undefined') return;
+		if (displayDimmed || connectivityChecking || typeof navigator === 'undefined') return;
 
 		browserOnline = navigator.onLine;
 		if (!browserOnline) {
@@ -1161,7 +1171,9 @@
 
 	function handleBrowserOnline() {
 		browserOnline = true;
-		void checkConnectivity();
+		if (!displayDimmed) {
+			void checkConnectivity();
+		}
 	}
 
 	function handleBrowserOffline() {
@@ -1171,7 +1183,7 @@
 	}
 
 	async function checkHardware() {
-		if (hardwareChecking) return;
+		if (displayDimmed || hardwareChecking) return;
 		hardwareChecking = true;
 		try {
 			const res = await fetch('/api/hardware', { cache: 'no-store' });
@@ -1236,6 +1248,62 @@
 		await handleEnergyTriggerPress();
 	}
 
+	function pauseIdleSensitivePolling() {
+		if (connectivityInterval) {
+			clearInterval(connectivityInterval);
+			connectivityInterval = null;
+		}
+		if (hardwareInterval) {
+			clearInterval(hardwareInterval);
+			hardwareInterval = null;
+		}
+		if (wattageRefreshTimeout) {
+			clearTimeout(wattageRefreshTimeout);
+			wattageRefreshTimeout = null;
+		}
+		if (wattageAutomaticRefreshTimeout) {
+			clearTimeout(wattageAutomaticRefreshTimeout);
+			wattageAutomaticRefreshTimeout = null;
+		}
+		if (statusAutomaticRefreshTimeout) {
+			clearTimeout(statusAutomaticRefreshTimeout);
+			statusAutomaticRefreshTimeout = null;
+		}
+		clearStatusFollowups();
+		if (stateStream) {
+			stateStream.close();
+			stateStream = null;
+		}
+		if (stateStreamReconnectTimeout) {
+			clearTimeout(stateStreamReconnectTimeout);
+			stateStreamReconnectTimeout = null;
+		}
+	}
+
+	function startIdleSensitivePolling(refreshImmediately = false) {
+		if (displayDimmed || typeof window === 'undefined') return;
+
+		if (!connectivityInterval) {
+			connectivityInterval = setInterval(() => void checkConnectivity(), connectivityRefreshMs);
+		}
+		if (!hardwareInterval) {
+			hardwareInterval = setInterval(() => void checkHardware(), hardwareRefreshMs);
+		}
+		startStateStream();
+
+		if (refreshImmediately) {
+			void checkConnectivity();
+			void checkHardware();
+			void refreshStatusDevices();
+			if (!wattageDisabled) {
+				void refreshWattage(true);
+			}
+		} else {
+			scheduleAutomaticStatusRefresh();
+			scheduleAutomaticWattageRefresh();
+		}
+	}
+
 	onMount(() => {
 		if (typeof window !== 'undefined') {
 			window.addEventListener('contextmenu', preventContextMenu);
@@ -1247,18 +1315,9 @@
 			if (!browserOnline) {
 				handleBrowserOffline();
 			}
-			void checkConnectivity();
-			connectivityInterval = setInterval(() => void checkConnectivity(), connectivityRefreshMs);
-			void checkHardware();
-			hardwareInterval = setInterval(() => void checkHardware(), hardwareRefreshMs);
 			scheduleDisplayDim();
-			void refreshStatusDevices();
-			loadDeviceStates().finally(() => {
-				if (!wattageDisabled) {
-					void refreshWattage(true);
-				}
-			});
-			startStateStream();
+			startIdleSensitivePolling(true);
+			void loadDeviceStates();
 		}
 	});
 
@@ -1270,38 +1329,13 @@
 			window.removeEventListener('online', handleBrowserOnline);
 			window.removeEventListener('offline', handleBrowserOffline);
 		}
-		if (connectivityInterval) {
-			clearInterval(connectivityInterval);
-			connectivityInterval = null;
-		}
-		if (hardwareInterval) {
-			clearInterval(hardwareInterval);
-			hardwareInterval = null;
-		}
+		pauseIdleSensitivePolling();
 		if (statusDeviceWarningTimeout) {
 			clearTimeout(statusDeviceWarningTimeout);
 			statusDeviceWarningTimeout = null;
 		}
 		transientActiveTimeouts.forEach((timeout) => clearTimeout(timeout));
 		transientActiveTimeouts.clear();
-		if (wattageRefreshTimeout) {
-			clearTimeout(wattageRefreshTimeout);
-		}
-		if (wattageAutomaticRefreshTimeout) {
-			clearTimeout(wattageAutomaticRefreshTimeout);
-		}
-		if (statusAutomaticRefreshTimeout) {
-			clearTimeout(statusAutomaticRefreshTimeout);
-		}
-		clearStatusFollowups();
-		if (stateStream) {
-			stateStream.close();
-			stateStream = null;
-		}
-		if (stateStreamReconnectTimeout) {
-			clearTimeout(stateStreamReconnectTimeout);
-			stateStreamReconnectTimeout = null;
-		}
 		clearUpdatePoll();
 		clearAdvancedIdleTimer();
 		clearDisplayDimTimer();

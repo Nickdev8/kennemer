@@ -61,6 +61,10 @@ rate limits before shortening it.
   whole page with a clear progress view.
 - When idle, the black overlay is visually at zero brightness. The wake touch
   is consumed and cannot press a button beneath it.
+- While the idle overlay is active, pause device-status, connectivity, wattage,
+  hardware polling, and the local SSE stream. Wake must immediately refresh
+  each source, reconnect SSE, and restart normal schedules. Do not pause active
+  update-progress polling.
 
 ## Server/browser boundary
 

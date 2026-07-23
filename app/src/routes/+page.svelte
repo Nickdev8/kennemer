@@ -549,9 +549,14 @@
 		}, liveStatusRefreshMs);
 	}
 
-	function applyStatusDeviceStates(states: Record<string, { lastCommand: DeviceCommandKey }>) {
+	function applyStatusDeviceStates(
+		states: Record<string, { lastCommand: DeviceCommandKey }>,
+		unavailableIds: string[] = []
+	) {
 		const nextStatusStates = new Map(statusDeviceStates);
 		const nextDeviceStates = new Map(deviceStates);
+
+		unavailableIds.forEach((id) => nextStatusStates.delete(id));
 
 		Object.entries(states).forEach(([id, entry]) => {
 			if (entry?.lastCommand === 'on' || entry?.lastCommand === 'off') {
@@ -577,9 +582,10 @@
 			const payload = (await res.json()) as {
 				ok: boolean;
 				states: Record<string, { lastCommand: DeviceCommandKey }>;
+				errors?: Record<string, string>;
 			};
 			if (!payload?.ok || !payload.states) return;
-			applyStatusDeviceStates(payload.states);
+			applyStatusDeviceStates(payload.states, Object.keys(payload.errors ?? {}));
 		} finally {
 			const nextPendingIds = new Set(initialStatusPendingIds);
 			uniqueIds.forEach((id) => nextPendingIds.delete(id));
@@ -613,7 +619,9 @@
 	) {
 		const statusDeviceId = device.statusdeviceid?.trim();
 		if (statusDeviceId && isValidStatusDeviceId(statusDeviceId)) {
-			return knownStatusDeviceStates.get(statusDeviceId) ?? null;
+			return (
+				knownStatusDeviceStates.get(statusDeviceId) ?? knownDeviceStates.get(device.id) ?? 'off'
+			);
 		}
 		if (device.type === 'Scene') return null;
 
@@ -642,10 +650,11 @@
 		try {
 			await triggerDeviceCommand(deviceId, command);
 			const statusDeviceId = device.statusdeviceid?.trim();
+			if (!options.stateless) {
+				setDeviceState(deviceId, command);
+			}
 			if (statusDeviceId) {
 				startStatusFollowup(statusDeviceId);
-			} else if (!options.stateless) {
-				setDeviceState(deviceId, command);
 			}
 			succeeded = true;
 			if (advancedUnlocked && showAdvancedPanel) {

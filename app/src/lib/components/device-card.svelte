@@ -29,6 +29,7 @@
 	export let loadingCommandKey: string | null;
 	export let initialStatus: DeviceCommandKey | null = null;
 	export let statusEnabled = true;
+	export let statusPending = false;
 	export let showType = false;
 	export let resolveToggleCommand: (status: DeviceCommandKey | null) => DeviceCommandKey = (
 		status
@@ -336,6 +337,8 @@
 				{:else if hasKnownStatus}
 					<span class={`h-2.5 w-2.5 rounded-full ${statusDotClass}`} aria-hidden="true"></span>
 					<span>Status: {statusLabel}</span>
+				{:else if statusPending}
+					<span>Pingen…</span>
 				{:else}
 					<span>Status onbekend</span>
 				{/if}

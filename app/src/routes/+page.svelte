@@ -144,6 +144,7 @@
 				.filter((deviceId): deviceId is string => isValidStatusDeviceId(deviceId))
 		)
 	);
+	let initialStatusPendingIds = new Set(statusDeviceIds);
 	const configurationDiagnostics: DiagnosticEntry[] = allDevices.flatMap((device) => {
 		const issues = getDeviceConfigurationIssues(device);
 		return issues.length > 0
@@ -575,6 +576,9 @@
 			if (!payload?.ok || !payload.states) return;
 			applyStatusDeviceStates(payload.states);
 		} finally {
+			const nextPendingIds = new Set(initialStatusPendingIds);
+			uniqueIds.forEach((id) => nextPendingIds.delete(id));
+			initialStatusPendingIds = nextPendingIds;
 			statusRefreshLoading = false;
 			scheduleAutomaticStatusRefresh();
 		}
@@ -609,6 +613,11 @@
 		if (device.type === 'Scene') return null;
 
 		return knownDeviceStates.get(device.id) ?? null;
+	}
+
+	function isInitialStatusPending(device: ShellyDevice) {
+		const statusDeviceId = device.statusdeviceid?.trim();
+		return Boolean(statusDeviceId && initialStatusPendingIds.has(statusDeviceId));
 	}
 
 	async function handlePress(
@@ -1406,6 +1415,7 @@
 						{resolveToggleCommand}
 						{loadingCommandKey}
 						statusEnabled={isDeviceStatusConfigured(device)}
+						statusPending={isInitialStatusPending(device)}
 						initialStatus={resolveCardStatus(device, deviceStates, statusDeviceStates)}
 						on:command={({ detail }) =>
 							handlePress(detail.deviceId, detail.command, { stateless: device.stateless })}
@@ -1625,6 +1635,7 @@
 										{resolveToggleCommand}
 										{loadingCommandKey}
 										statusEnabled={isDeviceStatusConfigured(device)}
+										statusPending={isInitialStatusPending(device)}
 										initialStatus={resolveCardStatus(device, deviceStates, statusDeviceStates)}
 										on:command={({ detail }) =>
 											handlePress(detail.deviceId, detail.command, {

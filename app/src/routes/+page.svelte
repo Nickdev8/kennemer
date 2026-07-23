@@ -326,7 +326,7 @@
 
 	function startAdvancedIdleTimer(mode: 'prompt' | 'panel') {
 		clearAdvancedIdleTimer();
-		if (mode === 'panel' && advancedPanelPinned) return;
+		if (mode === 'panel' && (advancedPanelPinned || updateRunning)) return;
 		const timeoutMs = mode === 'panel' ? advancedPanelIdleMs : advancedPromptIdleMs;
 		advancedIdleTimeout = setTimeout(() => {
 			if (mode === 'prompt' && showAdvancedPrompt) {
@@ -342,6 +342,12 @@
 			startAdvancedIdleTimer('panel');
 		} else if (showAdvancedPrompt) {
 			startAdvancedIdleTimer('prompt');
+		}
+	}
+
+	function resumeAdvancedIdleTimerAfterUpdate() {
+		if (showAdvancedPanel && !advancedPanelPinned) {
+			startAdvancedIdleTimer('panel');
 		}
 	}
 
@@ -902,6 +908,7 @@
 		updateRunning = false;
 		updatePhase = 'error';
 		updateMessage = message;
+		resumeAdvancedIdleTimerAfterUpdate();
 	}
 
 	async function pollUpdateProgress() {
@@ -922,6 +929,7 @@
 
 			updateStatus = payload;
 			if (payload.updating) {
+				clearAdvancedIdleTimer();
 				updateWasObservedRunning = true;
 				updatePhase = 'running';
 				updateMessage = 'Update wordt geïnstalleerd. Laat de ODROID aan staan.';
@@ -936,6 +944,7 @@
 				updateMessage = payload.currentShort
 					? `Update voltooid: versie ${payload.currentShort}.`
 					: 'Update voltooid.';
+				resumeAdvancedIdleTimerAfterUpdate();
 				return;
 			}
 
@@ -972,6 +981,7 @@
 				updatePhase = 'error';
 			} else if (payload.updating) {
 				updateRunning = true;
+				clearAdvancedIdleTimer();
 				updateStartedAt = Date.now();
 				updateWasObservedRunning = true;
 				updatePhase = 'running';
@@ -1000,6 +1010,7 @@
 		if (updateRunning) return;
 		clearUpdatePoll();
 		updateRunning = true;
+		clearAdvancedIdleTimer();
 		updateStartedAt = Date.now();
 		updateWasObservedRunning = false;
 		updatePhase = 'starting';
@@ -1015,6 +1026,7 @@
 				updateRunning = false;
 				updatePhase = 'success';
 				updateMessage = 'De kiosk was al up-to-date.';
+				resumeAdvancedIdleTimerAfterUpdate();
 			} else {
 				updatePhase = 'running';
 				updateMessage = 'Update wordt geïnstalleerd. Laat de ODROID aan staan.';

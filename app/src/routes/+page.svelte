@@ -600,12 +600,7 @@
 	) {
 		const statusDeviceId = device.statusdeviceid?.trim();
 		if (statusDeviceId && isValidStatusDeviceId(statusDeviceId)) {
-			return (
-				knownStatusDeviceStates.get(statusDeviceId) ??
-				knownDeviceStates.get(statusDeviceId) ??
-				knownDeviceStates.get(device.id) ??
-				null
-			);
+			return knownStatusDeviceStates.get(statusDeviceId) ?? null;
 		}
 		if (device.type === 'Scene') return null;
 
@@ -681,6 +676,12 @@
 		const next = new Map(deviceStates);
 		next.set(deviceId, command);
 		deviceStates = next;
+
+		if (statusDeviceIds.includes(deviceId)) {
+			const nextStatusStates = new Map(statusDeviceStates);
+			nextStatusStates.set(deviceId, command);
+			statusDeviceStates = nextStatusStates;
+		}
 	}
 
 	async function loadDeviceStates() {
@@ -1128,8 +1129,8 @@
 			void checkHardware();
 			hardwareInterval = setInterval(() => void checkHardware(), hardwareRefreshMs);
 			scheduleDisplayDim();
+			void refreshStatusDevices();
 			loadDeviceStates().finally(() => {
-				void refreshStatusDevices();
 				if (!wattageDisabled) {
 					void refreshWattage(true);
 				}

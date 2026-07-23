@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
+	import ArrowUp from 'lucide-svelte/icons/arrow-up';
 	import type { DeviceCommandKey, ShellyDevice } from '$lib/config/schema';
 	import { isDeviceCommandConfigured } from '$lib/config/device-validation';
 
@@ -353,7 +354,14 @@
 					disabled={singleState.disabled}
 					on:click={() => handleCommand(singleState.command)}
 				>
-					<span class="pointer-events-none text-center">{singleState.label}</span>
+					<span
+						class="pointer-events-none inline-flex items-center justify-center gap-3 text-center"
+					>
+						{#if device.commands[singleState.command]?.icon === 'arrow-up'}
+							<ArrowUp class="h-7 w-7" aria-hidden="true" />
+						{/if}
+						{singleState.label}
+					</span>
 					{#if loadingCommandKey === singleState.key}
 						<span
 							class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-slate-900/60 text-sm font-semibold text-white"

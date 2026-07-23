@@ -151,7 +151,8 @@ export const devices: ShellyDevice[] = [
 		stateless: true,
 		commands: {
 			on: {
-				label: 'Screens up',
+				label: 'Screens omhoog',
+				icon: 'arrow-up',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',

@@ -14,6 +14,7 @@ export type DeviceButtonMode = 'toggle' | 'dual' | 'single';
 
 export interface ShellyDeviceCommand {
 	label?: string;
+	icon?: 'arrow-up';
 	type?: string;
 	typeBorder?: string;
 	cloud?: ShellyTargetConfig;

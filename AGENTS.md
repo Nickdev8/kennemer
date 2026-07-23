@@ -120,9 +120,8 @@ this priority:
 2. The last action remembered by the server.
 3. `off` as the safe display fallback.
 
-On initial load, a configured status device briefly displays `Pingen...` during
-the first request. Permanent `Status: Aan/Uit` copy is intentionally omitted;
-the card color communicates the result. An unreachable status device does not
+Device cards do not show polling text or permanent `Status: Aan/Uit` copy; the
+card color communicates the result. An unreachable status device does not
 disable a properly configured scene button. Instead, the UI briefly warns that
 the push-button panel was not found and the displayed state is less reliable.
 The UI remains operable and the server remembers the last successful dashboard
@@ -289,7 +288,7 @@ For application changes:
 1. Run `npm run check`.
 2. Run `npm run build`.
 3. Exercise UI logic without invoking real scene routes.
-4. Verify offline, initial `Pingen...`, and idle wake behavior if affected.
+4. Verify offline status fallback and idle wake behavior if affected.
 
 For ODROID changes:
 

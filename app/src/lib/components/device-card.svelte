@@ -28,7 +28,6 @@
 	export let commandLabel: (device: ShellyDevice, command: DeviceCommandKey) => string;
 	export let loadingCommandKey: string | null;
 	export let initialStatus: DeviceCommandKey | null = null;
-	export let statusPending = false;
 	export let transientActive = false;
 	export let showType = false;
 	export let resolveToggleCommand: (status: DeviceCommandKey | null) => DeviceCommandKey = (
@@ -320,9 +319,6 @@
 				<p class="text-xs tracking-wide text-slate-400 uppercase">{device.type}</p>
 			{/if}
 		</div>
-		{#if !isStateless && !isSingle && statusPending}
-			<p class="text-sm font-semibold text-slate-500" role="status">Pingen…</p>
-		{/if}
 	</div>
 
 	<div class={`grid flex-1 ${commandGridClass} gap-4`}>

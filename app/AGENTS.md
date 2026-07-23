@@ -47,9 +47,8 @@ rate limits before shortening it.
 
 - On is green; off is neutral. Do not invert the labels or colors.
 - Toggle labels are Dutch: `Aan` turns on and `Uit` turns off.
-- Only the initial unresolved status briefly shows `Pingen...`; permanent
-  `Status: Aan/Uit` text is intentionally hidden because card color carries the
-  state.
+- Device cards show no polling or permanent `Status: Aan/Uit` text because card
+  color carries the state.
 - A newly unreachable status device produces one temporary warning at the top
   right only after two consecutive failed polls. A successful poll immediately
   resets its failure count. Do not renew the warning on every polling cycle

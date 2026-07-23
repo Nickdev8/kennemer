@@ -145,7 +145,6 @@
 				.filter((deviceId): deviceId is string => isValidStatusDeviceId(deviceId))
 		)
 	);
-	let initialStatusPendingIds = new Set(statusDeviceIds);
 	const configurationDiagnostics: DiagnosticEntry[] = allDevices.flatMap((device) => {
 		const issues = getDeviceConfigurationIssues(device);
 		return issues.length > 0
@@ -232,7 +231,6 @@
 	let statusDeviceWarningTimeout: ReturnType<typeof setTimeout> | null = null;
 	let unavailableStatusDeviceIds = new Set<string>();
 	let statusDeviceFailureCounts = new Map<string, number>();
-	let initialStatusDisplayTimeout: ReturnType<typeof setTimeout> | null = null;
 	let transientActiveUntilByDevice = new Map<string, number>();
 	const transientActiveTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -244,7 +242,6 @@
 	const fastWattageRefreshMs = 2 * 60 * 1000;
 	const fastWattageWindowMs = 10 * 60 * 1000;
 	const liveStatusRefreshMs = 5_000;
-	const initialStatusDisplayMaxMs = 8_000;
 	const statusDeviceWarningDurationMs = 7_000;
 	const statusDeviceWarningFailureThreshold = 2;
 	const statusFollowupDelaysMs = [1200, 2500, 5000, 10000, 20000, 45000, 90000];
@@ -637,13 +634,6 @@
 		} catch {
 			applyStatusDeviceStates({}, uniqueIds);
 		} finally {
-			const nextPendingIds = new Set(initialStatusPendingIds);
-			uniqueIds.forEach((id) => nextPendingIds.delete(id));
-			initialStatusPendingIds = nextPendingIds;
-			if (nextPendingIds.size === 0 && initialStatusDisplayTimeout) {
-				clearTimeout(initialStatusDisplayTimeout);
-				initialStatusDisplayTimeout = null;
-			}
 			statusRefreshLoading = false;
 			scheduleAutomaticStatusRefresh();
 		}
@@ -680,11 +670,6 @@
 		if (device.type === 'Scene') return null;
 
 		return knownDeviceStates.get(device.id) ?? null;
-	}
-
-	function isInitialStatusPending(device: ShellyDevice) {
-		const statusDeviceId = device.statusdeviceid?.trim();
-		return Boolean(statusDeviceId && initialStatusPendingIds.has(statusDeviceId));
 	}
 
 	function isTransientDeviceActive(deviceId: string) {
@@ -1267,10 +1252,6 @@
 			void checkHardware();
 			hardwareInterval = setInterval(() => void checkHardware(), hardwareRefreshMs);
 			scheduleDisplayDim();
-			initialStatusDisplayTimeout = setTimeout(() => {
-				initialStatusPendingIds = new Set();
-				initialStatusDisplayTimeout = null;
-			}, initialStatusDisplayMaxMs);
 			void refreshStatusDevices();
 			loadDeviceStates().finally(() => {
 				if (!wattageDisabled) {
@@ -1300,10 +1281,6 @@
 		if (statusDeviceWarningTimeout) {
 			clearTimeout(statusDeviceWarningTimeout);
 			statusDeviceWarningTimeout = null;
-		}
-		if (initialStatusDisplayTimeout) {
-			clearTimeout(initialStatusDisplayTimeout);
-			initialStatusDisplayTimeout = null;
 		}
 		transientActiveTimeouts.forEach((timeout) => clearTimeout(timeout));
 		transientActiveTimeouts.clear();
@@ -1558,7 +1535,6 @@
 						{commandLabel}
 						{resolveToggleCommand}
 						{loadingCommandKey}
-						statusPending={isInitialStatusPending(device)}
 						transientActive={isTransientDeviceActive(device.id)}
 						initialStatus={resolveCardStatus(device, deviceStates, statusDeviceStates)}
 						on:command={({ detail }) =>
@@ -1815,7 +1791,6 @@
 										{commandLabel}
 										{resolveToggleCommand}
 										{loadingCommandKey}
-										statusPending={isInitialStatusPending(device)}
 										transientActive={isTransientDeviceActive(device.id)}
 										initialStatus={resolveCardStatus(device, deviceStates, statusDeviceStates)}
 										on:command={({ detail }) =>

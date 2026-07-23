@@ -5,22 +5,21 @@ Kennemer. Het draait op een ODROID en bedient Shelly-scenes.
 
 ## Dagelijks beheer
 
-Maak verbinding met de ODROID:
+Maak verbinding met de ODROID, kans is dat geen wachtwoord nodig is, dat komt omdat je ssh key dan op de odroid al stond:
 
 ```bash
 ssh root@10.10.80.50
 or
 ssh root@dashboard.local
 
-ssh-keygen -t ed25519 -a 100 -f "$env:USERPROFILE\.ssh\dashboard_ed25519" -C "windows-dashboard"
 
-Then install the public key:
+@"
+Host dashboard.local
+    User root
+    IdentityFile ~/.ssh/dashboard_ed25519
+    IdentitiesOnly yes
+"@ | Add-Content -Encoding ascii "$env:USERPROFILE\.ssh\config"
 
-Get-Content "$env:USERPROFILE\.ssh\dashboard_ed25519.pub" | ssh root@dashboard.local "umask 077; mkdir -p /root/.ssh; cat >> /root/.ssh/authorized_keys; chmod 700 /root/.ssh; chmod 600 /root/.ssh/authorized_keys"
-
-Test it:
-
-ssh -i "$env:USERPROFILE\.ssh\dashboard_ed25519" root@dashboard.local
 ```
 
 De belangrijkste commando's zijn:

@@ -219,6 +219,7 @@
 	let stateStreamReconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 	let loadingTriggerId: string | null = null;
 	let energyTriggerError = '';
+	let showEnergyTriggerConfirmation = false;
 	let browserOnline = true;
 	let cloudReachable = true;
 	let connectivityChecked = false;
@@ -384,6 +385,7 @@
 	}
 
 	function markDisplayActivity() {
+		if (displayDimmed) return;
 		displayDimmed = false;
 		scheduleDisplayDim();
 	}
@@ -391,7 +393,8 @@
 	function wakeDisplay(event?: Event) {
 		event?.preventDefault();
 		event?.stopPropagation();
-		markDisplayActivity();
+		displayDimmed = false;
+		scheduleDisplayDim();
 	}
 
 	async function refreshWattage(forceRefresh = false) {
@@ -1141,6 +1144,20 @@
 		}
 	}
 
+	function openEnergyTriggerConfirmation() {
+		energyTriggerError = '';
+		showEnergyTriggerConfirmation = true;
+	}
+
+	function cancelEnergyTriggerConfirmation() {
+		showEnergyTriggerConfirmation = false;
+	}
+
+	async function confirmEnergyTrigger() {
+		showEnergyTriggerConfirmation = false;
+		await handleEnergyTriggerPress();
+	}
+
 	onMount(() => {
 		if (typeof window !== 'undefined') {
 			window.addEventListener('contextmenu', preventContextMenu);
@@ -1312,9 +1329,9 @@
 			<div class="mt-4">
 				<button
 					type="button"
-					class="relative flex w-full items-center justify-center rounded-lg border border-slate-800 bg-slate-800 px-5 py-5 text-lg font-semibold text-white transition-colors duration-150 hover:bg-slate-700 disabled:cursor-wait disabled:opacity-70"
+					class="relative flex w-full items-center justify-center rounded-lg border border-red-800 bg-red-700 px-5 py-5 text-lg font-bold text-white transition-colors duration-150 hover:bg-red-800 disabled:cursor-wait disabled:opacity-70"
 					disabled={loadingTriggerId === energyDevicesTrigger.id}
-					on:click={handleEnergyTriggerPress}
+					on:click={openEnergyTriggerConfirmation}
 				>
 					{#if loadingTriggerId === energyDevicesTrigger.id}
 						Bezig…
@@ -1432,14 +1449,51 @@
 	{#if displayDimmed}
 		<button
 			type="button"
-			class="fixed inset-0 z-[70] cursor-default bg-slate-950/65 transition-opacity duration-500"
+			class="fixed inset-0 z-[70] cursor-default bg-black"
 			aria-label="Scherm actief maken"
 			on:click={wakeDisplay}
-			on:pointerdown={wakeDisplay}
 			on:keydown={wakeDisplay}
 		></button>
 	{/if}
 </main>
+
+{#if showEnergyTriggerConfirmation}
+	<div
+		class="fixed inset-0 z-[80] flex items-center justify-center px-6"
+		role="alertdialog"
+		aria-modal="true"
+		aria-labelledby="energy-confirmation-title"
+	>
+		<button
+			type="button"
+			class="absolute inset-0 bg-slate-950/75"
+			aria-label="Nee"
+			on:click={cancelEnergyTriggerConfirmation}
+		></button>
+		<div class="relative w-full max-w-md rounded-lg border border-slate-300 bg-white p-6">
+			<h2 id="energy-confirmation-title" class="text-xl font-semibold text-slate-900">
+				Alles uitschakelen?
+			</h2>
+			<p class="mt-3 text-base text-slate-700">Ben je bevoegd om deze actie uit te voeren?</p>
+			<div class="mt-6 grid grid-cols-2 gap-3">
+				<button
+					type="button"
+					class="rounded-lg border border-slate-300 bg-white px-4 py-3 text-base font-semibold text-slate-800 hover:bg-slate-100"
+					on:click={cancelEnergyTriggerConfirmation}
+				>
+					Nee
+				</button>
+				<button
+					type="button"
+					class="rounded-lg border border-red-800 bg-red-700 px-4 py-3 text-base font-bold text-white hover:bg-red-800"
+					on:click={confirmEnergyTrigger}
+				>
+					Ja
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
 
 {#if showAdvancedPrompt}
 	<div

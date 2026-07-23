@@ -72,7 +72,7 @@
 </script>
 
 <section class={`${baseCardClass} ${cardNeutralClass}`} style={cardStyle}>
-	<p class="text-sm font-semibold text-slate-700">Actie</p>
+	<p class="text-sm font-semibold text-slate-700">{isConfigured ? 'Actie' : trigger.label}</p>
 	<button
 		type="button"
 		class={buttonVisual.className}
@@ -81,7 +81,7 @@
 		on:click={handleTrigger}
 	>
 		<span class="pointer-events-none text-center">
-			{isConfigured ? trigger.label : 'Scène niet ingesteld'}
+			{isConfigured ? trigger.label : 'Niet ingesteld'}
 		</span>
 		{#if isLoading}
 			<span

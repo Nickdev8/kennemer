@@ -268,7 +268,9 @@
 			? actionCommand === 'on'
 				? 'Uit'
 				: 'Aan'
-			: 'Scène niet ingesteld';
+			: device.type === 'Scene'
+				? 'Scène niet ingesteld'
+				: 'Niet ingesteld';
 		return {
 			key,
 			className: visual.className,
@@ -298,7 +300,11 @@
 			ariaPressed: false,
 			disabled: !commandConfigured,
 			command,
-			label: commandConfigured ? (device.commands.on?.label ?? '') : 'Scène niet ingesteld'
+			label: commandConfigured
+				? (device.commands.on?.label ?? '')
+				: device.type === 'Scene'
+					? 'Scène niet ingesteld'
+					: 'Niet ingesteld'
 		};
 	})();
 

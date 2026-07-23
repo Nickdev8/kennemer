@@ -41,11 +41,14 @@ export function isValidStatusDeviceId(value?: string): boolean {
 }
 
 export function isDeviceStatusConfigured(device: ShellyDevice): boolean {
+	if (device.type === 'Placeholder') return false;
 	if (device.stateless || device.buttonMode === 'single' || device.type !== 'Scene') return true;
 	return isValidStatusDeviceId(device.statusdeviceid);
 }
 
 export function getDeviceConfigurationIssues(device: ShellyDevice): string[] {
+	if (device.type === 'Placeholder') return [];
+
 	const issues: string[] = [];
 
 	(['on', 'off'] as DeviceCommandKey[]).forEach((command) => {

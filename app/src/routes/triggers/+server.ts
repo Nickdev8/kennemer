@@ -1,5 +1,6 @@
 import type { RequestHandler } from './$types';
 import { advancedTriggers } from '$lib/config/advanced';
+import { energyDevicesTrigger } from '$lib/config/triggers';
 import { sendDeviceCommand, ShellyHttpError } from '$lib/server/shelly-http';
 import type { ShellyDevice } from '$lib/config/schema';
 
@@ -18,7 +19,7 @@ export const POST: RequestHandler = async ({ request, fetch, url }) => {
 		});
 	}
 
-	const trigger = advancedTriggers.find((item) => item.id === triggerId);
+	const trigger = [energyDevicesTrigger, ...advancedTriggers].find((item) => item.id === triggerId);
 
 	if (!trigger) {
 		return new Response(JSON.stringify({ error: 'Unknown trigger' }), { status: 404 });

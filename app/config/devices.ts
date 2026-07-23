@@ -253,7 +253,7 @@ export const devices: ShellyDevice[] = [
 	},
 	{
 		id: 'scene-kopje-gang',
-		label: 'Kopje gang',
+		label: 'Kopje',
 		type: 'Scene',
 		pushNumber: 9,
 		buttonMode: 'toggle',

@@ -4,6 +4,7 @@
 	import TriggerCard from '$lib/components/trigger-card.svelte';
 	import { devices as configuredPrimaryDevices } from '$lib/config/devices';
 	import { advancedDevices, advancedTriggers } from '$lib/config/advanced';
+	import { energyDevicesTrigger } from '$lib/config/triggers';
 	import { env as publicEnv } from '$env/dynamic/public';
 	import type { DeviceCommandKey, ShellyDevice } from '$lib/config/schema';
 	import {
@@ -217,6 +218,7 @@
 	let stateStream: EventSource | null = null;
 	let stateStreamReconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 	let loadingTriggerId: string | null = null;
+	let energyTriggerError = '';
 	let browserOnline = true;
 	let cloudReachable = true;
 	let connectivityChecked = false;
@@ -1126,6 +1128,19 @@
 		}
 	}
 
+	async function handleEnergyTriggerPress() {
+		loadingTriggerId = energyDevicesTrigger.id;
+		energyTriggerError = '';
+		try {
+			await triggerAction(energyDevicesTrigger.id);
+			requestWattageRefresh();
+		} catch (err) {
+			energyTriggerError = err instanceof Error ? err.message : 'Scène kon niet worden uitgevoerd';
+		} finally {
+			loadingTriggerId = null;
+		}
+	}
+
 	onMount(() => {
 		if (typeof window !== 'undefined') {
 			window.addEventListener('contextmenu', preventContextMenu);
@@ -1294,33 +1309,22 @@
 				</p>
 			</div>
 
-			<div class="mt-4 overflow-hidden rounded-lg border border-slate-200">
-				<div class="grid grid-cols-2">
-					<div class="border-r border-b border-slate-200 px-4 py-3">
-						<p class="text-xs font-medium text-slate-500">Alle apparaten</p>
-						<p class="mt-1 text-2xl font-semibold text-slate-900">
-							{wattageInventory?.totalCount ?? '—'}
-						</p>
-					</div>
-					<div class="border-b border-slate-200 px-4 py-3">
-						<p class="text-xs font-medium text-emerald-700">Online</p>
-						<p class="mt-1 text-2xl font-semibold text-emerald-700">
-							{wattageInventory?.onlineCount ?? '—'}
-						</p>
-					</div>
-					<div class="border-r border-slate-200 px-4 py-3">
-						<p class="text-xs font-medium text-amber-700">Offline</p>
-						<p class="mt-1 text-2xl font-semibold text-amber-700">
-							{wattageInventory?.offlineCount ?? '—'}
-						</p>
-					</div>
-					<div class="px-4 py-3">
-						<p class="text-xs font-medium text-slate-500">Status onbekend</p>
-						<p class="mt-1 text-2xl font-semibold text-slate-700">
-							{wattageInventory?.unknownStatusCount ?? '—'}
-						</p>
-					</div>
-				</div>
+			<div class="mt-4">
+				<button
+					type="button"
+					class="relative flex w-full items-center justify-center rounded-lg border border-slate-800 bg-slate-800 px-5 py-5 text-lg font-semibold text-white transition-colors duration-150 hover:bg-slate-700 disabled:cursor-wait disabled:opacity-70"
+					disabled={loadingTriggerId === energyDevicesTrigger.id}
+					on:click={handleEnergyTriggerPress}
+				>
+					{#if loadingTriggerId === energyDevicesTrigger.id}
+						Bezig…
+					{:else}
+						{energyDevicesTrigger.label}
+					{/if}
+				</button>
+				{#if energyTriggerError}
+					<p class="mt-2 text-sm font-semibold text-red-700">{energyTriggerError}</p>
+				{/if}
 			</div>
 
 			<div class="mt-4 flex items-center justify-between border-b border-slate-200 pb-4">

@@ -5,6 +5,7 @@ import type { DeviceCommandKey } from '$lib/config/schema';
 import { sendDeviceCommand, ShellyHttpError } from '$lib/server/shelly-http';
 import { updateDeviceState } from '$lib/server/device-state-store';
 import { publishDeviceState } from '$lib/server/device-state-events';
+import { isDeviceCommandConfigured } from '$lib/config/device-validation';
 
 type ActionRequest = {
 	deviceId?: string;
@@ -26,19 +27,27 @@ export const POST: RequestHandler = async ({ request }) => {
 		return new Response(JSON.stringify({ error: 'Unknown device' }), { status: 404 });
 	}
 
+	if (!isDeviceCommandConfigured(device, command)) {
+		return new Response(JSON.stringify({ error: 'Actie niet ingesteld: scène-ID ontbreekt' }), {
+			status: 409,
+			headers: { 'content-type': 'application/json' }
+		});
+	}
+
 	try {
 		await sendDeviceCommand(device, command);
 		if (!device.stateless) {
 			const state = await updateDeviceState(device.id, command);
 			publishDeviceState({ deviceId: device.id, state });
 		}
-		return new Response(JSON.stringify({ ok: true, state: { deviceId: device.id, lastCommand: command } }));
+		return new Response(
+			JSON.stringify({ ok: true, state: { deviceId: device.id, lastCommand: command } })
+		);
 	} catch (err) {
 		if (err instanceof ShellyHttpError) {
-			return new Response(
-				JSON.stringify({ error: err.message, errorCode: err.code }),
-				{ status: err.status || 502 }
-			);
+			return new Response(JSON.stringify({ error: err.message, errorCode: err.code }), {
+				status: err.status || 502
+			});
 		}
 
 		const msg = err instanceof Error ? err.message : 'Action failed';

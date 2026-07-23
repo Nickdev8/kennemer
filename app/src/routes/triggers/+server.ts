@@ -24,6 +24,13 @@ export const POST: RequestHandler = async ({ request, fetch, url }) => {
 		return new Response(JSON.stringify({ error: 'Unknown trigger' }), { status: 404 });
 	}
 
+	if (!trigger.sceneId?.trim()) {
+		return new Response(JSON.stringify({ error: 'Actie niet ingesteld: scène-ID ontbreekt' }), {
+			status: 409,
+			headers: { 'content-type': 'application/json' }
+		});
+	}
+
 	try {
 		const sceneDevice: ShellyDevice = {
 			id: `trigger-${trigger.id}`,

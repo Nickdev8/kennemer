@@ -6,6 +6,12 @@
 	import { advancedDevices, advancedTriggers } from '$lib/config/advanced';
 	import { env as publicEnv } from '$env/dynamic/public';
 	import type { DeviceCommandKey, ShellyDevice } from '$lib/config/schema';
+	import {
+		getDeviceConfigurationIssues,
+		isDeviceCommandConfigured,
+		isDeviceStatusConfigured,
+		isValidStatusDeviceId
+	} from '$lib/config/device-validation';
 	import { triggerAction, triggerDeviceCommand } from '$lib/api';
 	import type { PageData } from './$types';
 	import RefreshCw from 'lucide-svelte/icons/refresh-cw';
@@ -23,6 +29,24 @@
 		timestamp?: number | null;
 		capability?: 'metered' | 'not-metered' | 'unknown';
 		state?: 'ok' | 'unavailable';
+	};
+
+	type InventoryDevice = {
+		deviceId: string;
+		name: string;
+		ip: string;
+	};
+
+	type DiagnosticEntry = {
+		id: string;
+		name: string;
+		detail: string;
+	};
+
+	type DiagnosticGroup = {
+		id: string;
+		label: string;
+		entries: DiagnosticEntry[];
 	};
 
 	type UpdateStatus = {
@@ -120,9 +144,22 @@
 		new Set(
 			allDevices
 				.map((device) => device.statusdeviceid?.trim())
-				.filter((deviceId): deviceId is string => Boolean(deviceId))
+				.filter((deviceId): deviceId is string => isValidStatusDeviceId(deviceId))
 		)
 	);
+	const configurationDiagnostics: DiagnosticEntry[] = allDevices.flatMap((device) => {
+		const issues = getDeviceConfigurationIssues(device);
+		return issues.length > 0
+			? [{ id: device.id, name: device.label, detail: issues.join(' · ') }]
+			: [];
+	});
+	const triggerConfigurationDiagnostics: DiagnosticEntry[] = advancedTriggers
+		.filter((trigger) => !trigger.sceneId?.trim())
+		.map((trigger) => ({
+			id: trigger.id,
+			name: trigger.label,
+			detail: 'Scène-ID ontbreekt'
+		}));
 	const advancedSections = advancedSectionOrder.map((section) => ({
 		...section,
 		devices: section.deviceIds
@@ -148,6 +185,8 @@
 		onlineCount: number;
 		offlineCount: number;
 		unknownStatusCount: number;
+		offlineDevices?: InventoryDevice[];
+		unknownStatusDevices?: InventoryDevice[];
 	} | null = null;
 	let wattageSummary: {
 		unavailableCount: number;
@@ -162,6 +201,8 @@
 	let topWattageDevices: WattageDeviceSummary[] = [];
 	let topWattageMax = 1;
 	let availableWattageMeasurements = 0;
+	let diagnosticGroups: DiagnosticGroup[] = [];
+	let diagnosticProblemCount = 0;
 	let cacheMessage = '';
 	let cacheClearing = false;
 	let updateStatus: UpdateStatus | null = null;
@@ -220,6 +261,71 @@
 	$: availableWattageMeasurements = wattageSummary
 		? Math.max(0, wattageSummary.meteredCount - wattageSummary.unavailableCount)
 		: 0;
+	$: diagnosticGroups = [
+		{
+			id: 'offline',
+			label: 'Offline apparaten',
+			entries: (wattageInventory?.offlineDevices ?? []).map((device) => ({
+				id: device.deviceId,
+				name: device.name,
+				detail: device.ip ? `Cloud offline · ${device.ip}` : 'Cloud offline'
+			}))
+		},
+		{
+			id: 'cloud-unknown',
+			label: 'Cloudstatus onbekend',
+			entries: (wattageInventory?.unknownStatusDevices ?? []).map((device) => ({
+				id: device.deviceId,
+				name: device.name,
+				detail: device.ip ? `Geen cloudstatus · ${device.ip}` : 'Geen cloudstatus'
+			}))
+		},
+		{
+			id: 'output-unknown',
+			label: 'Schakelstatus onbekend',
+			entries: wattageDevices
+				.filter((device) => device.output === null)
+				.map((device) => ({
+					id: device.deviceId,
+					name: device.name,
+					detail: `${device.source ?? 'unknown'} · ${device.ip || 'geen IP-adres'}`
+				}))
+		},
+		{
+			id: 'unavailable',
+			label: 'Metingen niet beschikbaar',
+			entries: wattageDevices
+				.filter((device) => device.state === 'unavailable')
+				.map((device) => ({
+					id: device.deviceId,
+					name: device.name,
+					detail: `Geen actuele meting · ${device.ip || 'geen IP-adres'}`
+				}))
+		},
+		{
+			id: 'fallback',
+			label: 'LAN fallback actief',
+			entries: wattageDevices
+				.filter((device) => device.source === 'cloud' || device.source === 'cached')
+				.map((device) => ({
+					id: device.deviceId,
+					name: device.name,
+					detail:
+						device.source === 'cached'
+							? 'Tijdelijk oude meting gebruikt'
+							: 'Cloudmeting gebruikt omdat LAN niet antwoordde'
+				}))
+		},
+		{
+			id: 'configuration',
+			label: 'Configuratieproblemen',
+			entries: [...configurationDiagnostics, ...triggerConfigurationDiagnostics]
+		}
+	];
+	$: diagnosticProblemCount = diagnosticGroups.reduce(
+		(total, group) => total + group.entries.length,
+		0
+	);
 
 	function clearAdvancedIdleTimer() {
 		if (advancedIdleTimeout) {
@@ -311,6 +417,8 @@
 					onlineCount: number;
 					offlineCount: number;
 					unknownStatusCount: number;
+					offlineDevices?: InventoryDevice[];
+					unknownStatusDevices?: InventoryDevice[];
 				};
 				summary?: {
 					unavailableCount: number;
@@ -484,7 +592,7 @@
 		knownStatusDeviceStates: Map<string, DeviceCommandKey>
 	) {
 		const statusDeviceId = device.statusdeviceid?.trim();
-		if (statusDeviceId) {
+		if (statusDeviceId && isValidStatusDeviceId(statusDeviceId)) {
 			return (
 				knownStatusDeviceStates.get(statusDeviceId) ??
 				knownDeviceStates.get(statusDeviceId) ??
@@ -492,6 +600,7 @@
 				null
 			);
 		}
+		if (device.type === 'Scene') return null;
 
 		return knownDeviceStates.get(device.id) ?? null;
 	}
@@ -501,13 +610,18 @@
 		command: DeviceCommandKey,
 		options: PressOptions = {}
 	): Promise<void> {
+		const device = deviceById.get(deviceId);
+		if (!device || !isDeviceCommandConfigured(device, command)) {
+			errorMsg = 'Deze actie is nog niet ingesteld.';
+			return;
+		}
 		const key = commandKey(deviceId, command);
 		loadingCommandKey = key;
 		errorMsg = '';
 		let succeeded = false;
 		try {
 			await triggerDeviceCommand(deviceId, command);
-			const statusDeviceId = deviceById.get(deviceId)?.statusdeviceid?.trim();
+			const statusDeviceId = device.statusdeviceid?.trim();
 			if (statusDeviceId) {
 				startStatusFollowup(statusDeviceId);
 			} else if (!options.stateless) {
@@ -1144,6 +1258,7 @@
 						{commandLabel}
 						{resolveToggleCommand}
 						{loadingCommandKey}
+						statusEnabled={isDeviceStatusConfigured(device)}
 						initialStatus={resolveCardStatus(device, deviceStates, statusDeviceStates)}
 						on:command={({ detail }) =>
 							handlePress(detail.deviceId, detail.command, { stateless: device.stateless })}
@@ -1367,6 +1482,7 @@
 													{commandLabel}
 													{resolveToggleCommand}
 													{loadingCommandKey}
+													statusEnabled={isDeviceStatusConfigured(device)}
 													initialStatus={resolveCardStatus(
 														device,
 														deviceStates,
@@ -1409,7 +1525,7 @@
 					</div>
 				</section>
 
-				<aside class="w-full space-y-4 lg:w-[400px] lg:flex-shrink-0">
+				<aside class="w-full space-y-4 overflow-y-auto pr-1 lg:w-[400px] lg:flex-shrink-0">
 					<div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
 						<p class="text-xs font-semibold tracking-wide text-slate-500 uppercase">
 							System actions
@@ -1477,6 +1593,43 @@
 									{cacheMessage}
 								</p>
 							{/if}
+						</div>
+					</div>
+
+					<div class="rounded-lg border border-slate-300 bg-white p-4">
+						<div class="flex items-center justify-between gap-3">
+							<h3 class="text-base font-semibold text-slate-900">Apparaatproblemen</h3>
+							<span
+								class={`text-sm font-semibold ${diagnosticProblemCount > 0 ? 'text-amber-700' : 'text-emerald-700'}`}
+							>
+								{diagnosticProblemCount} meldingen
+							</span>
+						</div>
+						<div class="mt-3 border-t border-slate-200">
+							{#each diagnosticGroups as group (group.id)}
+								<details class="border-b border-slate-200">
+									<summary
+										class="flex cursor-pointer items-center justify-between gap-3 py-3 text-sm font-semibold text-slate-700"
+									>
+										<span>{group.label}</span>
+										<span class={group.entries.length > 0 ? 'text-amber-700' : 'text-slate-400'}>
+											{group.entries.length}
+										</span>
+									</summary>
+									{#if group.entries.length === 0}
+										<p class="pb-3 text-sm text-slate-500">Geen apparaten.</p>
+									{:else}
+										<ul class="space-y-3 pb-3">
+											{#each group.entries as entry (`${group.id}:${entry.id}`)}
+												<li>
+													<p class="text-sm font-semibold text-slate-800">{entry.name}</p>
+													<p class="mt-0.5 text-xs break-words text-slate-500">{entry.detail}</p>
+												</li>
+											{/each}
+										</ul>
+									{/if}
+								</details>
+							{/each}
 						</div>
 					</div>
 

@@ -35,6 +35,7 @@
 	};
 
 	$: isLoading = loadingTriggerId === trigger.id;
+	$: isConfigured = Boolean(trigger.sceneId?.trim());
 
 	let cardStyle: string | undefined;
 
@@ -65,6 +66,7 @@
 	})();
 
 	function handleTrigger() {
+		if (!isConfigured) return;
 		dispatch('trigger', { triggerId: trigger.id });
 	}
 </script>
@@ -75,10 +77,12 @@
 		type="button"
 		class={buttonVisual.className}
 		style={buttonVisual.style}
-		disabled={isLoading}
+		disabled={isLoading || !isConfigured}
 		on:click={handleTrigger}
 	>
-		<span class="pointer-events-none text-center">{trigger.label}</span>
+		<span class="pointer-events-none text-center">
+			{isConfigured ? trigger.label : 'Scène niet ingesteld'}
+		</span>
 		{#if isLoading}
 			<span
 				class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-slate-900/60 text-sm font-semibold text-white"

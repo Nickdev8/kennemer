@@ -93,6 +93,14 @@ type DeviceInventorySummary = {
 	onlineCount: number;
 	offlineCount: number;
 	unknownStatusCount: number;
+	offlineDevices: InventoryDevice[];
+	unknownStatusDevices: InventoryDevice[];
+};
+
+type InventoryDevice = {
+	deviceId: string;
+	name: string;
+	ip: string;
 };
 
 type ErrorResponse = {
@@ -100,10 +108,8 @@ type ErrorResponse = {
 	message: string;
 };
 
-const DEVICE_LIST_ENDPOINT =
-	'https://shelly-115-eu.shelly.cloud/interface/device/get_all_lists';
-const CLOUD_STATUS_ENDPOINT =
-	'https://shelly-115-eu.shelly.cloud/device/status';
+const DEVICE_LIST_ENDPOINT = 'https://shelly-115-eu.shelly.cloud/interface/device/get_all_lists';
+const CLOUD_STATUS_ENDPOINT = 'https://shelly-115-eu.shelly.cloud/device/status';
 const HTTP_TIMEOUT_MS = 4000;
 const IP_CACHE_PATH = resolvePath(process.cwd(), 'ips.json');
 const CACHE_TTL_MS = 2 * 60 * 1000;
@@ -201,15 +207,18 @@ async function resolveRoomDevices(
 }> {
 	const list = await loadDeviceListPayload(options.forceRefresh ?? false);
 	const ignoreRoomFilter = roomId === -1;
-	const label =
-		ignoreRoomFilter ? 'Alle ruimtes' : resolveRoomLabel(list?.rooms, roomId) ?? `Room ${roomId}`;
+	const label = ignoreRoomFilter
+		? 'Alle ruimtes'
+		: (resolveRoomLabel(list?.rooms, roomId) ?? `Room ${roomId}`);
 	const devices = collectRoomDeviceTargets(list?.devices, roomId, { ignoreRoomFilter });
 	const inventory = summariseInventory(list?.devices, roomId, { ignoreRoomFilter });
 
 	return { label, devices, inventory };
 }
 
-async function loadDeviceListPayload(forceRefresh: boolean): Promise<ShellyDeviceListPayload | null> {
+async function loadDeviceListPayload(
+	forceRefresh: boolean
+): Promise<ShellyDeviceListPayload | null> {
 	if (!forceRefresh) {
 		const cached = await readDeviceListCache();
 		if (cached) {
@@ -244,8 +253,7 @@ async function writeDeviceListCache(payload: ShellyDeviceListPayload): Promise<v
 
 	try {
 		await writeFile(IP_CACHE_PATH, JSON.stringify(cachePayload, null, 2), 'utf-8');
-	} catch {
-	}
+	} catch {}
 }
 
 async function fetchDeviceListFromCloud(): Promise<ShellyDeviceListPayload | null> {
@@ -343,22 +351,39 @@ function summariseInventory(
 	let onlineCount = 0;
 	let offlineCount = 0;
 	let unknownStatusCount = 0;
+	const offlineDevices: InventoryDevice[] = [];
+	const unknownStatusDevices: InventoryDevice[] = [];
 
-	for (const [, entry] of toDeviceEntries(devices)) {
+	for (const [key, entry] of toDeviceEntries(devices)) {
 		const entryRoom = parseNumber(entry.room_id);
 		if (!options.ignoreRoomFilter && entryRoom !== roomId) continue;
+		const deviceId = normaliseLabel(entry.id) ?? key;
+		const device = {
+			deviceId,
+			name: normaliseLabel(entry.name) ?? deviceId,
+			ip: pickDeviceIp(entry)
+		};
 
 		totalCount += 1;
 		if (entry.cloud_online === true) {
 			onlineCount += 1;
 		} else if (entry.cloud_online === false) {
 			offlineCount += 1;
+			offlineDevices.push(device);
 		} else {
 			unknownStatusCount += 1;
+			unknownStatusDevices.push(device);
 		}
 	}
 
-	return { totalCount, onlineCount, offlineCount, unknownStatusCount };
+	return {
+		totalCount,
+		onlineCount,
+		offlineCount,
+		unknownStatusCount,
+		offlineDevices,
+		unknownStatusDevices
+	};
 }
 
 function pickDeviceIp(entry: ShellyDeviceListEntry): string {
@@ -467,9 +492,7 @@ function supportsRpcPower(target: ShellyDeviceTarget) {
 	return typeof target.gen === 'number' && target.gen >= 2;
 }
 
-async function fetchLanReading(
-	target: ShellyDeviceTarget
-): Promise<{
+async function fetchLanReading(target: ShellyDeviceTarget): Promise<{
 	watts: number | null;
 	output: boolean | null;
 	source: WattageSource;
@@ -493,7 +516,7 @@ async function fetchLanReading(
 		const hasOutput = payload && typeof payload.output === 'boolean';
 		return {
 			watts: null,
-			output: hasOutput ? payload.output ?? null : null,
+			output: hasOutput ? (payload.output ?? null) : null,
 			source: 'lan-rpc',
 			timestamp,
 			capabilityHint: hasOutput ? 'not-metered' : null
@@ -522,7 +545,12 @@ async function fetchLanReading(
 }
 
 async function fetchCloudReading(target: ShellyDeviceTarget): Promise<{
-	reading: { watts: number | null; output: boolean | null; source: WattageSource; timestamp: number };
+	reading: {
+		watts: number | null;
+		output: boolean | null;
+		source: WattageSource;
+		timestamp: number;
+	};
 	payload: unknown;
 } | null> {
 	try {
@@ -605,13 +633,16 @@ function isValidReading(reading: {
 	return true;
 }
 
-function rememberReading(deviceId: string, reading: {
-	watts: number | null;
-	output: boolean | null;
-	source: WattageSource;
-	timestamp: number | null;
-	capability: WattageCapability;
-}) {
+function rememberReading(
+	deviceId: string,
+	reading: {
+		watts: number | null;
+		output: boolean | null;
+		source: WattageSource;
+		timestamp: number | null;
+		capability: WattageCapability;
+	}
+) {
 	if (reading.watts === null || !Number.isFinite(reading.watts)) return;
 	if (reading.timestamp === null || !Number.isFinite(reading.timestamp)) return;
 	lastKnownWattage.set(deviceId, {
@@ -623,10 +654,7 @@ function rememberReading(deviceId: string, reading: {
 	});
 }
 
-function readCachedReading(
-	target: ShellyDeviceTarget,
-	now: number
-): WattageDeviceSummary | null {
+function readCachedReading(target: ShellyDeviceTarget, now: number): WattageDeviceSummary | null {
 	const cached = lastKnownWattage.get(target.deviceId);
 	if (!cached) return null;
 	if (now - cached.timestamp > CACHE_TTL_MS) {
@@ -941,8 +969,6 @@ function extractDeviceIdentifiers(payload: Record<string, unknown>): string[] {
 
 	return Array.from(identifiers);
 }
-
-
 
 function matchesDeviceIdentity(payload: Record<string, unknown>, expectedId: string) {
 	const identifiers = extractDeviceIdentifiers(payload);

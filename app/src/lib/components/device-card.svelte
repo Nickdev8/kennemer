@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
 	import type { DeviceCommandKey, ShellyDevice } from '$lib/config/schema';
+	import { isDeviceCommandConfigured } from '$lib/config/device-validation';
 
 	const baseCardClass =
 		'flex h-full max-h-[18rem] min-h-[12rem] flex-col gap-3 rounded-lg border border-slate-300 bg-white px-5 py-5 transition-colors duration-150';
@@ -26,6 +27,7 @@
 	export let commandLabel: (device: ShellyDevice, command: DeviceCommandKey) => string;
 	export let loadingCommandKey: string | null;
 	export let initialStatus: DeviceCommandKey | null = null;
+	export let statusEnabled = true;
 	export let showType = false;
 	export let resolveToggleCommand: (status: DeviceCommandKey | null) => DeviceCommandKey = (
 		status
@@ -127,6 +129,7 @@
 		className: string;
 		style?: string;
 		ariaPressed: boolean;
+		disabled: boolean;
 	};
 
 	let commandVisualStates: Partial<Record<DeviceCommandKey, CommandVisualState>> = {};
@@ -239,7 +242,8 @@
 							key,
 							className: visual.className,
 							style: visual.style,
-							ariaPressed: optimisticStatus === command
+							ariaPressed: optimisticStatus === command,
+							disabled: !isDeviceCommandConfigured(device, command)
 						};
 						return acc;
 					},
@@ -254,17 +258,23 @@
 		const actionKey = commandKey(device.id, actionCommand);
 		const key = deviceLoading && loadingCommandKey ? loadingCommandKey : actionKey;
 		const showGreenAction = actionCommand === 'off';
+		const actionConfigured = isDeviceCommandConfigured(device, actionCommand);
 		const visualCommand: DeviceCommandKey = showGreenAction ? 'on' : actionCommand;
 		const visual = computeButtonClass(visualCommand, key, {
 			forceProminent: showGreenAction,
 			forceToggleNeutral: !showGreenAction
 		});
-		const actionLabel = actionCommand === 'on' ? 'Zet aan' : 'Zet uit';
+		const actionLabel = actionConfigured
+			? actionCommand === 'on'
+				? 'Uit'
+				: 'Aan'
+			: 'Scène niet ingesteld';
 		return {
 			key,
 			className: visual.className,
 			style: visual.style,
 			ariaPressed: stateCommand === 'on',
+			disabled: !actionConfigured,
 			command: actionCommand,
 			label: actionLabel
 		};
@@ -276,6 +286,7 @@
 		const command: DeviceCommandKey = 'on';
 		if (!device.commands.on) return null;
 		const key = commandKey(device.id, command);
+		const commandConfigured = isDeviceCommandConfigured(device, command);
 		const visual = computeButtonClass(command, key, {
 			forceNeutral,
 			forceProminent: !forceNeutral
@@ -285,12 +296,14 @@
 			className: visual.className,
 			style: visual.style,
 			ariaPressed: false,
+			disabled: !commandConfigured,
 			command,
-			label: device.commands.on?.label ?? ''
+			label: commandConfigured ? (device.commands.on?.label ?? '') : 'Scène niet ingesteld'
 		};
 	})();
 
 	function handleCommand(command: DeviceCommandKey) {
+		if (!isDeviceCommandConfigured(device, command)) return;
 		const key = commandKey(device.id, command);
 		if (!isStateless && !isSingle) {
 			optimisticStatus = command;
@@ -311,7 +324,9 @@
 		</div>
 		{#if !isStateless && !isSingle}
 			<div class={`flex items-center gap-2 text-sm font-semibold ${statusTextClass}`}>
-				{#if hasKnownStatus}
+				{#if !statusEnabled}
+					<span>Status niet ingesteld</span>
+				{:else if hasKnownStatus}
 					<span class={`h-2.5 w-2.5 rounded-full ${statusDotClass}`} aria-hidden="true"></span>
 					<span>Status: {statusLabel}</span>
 				{:else}
@@ -329,6 +344,7 @@
 					class={singleState.className}
 					style={singleState.style}
 					aria-pressed={singleState.ariaPressed}
+					disabled={singleState.disabled}
 					on:click={() => handleCommand(singleState.command)}
 				>
 					<span class="pointer-events-none text-center">{singleState.label}</span>
@@ -348,6 +364,7 @@
 					class={toggleState.className}
 					style={toggleState.style}
 					aria-pressed={toggleState.ariaPressed}
+					disabled={toggleState.disabled}
 					on:click={() => handleCommand(toggleState.command)}
 				>
 					<span class="pointer-events-none text-center">{toggleState.label}</span>
@@ -370,6 +387,7 @@
 							class={state.className}
 							style={state.style}
 							aria-pressed={state.ariaPressed}
+							disabled={state.disabled}
 							on:click={() => handleCommand(cmd)}
 						>
 							<span class="pointer-events-none text-center">{commandLabel(device, cmd)}</span>

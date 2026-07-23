@@ -1,76 +1,115 @@
-## Kennemer Device Panel
+# Kennemer bedieningspaneel
 
-Minimal SvelteKit-dashboard voor Shelly-apparaten.
+Dit project is het touchscreen-dashboard voor de verlichting en schermen van
+Kennemer. Het draait op een ODROID en bedient Shelly-scenes.
 
-## Snelle URL's
+## Dagelijks beheer
 
-Alleen de zichtbare status bijwerken (geen echte device-call):
+Maak verbinding met de ODROID:
 
-```url
-http://localhost/api/device-state/callback?deviceId=scene-screen-lokalen&state=off
+```bash
+ssh kennemer-cloudflare
 ```
 
-## Devices (Cards) toevoegen of aanpassen
+De belangrijkste commando's zijn:
 
-Bewerk `app/config/devices.ts`.
-
-- Elke entry in `devices` wordt een card.
-- Gebruik een uniek `id`, zet `label` + `type`, en definieer `commands.on/off`.
-- `buttonMode` bepaalt de knop:
-  - `toggle` Aan/Uit in 1 knop. Leeg/Groen
-  - `dual` Aan + Uit over 2 knoppen Rood/Groen
-  - `single` 1 actie. Geen kleur
-
-Minimal voorbeeld:
-
-```ts
-{
-  id: 'scene-kantine',
-  label: 'Kantine',
-  type: 'Scene',
-  buttonMode: 'toggle',
-  commands: {
-    on: {
-      label: 'Aan',
-      cloud: { endpoint: shellySceneEndpoint, method: 'POST', payload: { id: '123' }, requiresAuthKey: true }
-    },
-    off: {
-      label: 'Uit',
-      cloud: { endpoint: shellySceneEndpoint, method: 'POST', payload: { id: '456' }, requiresAuthKey: true }
-    }
-  }
-}
+```bash
+update                 # nieuwste versie ophalen en installeren
+restart                # alleen het kioskscherm opnieuw starten
+screen status          # status van het kioskscherm bekijken
 ```
 
-## Advanced devices
+De projectmap op de ODROID is `/opt/kennemer`. Voer Docker-commando's vanuit
+die map uit:
 
-Advanced cards staan in `app/config/advanced.ts`.
+```bash
+cd /opt/kennemer
+docker compose ps                    # status van de webapp
+docker compose logs --tail=100 web
+```
 
-- Werkt hetzelfde als gewone devices, maar ze zijn alleen zichtbaar na de advanced unlock.
-- Gebruik dit voor beheer‑only apperaten.
+`update` bouwt eerst een nieuwe versie en zet die daarna pas live. Tijdens een
+update toont het dashboard een volledig scherm met een update-animatie. Na een
+geslaagde update wordt het kioskscherm opnieuw gestart. Dit kan enige tijd een
+zwart scherm geven terwijl Xorg en Brave opnieuw opstarten.
 
-## Scripts
+## Knoppen aanpassen
 
-- `restart`: herstart de `odroid-kiosk` systemd-service (dubbele restart).
-- `screen`: start/stop de kiosk-stack (Xorg + window manager + Brave kiosk) met watchdog.
-  Op de Kennemer Odroid:
-- `/opt/kennemer/odroid/` is de bron voor de kiosk-scripts; de terminalcommando's zijn symlinks naar deze bestanden.
-- `update`: haalt de laatste git-commits op, deployt de app en herstart daarna het scherm.
-- `restart`: herlaadt alleen het scherm zodat updates zichtbaar zijn.
-- The folder is located `cd /opt/kennemer/`
+De gewone negen knoppen staan in:
 
-## .env (app/.env)
+```text
+app/config/devices.ts
+```
 
-Hier staan runtime-instellingen (niet committen).
-Meest gebruikt:
+De knop **ALLES UIT** staat in:
 
-- `SHELLY_AUTH_KEY` = Shelly cloud API key
-- `SHELLY_SIMULATE_DEVICES=1` om hardware te simuleren
-- `USE_LAN_DEVICES=1` om LAN te prefereren
-- `USE_LAN_WATTAGE=1` voor LAN wattage
-- `PUBLIC_ADVANCED_PATTERN` of `PUBLIC_ADVANCED_PIN` voor advanced toegang
-  Template staat in `app/env.temp` — kopieer naar `app/.env`.
+```text
+app/config/triggers.ts
+```
 
-https://github.com/user-attachments/assets/829898f8-7536-4730-b2df-8f1d1052f528
+De lege knoppen onder geavanceerde bediening staan in:
 
-https://github.com/user-attachments/assets/df56418f-1570-46dd-a5a5-fe70f3744413
+```text
+app/config/advanced.ts
+```
+
+Let bij een gewone knop op:
+
+- `pushNumber` bepaalt de positie: 1 linksboven, 9 rechtsonder.
+- `commands.on` bevat de scene voor **Aan**.
+- `commands.off` bevat de scene voor **Uit**.
+- `statusdeviceid` is het Shelly-apparaat waarvan de echte status wordt gelezen.
+- Een lege scene-ID maakt een actie bewust niet klikbaar.
+
+Test een gewijzigde scene niet zomaar op locatie: een API-call kan echte
+verlichting of schermen bedienen.
+
+## Instellingen en wachtwoorden
+
+De lokale instellingen staan in `app/.env`. Dit bestand bevat onder andere de
+Shelly API-sleutel en het onderhoudstoken en mag niet in Git komen.
+
+Een overzicht van de beschikbare instellingen staat in `app/env.temp`:
+
+```bash
+cp app/env.temp app/.env
+```
+
+Vul daarna de echte waarden in. Herstart de app na een wijziging aan `.env`.
+
+## Lokaal ontwikkelen
+
+```bash
+cd app
+npm ci
+npm run dev
+```
+
+Controleer wijzigingen voor ze worden uitgerold:
+
+```bash
+npm run check
+npm run build
+```
+
+Voor een lokale productieomgeving vanuit de hoofdmap:
+
+```bash
+docker compose up --build -d
+```
+
+## Als iets niet werkt
+
+- **Geen dashboard:** controleer `docker compose ps` en de logs van `web`.
+- **Zwart scherm:** gebruik `screen status` en daarna eventueel `restart`.
+- **Touch werkt niet:** controleer of de USB-kabel ook data ondersteunt en kijk
+  naar `systemctl status kennemer-maintenance.service`.
+- **Geen internet:** het dashboard blijft bruikbaar met onthouden statussen,
+  maar cloud-scenes kunnen pas weer werken wanneer de verbinding terug is.
+- **Update blijft hangen:** bekijk
+  `systemctl status kennemer-update.service` en
+  `journalctl -u kennemer-update.service -n 100`.
+
+De technische architectuur, API-routes en deploydetails staan in
+[`AGENTS.md`](AGENTS.md). In belangrijke mappen staat een aanvullende
+`AGENTS.md` met regels voor die map.

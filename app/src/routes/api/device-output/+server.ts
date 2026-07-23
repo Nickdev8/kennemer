@@ -73,9 +73,22 @@ function cachedIp(device: CachedDevice | null): string {
 	return '';
 }
 
-function cachedChannel(device: CachedDevice | null): number {
+function cachedChannel(device: CachedDevice | null, requestedChannel: number): number {
+	if (Number.isInteger(requestedChannel) && requestedChannel >= 0) {
+		return requestedChannel;
+	}
 	const parsed = Number(device?.channel ?? 0);
 	return Number.isInteger(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+function splitStatusDeviceId(deviceId: string) {
+	const match = /^([a-f0-9]{12})(?:_(\d+))?$/i.exec(deviceId);
+	if (!match) return { baseDeviceId: deviceId, channel: 0 };
+	const channel = Number(match[2] ?? 0);
+	return {
+		baseDeviceId: match[1].toLowerCase(),
+		channel: Number.isInteger(channel) && channel >= 0 ? channel : 0
+	};
 }
 
 function parseIds(value: string | null) {
@@ -119,43 +132,81 @@ function resolveStatusPayload(payload: unknown): Record<string, unknown> | null 
 	return root;
 }
 
-function readOutputFromEntries(entries: unknown, keys: string[]) {
-	if (!Array.isArray(entries)) return null;
-	for (const entry of entries) {
-		if (!entry || typeof entry !== 'object') continue;
-		const record = entry as Record<string, unknown>;
-		for (const key of keys) {
-			const output = parseBoolean(record[key]);
-			if (output !== null) return output;
-		}
+function readOutputFromRecord(entry: unknown, keys: string[]) {
+	if (!entry || typeof entry !== 'object') return null;
+	const record = entry as Record<string, unknown>;
+	for (const key of keys) {
+		const output = parseBoolean(record[key]);
+		if (output !== null) return output;
 	}
 	return null;
 }
 
-function extractOutput(payload: unknown): boolean | null {
+function readOutputFromEntries(entries: unknown, keys: string[], channel: number) {
+	if (!Array.isArray(entries)) return null;
+
+	const matchingEntry = entries.find((entry) => {
+		if (!entry || typeof entry !== 'object') return false;
+		const record = entry as Record<string, unknown>;
+		for (const value of [record.id, record.channel, record.index]) {
+			if (Number(value) === channel) return true;
+		}
+		return false;
+	});
+	const matchingOutput = readOutputFromRecord(matchingEntry, keys);
+	if (matchingOutput !== null) return matchingOutput;
+
+	const indexedOutput = readOutputFromRecord(entries[channel], keys);
+	if (indexedOutput !== null) return indexedOutput;
+
+	if (channel === 0) {
+		for (const entry of entries) {
+			const output = readOutputFromRecord(entry, keys);
+			if (output !== null) return output;
+		}
+	}
+
+	return null;
+}
+
+function extractOutput(payload: unknown, channel: number): boolean | null {
 	const status = resolveStatusPayload(payload);
 	if (!status) return null;
 
-	const switchOutput = readOutputFromEntries(status.switch, ['output', 'on', 'ison', 'enabled']);
+	const switchOutput = readOutputFromEntries(
+		status.switch,
+		['output', 'on', 'ison', 'enabled'],
+		channel
+	);
 	if (switchOutput !== null) return switchOutput;
 
-	const relayOutput = readOutputFromEntries(status.relays, ['ison', 'output', 'on', 'enabled']);
+	const relayOutput = readOutputFromEntries(
+		status.relays,
+		['ison', 'output', 'on', 'enabled'],
+		channel
+	);
 	if (relayOutput !== null) return relayOutput;
 
-	const lightOutput = readOutputFromEntries(status.lights, ['ison', 'output', 'on', 'enabled']);
+	const lightOutput = readOutputFromEntries(
+		status.lights,
+		['ison', 'output', 'on', 'enabled'],
+		channel
+	);
 	if (lightOutput !== null) return lightOutput;
 
-	for (const [key, value] of Object.entries(status)) {
-		if (!value || typeof value !== 'object') continue;
-		if (!/^switch:\d+$/i.test(key) && !/^relay:\d+$/i.test(key) && !/^light:\d+$/i.test(key)) {
-			continue;
-		}
-		const record = value as Record<string, unknown>;
-		const output = parseBoolean(record.output ?? record.ison ?? record.on ?? record.enabled);
+	for (const component of ['switch', 'relay', 'light']) {
+		const output = readOutputFromRecord(status[`${component}:${channel}`], [
+			'output',
+			'ison',
+			'on',
+			'enabled'
+		]);
 		if (output !== null) return output;
 	}
 
-	return parseBoolean(status.output ?? status.ison ?? status.on ?? status.enabled);
+	return channel === 0
+		? parseBoolean(status.output ?? status.ison ?? status.on ?? status.enabled)
+		: null;
 }
 
 async function saveOutputState(
@@ -179,11 +230,12 @@ async function fetchLocalDeviceOutput(
 	deviceId: string,
 	cache: DeviceCache | null
 ): Promise<OutputState | null> {
-	const cachedDevice = resolveCachedDevice(cache, deviceId);
+	const { baseDeviceId, channel } = splitStatusDeviceId(deviceId);
+	const cachedDevice = resolveCachedDevice(cache, baseDeviceId);
 	const ip = cachedIp(cachedDevice);
 	if (!ip) return null;
 
-	const localStatus = await fetchSwitchStatus(ip, cachedChannel(cachedDevice));
+	const localStatus = await fetchSwitchStatus(ip, cachedChannel(cachedDevice, channel));
 	if (typeof localStatus?.output !== 'boolean') return null;
 	return saveOutputState(deviceId, localStatus.output, 'status-lan');
 }
@@ -192,15 +244,16 @@ async function fetchCloudDeviceOutput(
 	deviceId: string,
 	beforeCloudRequest: () => Promise<void>
 ): Promise<OutputState | null> {
+	const { baseDeviceId, channel } = splitStatusDeviceId(deviceId);
 	await beforeCloudRequest();
 	const payload = await fetchShellyJson({
 		endpoint: CLOUD_STATUS_ENDPOINT,
 		method: 'POST',
 		encoding: 'form',
-		payload: { id: deviceId },
+		payload: { id: baseDeviceId },
 		requiresAuthKey: true
 	});
-	const output = extractOutput(payload);
+	const output = extractOutput(payload, channel);
 	if (output === null) return null;
 	return saveOutputState(deviceId, output, 'status-poll');
 }

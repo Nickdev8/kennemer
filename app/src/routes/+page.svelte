@@ -231,6 +231,7 @@
 	let statusDeviceWarningVisible = false;
 	let statusDeviceWarningTimeout: ReturnType<typeof setTimeout> | null = null;
 	let unavailableStatusDeviceIds = new Set<string>();
+	let statusDeviceFailureCounts = new Map<string, number>();
 	let initialStatusDisplayTimeout: ReturnType<typeof setTimeout> | null = null;
 	let transientActiveUntilByDevice = new Map<string, number>();
 	const transientActiveTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
@@ -245,6 +246,7 @@
 	const liveStatusRefreshMs = 5_000;
 	const initialStatusDisplayMaxMs = 8_000;
 	const statusDeviceWarningDurationMs = 7_000;
+	const statusDeviceWarningFailureThreshold = 2;
 	const statusFollowupDelaysMs = [1200, 2500, 5000, 10000, 20000, 45000, 90000];
 	const connectivityRefreshMs = 15000;
 	const hardwareRefreshMs = 15000;
@@ -564,13 +566,19 @@
 		const nextStatusStates = new Map(statusDeviceStates);
 		const nextDeviceStates = new Map(deviceStates);
 		const nextUnavailableIds = new Set(unavailableStatusDeviceIds);
-		const hasNewUnavailableDevice = unavailableIds.some(
-			(id) => !unavailableStatusDeviceIds.has(id)
-		);
+		const nextFailureCounts = new Map(statusDeviceFailureCounts);
+		let hasNewUnavailableDevice = false;
 
 		unavailableIds.forEach((id) => {
 			nextStatusStates.delete(id);
-			nextUnavailableIds.add(id);
+			const failureCount = (nextFailureCounts.get(id) ?? 0) + 1;
+			nextFailureCounts.set(id, failureCount);
+			if (failureCount >= statusDeviceWarningFailureThreshold) {
+				if (!unavailableStatusDeviceIds.has(id)) {
+					hasNewUnavailableDevice = true;
+				}
+				nextUnavailableIds.add(id);
+			}
 		});
 
 		Object.entries(states).forEach(([id, entry]) => {
@@ -578,12 +586,14 @@
 				nextStatusStates.set(id, entry.lastCommand);
 				nextDeviceStates.set(id, entry.lastCommand);
 				nextUnavailableIds.delete(id);
+				nextFailureCounts.delete(id);
 			}
 		});
 
 		statusDeviceStates = nextStatusStates;
 		deviceStates = nextDeviceStates;
 		unavailableStatusDeviceIds = nextUnavailableIds;
+		statusDeviceFailureCounts = nextFailureCounts;
 
 		if (hasNewUnavailableDevice) {
 			showStatusDeviceWarning();

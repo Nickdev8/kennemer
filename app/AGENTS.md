@@ -51,8 +51,9 @@ rate limits before shortening it.
   `Status: Aan/Uit` text is intentionally hidden because card color carries the
   state.
 - A newly unreachable status device produces one temporary warning at the top
-  right. Do not renew it on every polling cycle while the same device remains
-  unavailable.
+  right only after two consecutive failed polls. A successful poll immediately
+  resets its failure count. Do not renew the warning on every polling cycle
+  while the same device remains unavailable.
 - Offline status does not disable a configured scene action.
 - Missing command payloads do disable the corresponding action.
 - Advanced controls auto-close after inactivity unless pinned.

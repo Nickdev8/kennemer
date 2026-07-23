@@ -5,12 +5,9 @@ Kennemer. Het draait op een ODROID en bedient Shelly-scenes.
 
 ## Dagelijks beheer
 
-Maak verbinding met de ODROID, kans is dat geen wachtwoord nodig is, dat komt omdat je ssh key dan op de odroid al stond:
+Maak verbinding met de ODROID. 
+Er is een kant dat geen wachtwoord nodig zal zijn, dat komt omdat je ssh key dan op de odroid al stond:
 
-```bash
-ssh root@10.10.80.50
-```
-or
 ```bash
 ssh root@dashboard.local
 ```

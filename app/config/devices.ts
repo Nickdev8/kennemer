@@ -39,8 +39,9 @@ export const devices: ShellyDevice[] = [
 		id: 'push-1',
 		label: '1ste etage',
 		type: 'Scene',
+		pushNumber: 1,
 		buttonMode: 'toggle',
-		statusdeviceid: '2cbcbb3d9af0_1', //push 1
+		statusdeviceid: '2cbcbb3d9af0_1',
 		commands: {
 			on: {
 				label: 'Aan',
@@ -66,8 +67,9 @@ export const devices: ShellyDevice[] = [
 		id: 'scene-aula-plafond',
 		label: 'Aula plafond',
 		type: 'Scene',
+		pushNumber: 2,
 		buttonMode: 'toggle',
-		statusdeviceid: '2043a80ac3e4', //push 2
+		statusdeviceid: '2043a80ac3e4',
 		commands: {
 			on: {
 				label: 'Aan',
@@ -93,8 +95,9 @@ export const devices: ShellyDevice[] = [
 		id: 'scene-gang-entree',
 		label: 'Gang + entree',
 		type: 'Scene',
+		pushNumber: 3,
 		buttonMode: 'toggle',
-		statusdeviceid: '2043a80ac3e4_1', //push 3
+		statusdeviceid: '2043a80ac3e4_1',
 		commands: {
 			on: {
 				label: 'Aan',
@@ -120,8 +123,9 @@ export const devices: ShellyDevice[] = [
 		id: 'scene-1ste',
 		label: '1ste',
 		type: 'Scene',
+		pushNumber: 4,
 		buttonMode: 'toggle',
-		statusdeviceid: '2cbcbb3d9af0', //push 4
+		statusdeviceid: '2cbcbb3d9af0',
 		commands: {
 			on: {
 				label: 'Aan',
@@ -147,7 +151,8 @@ export const devices: ShellyDevice[] = [
 		id: 'scene-screen-lokalen',
 		label: 'Screen lokalen',
 		type: 'Scene',
-		buttonMode: 'single', // push 5
+		pushNumber: 5,
+		buttonMode: 'single',
 		stateless: true,
 		commands: {
 			on: {
@@ -166,8 +171,9 @@ export const devices: ShellyDevice[] = [
 		id: 'scene-kantine',
 		label: 'Kantine',
 		type: 'Scene',
+		pushNumber: 6,
 		buttonMode: 'toggle',
-		statusdeviceid: '30c92276c1d4_1', //push 6
+		statusdeviceid: '30c92276c1d4_1',
 		commands: {
 			on: {
 				label: 'Aan',
@@ -193,8 +199,9 @@ export const devices: ShellyDevice[] = [
 		id: 'scene-parterre',
 		label: 'Parterre',
 		type: 'Scene',
+		pushNumber: 7,
 		buttonMode: 'toggle',
-		statusdeviceid: '8813bfd6d300', //push 7
+		statusdeviceid: '8813bfd6d300',
 		commands: {
 			on: {
 				label: 'Aan',
@@ -220,8 +227,9 @@ export const devices: ShellyDevice[] = [
 		id: 'scene-aula-vide',
 		label: 'Aula vide',
 		type: 'Scene',
+		pushNumber: 8,
 		buttonMode: 'toggle',
-		statusdeviceid: '8813bfd6d300_1', //push 8
+		statusdeviceid: '8813bfd6d300_1',
 		commands: {
 			on: {
 				label: 'Aan',
@@ -247,8 +255,9 @@ export const devices: ShellyDevice[] = [
 		id: 'scene-kopje-gang',
 		label: 'Kopje gang',
 		type: 'Scene',
+		pushNumber: 9,
 		buttonMode: 'toggle',
-		statusdeviceid: '30c92276c1d4', //push 9
+		statusdeviceid: '30c92276c1d4',
 		commands: {
 			on: {
 				label: 'Aan',

@@ -2,7 +2,7 @@
 	import { onDestroy, onMount } from 'svelte';
 	import DeviceCard from '$lib/components/device-card.svelte';
 	import TriggerCard from '$lib/components/trigger-card.svelte';
-	import { devices as primaryDevices } from '$lib/config/devices';
+	import { devices as configuredPrimaryDevices } from '$lib/config/devices';
 	import { advancedDevices, advancedTriggers } from '$lib/config/advanced';
 	import { env as publicEnv } from '$env/dynamic/public';
 	import type { DeviceCommandKey, ShellyDevice } from '$lib/config/schema';
@@ -130,6 +130,10 @@
 	);
 	let statusDeviceStates = new Map<string, DeviceCommandKey>();
 
+	const primaryDevices = [...configuredPrimaryDevices].sort(
+		(left, right) =>
+			(left.pushNumber ?? Number.MAX_SAFE_INTEGER) - (right.pushNumber ?? Number.MAX_SAFE_INTEGER)
+	);
 	const primaryDeviceCount = primaryDevices.length;
 	const allDevices = [...primaryDevices, ...advancedDevices];
 	const deviceById = new Map(allDevices.map((device) => [device.id, device]));
@@ -1392,8 +1396,8 @@
 					{errorMsg}
 				</p>
 			{/if}
-			<div class="grid h-full flex-1 grid-cols-3 grid-rows-3 gap-6 pr-1 pb-2">
-				{#each primaryDevices as device}
+			<div class="grid h-full flex-1 grid-flow-row grid-cols-3 grid-rows-3 gap-6 pr-1 pb-2">
+				{#each primaryDevices as device (device.id)}
 					<DeviceCard
 						{device}
 						{commandOrder}

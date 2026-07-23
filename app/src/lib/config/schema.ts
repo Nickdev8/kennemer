@@ -25,6 +25,7 @@ export interface ShellyDevice {
 	id: string;
 	label: string;
 	type: string;
+	pushNumber?: number;
 	buttonMode?: DeviceButtonMode;
 	statusdeviceid?: string;
 	stateless?: boolean;

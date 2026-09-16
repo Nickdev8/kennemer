@@ -74,7 +74,7 @@ export const devices: ShellyDevice[] = [
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
-					payload: { id: '1789560289492' },
+					payload: { id: '1789564319962' },
 					requiresAuthKey: true
 				}
 			},
@@ -83,7 +83,7 @@ export const devices: ShellyDevice[] = [
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
-					payload: { id: '1789560313748' },
+					payload: { id: 'x' },
 					requiresAuthKey: true
 				}
 			}

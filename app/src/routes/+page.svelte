@@ -1615,7 +1615,7 @@
 				Alles uitschakelen?
 			</h2>
 			<p class="mt-3 text-base text-slate-700">
-				Dit triggert de scene Alles uit Alarm (geforceerd, dus maakt niet uit of de scene aan of uit staat).
+				LET OP: Dit zet enkel verlichting uit.
 			</p>
 			<div class="mt-6 grid grid-cols-2 gap-3">
 				<button

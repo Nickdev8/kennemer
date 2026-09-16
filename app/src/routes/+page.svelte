@@ -1607,7 +1607,9 @@
 			<h2 id="energy-confirmation-title" class="text-xl font-semibold text-slate-900">
 				Alles uitschakelen?
 			</h2>
-			<p class="mt-3 text-base text-slate-700">Ben je bevoegd om deze actie uit te voeren?</p>
+			<p class="mt-3 text-base text-slate-700">
+				Dit triggert de scene Alles uit Alarm (geforceerd, dus maakt niet uit of de scene aan of uit staat).
+			</p>
 			<div class="mt-6 grid grid-cols-2 gap-3">
 				<button
 					type="button"

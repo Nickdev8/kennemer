@@ -33,4 +33,23 @@ export const advancedDevices: ShellyDevice[] = [
 	}
 ];
 
-export const advancedTriggers: ShellyTrigger[] = [];
+export const advancedTriggers: ShellyTrigger[] = [
+	{
+		id: 'Overwerktimer-1',
+		label: 'Overwerktimer Hoofdgebouw',
+		sceneId: '1789568539275',
+		type: 'Scene'
+	},
+	{
+		id: 'Overwerktimer-2',
+		label: 'Overwerktimer Nieuwbouw',
+		sceneId: '1789568549892',
+		type: 'Scene'
+	},
+	{
+		id: 'Overwerktimer-3',
+		label: 'Overwerktimer Kopje',
+		sceneId: '1789568570313',
+		type: 'Scene'
+	}
+];

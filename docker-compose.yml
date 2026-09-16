@@ -23,6 +23,7 @@ services:
       PORT: "80"
       HOST: "0.0.0.0"
       KENNEMER_MAINTENANCE_URL: http://host.docker.internal:8787
+      DEVICE_STATE_PATH: /data/device-states.json
       HTTPS_PORT: "443" # optional: remove or change if you don't need TLS
       HTTPS_KEY_PATH: /certs/server.key
       HTTPS_CERT_PATH: /certs/server.crt
@@ -36,7 +37,12 @@ services:
     working_dir: /app
     env_file:
       - ./app/.env
+    volumes:
+      - kennemer-state:/data
     # volumes: # uncomment to mount your own TLS certs over the baked-in self-signed ones
     #   - ./certs/server.key:/certs/server.key:ro
     #   - ./certs/server.crt:/certs/server.crt:ro
     #   - ./certs/ca.pem:/certs/ca.pem:ro
+
+volumes:
+  kennemer-state:

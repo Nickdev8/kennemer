@@ -7,7 +7,7 @@ const shellySceneEndpoint =
 export const advancedDevices: ShellyDevice[] = [
 	{
 		id: 'advanced-vacantie-begin',
-		label: 'Vacantie mode',
+		label: 'Vakantie mode',
 		type: 'Scene',
 		buttonMode: 'toggle',
 		commands: {

@@ -1804,7 +1804,7 @@
 			<div class="flex min-h-0 flex-1 flex-col gap-6 px-6 py-6 lg:flex-row">
 				<section class="flex min-h-0 flex-1 flex-col">
 					<div class="mb-3 flex items-center justify-between">
-						<h3 class="text-base font-semibold text-slate-900">Tijdelijke knoppen</h3>
+						<h3 class="text-base font-semibold text-slate-900">Bedenk goed wat je met deze knoppen doet...</h3>
 						<span class="text-sm text-slate-500">{advancedControlCount} knoppen</span>
 					</div>
 					{#if advancedErrorMsg}

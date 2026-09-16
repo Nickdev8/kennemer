@@ -13,12 +13,12 @@ RUN useradd -r -s /usr/sbin/nologin nodeuser
 WORKDIR /app
 COPY --from=builder /work/build ./build
 COPY --from=builder /work/server.js ./server.js
-RUN mkdir -p /certs \
+RUN mkdir -p /certs /data \
 	&& openssl req -x509 -newkey rsa:2048 -sha256 -days 365 -nodes \
 		-keyout /certs/server.key -out /certs/server.crt \
 		-subj "/CN=localhost" \
 		-addext "subjectAltName=DNS:localhost,IP:127.0.0.1" \
-	&& chown -R nodeuser:nodeuser /certs
+	&& chown -R nodeuser:nodeuser /certs /data
 RUN chown -R nodeuser:nodeuser /app
 RUN setcap 'cap_net_bind_service=+ep' /usr/local/bin/node
 USER nodeuser

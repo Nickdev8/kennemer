@@ -15,9 +15,8 @@ export const advancedDevices: ShellyDevice[] = [
 
 export const advancedTriggers: ShellyTrigger[] = [
 	{
-		id: 'advanced-placeholder-trigger',
-		label: 'Trigger',
-		sceneId: '',
-		type: 'placeholder'
+		id: 'advanced-scene-1789564319962',
+		label: 'Scene 1789564319962',
+		sceneId: '1789564319962'
 	}
 ];

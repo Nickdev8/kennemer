@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	import DeviceCard from '$lib/components/device-card.svelte';
+	import TimedTriggerCard from '$lib/components/timed-trigger-card.svelte';
 	import TriggerCard from '$lib/components/trigger-card.svelte';
 	import { devices as configuredPrimaryDevices } from '$lib/config/devices';
-	import { advancedDevices, advancedTriggers } from '$lib/config/advanced';
+	import { advancedDevices, advancedTimedTriggers, advancedTriggers } from '$lib/config/advanced';
 	import { energyDevicesTrigger } from '$lib/config/triggers';
 	import { env as publicEnv } from '$env/dynamic/public';
 	import type { DeviceCommandKey, ShellyDevice } from '$lib/config/schema';
@@ -151,14 +152,14 @@
 			? [{ id: device.id, name: device.label, detail: issues.join(' · ') }]
 			: [];
 	});
-	const triggerConfigurationDiagnostics: DiagnosticEntry[] = advancedTriggers
+	const triggerConfigurationDiagnostics: DiagnosticEntry[] = [...advancedTriggers, ...advancedTimedTriggers]
 		.filter((trigger) => trigger.type !== 'placeholder' && !trigger.sceneId?.trim())
 		.map((trigger) => ({
 			id: trigger.id,
 			name: trigger.label,
 			detail: 'Scène-ID ontbreekt'
 		}));
-	const advancedControlCount = advancedDevices.length + advancedTriggers.length;
+	const advancedControlCount = advancedDevices.length + advancedTriggers.length + advancedTimedTriggers.length;
 
 	const wattageRoomId = -1;
 	let wattageLabel = `Room ${wattageRoomId}`;
@@ -1232,7 +1233,7 @@
 	}
 
 	function startTriggerTimer(triggerId: string) {
-		const trigger = advancedTriggers.find((item) => item.id === triggerId);
+		const trigger = advancedTimedTriggers.find((item) => item.id === triggerId);
 		const durationMs = Math.max(0, Number(trigger?.activeDurationMs) || 0);
 		if (durationMs === 0) return;
 
@@ -1872,6 +1873,13 @@
 								{/each}
 								{#each advancedTriggers as trigger (trigger.id)}
 									<TriggerCard
+										{trigger}
+										{loadingTriggerId}
+										on:trigger={({ detail }) => handleTriggerPress(detail.triggerId)}
+									/>
+								{/each}
+								{#each advancedTimedTriggers as trigger (trigger.id)}
+									<TimedTriggerCard
 										{trigger}
 										{loadingTriggerId}
 										activeUntil={triggerActiveUntilById.get(trigger.id) ?? null}

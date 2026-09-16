@@ -37,9 +37,12 @@ export interface ShellyDevice {
 export interface ShellyTrigger {
 	id: string;
 	label: string;
-	buttonLabel?: string;
-	activeDurationMs?: number;
 	type?: string;
 	typeBorder?: string;
 	sceneId: string;
+}
+
+export interface TimedShellyTrigger extends ShellyTrigger {
+	buttonLabel: string;
+	activeDurationMs: number;
 }

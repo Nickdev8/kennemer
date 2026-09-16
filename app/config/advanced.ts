@@ -1,5 +1,5 @@
 import { env } from '$env/dynamic/public';
-import type { ShellyDevice, ShellyTrigger } from '../src/lib/config/schema';
+import type { ShellyDevice, ShellyTrigger, TimedShellyTrigger } from '../src/lib/config/schema';
 
 const shellySceneEndpoint =
 	env.PUBLIC_SHELLY_SCENE_ENDPOINT ?? 'https://shelly-115-eu.shelly.cloud/scene/manual_run';
@@ -33,14 +33,15 @@ export const advancedDevices: ShellyDevice[] = [
 	}
 ];
 
-export const advancedTriggers: ShellyTrigger[] = [
+export const advancedTriggers: ShellyTrigger[] = [];
+
+export const advancedTimedTriggers: TimedShellyTrigger[] = [
 	{
 		id: 'Overwerktimer-1',
 		label: 'Overwerktimer Hoofdgebouw',
 		buttonLabel: 'Start timer',
 		activeDurationMs: 3_600_000,
 		sceneId: '1789568539275',
-		type: 'off'
 	},
 	{
 		id: 'Overwerktimer-2',
@@ -48,7 +49,6 @@ export const advancedTriggers: ShellyTrigger[] = [
 		buttonLabel: 'Start timer',
 		activeDurationMs: 3_600_000,
 		sceneId: '1789568549892',
-		type: 'off'
 	},
 	{
 		id: 'Overwerktimer-3',
@@ -56,6 +56,5 @@ export const advancedTriggers: ShellyTrigger[] = [
 		buttonLabel: 'Start timer',
 		activeDurationMs: 3_600_000,
 		sceneId: '1789568570313',
-		type: 'off'
 	}
 ];

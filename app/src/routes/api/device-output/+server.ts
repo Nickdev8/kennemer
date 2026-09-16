@@ -3,7 +3,7 @@ import { resolve as resolvePath } from 'node:path';
 
 import type { RequestHandler } from './$types';
 import { fetchShellyJson } from '$lib/server/shelly-http';
-import { fetchSwitchStatus } from '$lib/server/shelly-rpc';
+import { fetchShellyStatus } from '$lib/server/shelly-rpc';
 import { updateDeviceStateIfNewer } from '$lib/server/device-state-store';
 import { publishDeviceState } from '$lib/server/device-state-events';
 import type { DeviceCommandKey } from '$lib/config/schema';
@@ -71,14 +71,6 @@ function cachedIp(device: CachedDevice | null): string {
 		if (typeof value === 'string' && value.trim()) return value.trim();
 	}
 	return '';
-}
-
-function cachedChannel(device: CachedDevice | null, requestedChannel: number): number {
-	if (Number.isInteger(requestedChannel) && requestedChannel >= 0) {
-		return requestedChannel;
-	}
-	const parsed = Number(device?.channel ?? 0);
-	return Number.isInteger(parsed) && parsed >= 0 ? parsed : 0;
 }
 
 function splitStatusDeviceId(deviceId: string) {
@@ -226,18 +218,41 @@ async function saveOutputState(
 	};
 }
 
-async function fetchLocalDeviceOutput(
-	deviceId: string,
+async function fetchLocalDeviceOutputs(
+	deviceIds: string[],
 	cache: DeviceCache | null
-): Promise<OutputState | null> {
-	const { baseDeviceId, channel } = splitStatusDeviceId(deviceId);
-	const cachedDevice = resolveCachedDevice(cache, baseDeviceId);
-	const ip = cachedIp(cachedDevice);
-	if (!ip) return null;
+): Promise<Array<{ deviceId: string; state: OutputState | null }>> {
+	const deviceIdsByBaseId = new Map<string, string[]>();
+	for (const deviceId of deviceIds) {
+		const { baseDeviceId } = splitStatusDeviceId(deviceId);
+		const groupedIds = deviceIdsByBaseId.get(baseDeviceId) ?? [];
+		groupedIds.push(deviceId);
+		deviceIdsByBaseId.set(baseDeviceId, groupedIds);
+	}
 
-	const localStatus = await fetchSwitchStatus(ip, cachedChannel(cachedDevice, channel));
-	if (typeof localStatus?.output !== 'boolean') return null;
-	return saveOutputState(deviceId, localStatus.output, 'status-lan');
+	const groupedResults = await Promise.all(
+		Array.from(deviceIdsByBaseId.entries()).map(async ([baseDeviceId, groupedIds]) => {
+			const cachedDevice = resolveCachedDevice(cache, baseDeviceId);
+			const ip = cachedIp(cachedDevice);
+			if (!ip) {
+				return groupedIds.map((deviceId) => ({ deviceId, state: null }));
+			}
+
+			const localStatus = await fetchShellyStatus(ip);
+			return Promise.all(
+				groupedIds.map(async (deviceId) => {
+					const { channel } = splitStatusDeviceId(deviceId);
+					const output = extractOutput(localStatus, channel);
+					return {
+						deviceId,
+						state: output === null ? null : await saveOutputState(deviceId, output, 'status-lan')
+					};
+				})
+			);
+		})
+	);
+
+	return groupedResults.flat();
 }
 
 async function fetchCloudDeviceOutput(
@@ -275,17 +290,8 @@ export const GET: RequestHandler = async ({ url }) => {
 		lastCloudRequestAt = Date.now();
 	};
 
-	const localResults = await Promise.all(
-		ids.map(async (deviceId) => {
-			try {
-				return {
-					deviceId,
-					state: await fetchLocalDeviceOutput(deviceId, cache)
-				};
-			} catch {
-				return { deviceId, state: null };
-			}
-		})
+	const localResults = await fetchLocalDeviceOutputs(ids, cache).catch(() =>
+		ids.map((deviceId) => ({ deviceId, state: null }))
 	);
 
 	const cloudFallbackIds: string[] = [];

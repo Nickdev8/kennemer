@@ -241,7 +241,7 @@
 	const normalWattageRefreshMs = 5 * 60 * 1000;
 	const fastWattageRefreshMs = 2 * 60 * 1000;
 	const fastWattageWindowMs = 10 * 60 * 1000;
-	const liveStatusRefreshMs = 5_000;
+	const liveStatusRefreshMs = 2_500;
 	const statusDeviceWarningDurationMs = 7_000;
 	const statusDeviceWarningFailureThreshold = 2;
 	const statusFollowupDelaysMs = [1200, 2500, 5000, 10000, 20000, 45000, 90000];
@@ -651,14 +651,21 @@
 		statusFollowupTimeouts = [];
 	}
 
+	function statusDeviceBaseId(deviceId: string) {
+		return deviceId.trim().replace(/_\d+$/, '').toLowerCase();
+	}
+
 	function startStatusFollowup(statusDeviceId: string) {
 		const cleanDeviceId = statusDeviceId.trim();
 		if (!cleanDeviceId || displayDimmed) return;
 		clearStatusFollowups();
+		const relatedStatusDeviceIds = statusDeviceIds.filter(
+			(deviceId) => statusDeviceBaseId(deviceId) === statusDeviceBaseId(cleanDeviceId)
+		);
 
 		statusFollowupTimeouts = statusFollowupDelaysMs.map((delay) =>
 			setTimeout(() => {
-				void refreshStatusDevices([cleanDeviceId]);
+				void refreshStatusDevices(relatedStatusDeviceIds);
 			}, delay)
 		);
 	}

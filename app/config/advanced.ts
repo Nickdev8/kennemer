@@ -8,7 +8,7 @@ export const advancedDevices: ShellyDevice[] = [
 	{
 		id: 'advanced-vacantie-begin',
 		label: 'Vakantie mode',
-		type: 'Scene',
+		type: 'Advanced',
 		buttonMode: 'toggle',
 		commands: {
 			on: {

@@ -37,19 +37,25 @@ export const advancedTriggers: ShellyTrigger[] = [
 	{
 		id: 'Overwerktimer-1',
 		label: 'Overwerktimer Hoofdgebouw',
+		buttonLabel: 'Start timer',
+		activeDurationMs: 3_600_000,
 		sceneId: '1789568539275',
-		type: 'Scene'
+		type: 'off'
 	},
 	{
 		id: 'Overwerktimer-2',
 		label: 'Overwerktimer Nieuwbouw',
+		buttonLabel: 'Start timer',
+		activeDurationMs: 3_600_000,
 		sceneId: '1789568549892',
-		type: 'Scene'
+		type: 'off'
 	},
 	{
 		id: 'Overwerktimer-3',
 		label: 'Overwerktimer Kopje',
+		buttonLabel: 'Start timer',
+		activeDurationMs: 3_600_000,
 		sceneId: '1789568570313',
-		type: 'Scene'
+		type: 'off'
 	}
 ];

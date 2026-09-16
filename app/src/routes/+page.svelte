@@ -217,6 +217,8 @@
 	let stateStream: EventSource | null = null;
 	let stateStreamReconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 	let loadingTriggerId: string | null = null;
+	let triggerActiveUntilById = new Map<string, number>();
+	const triggerActiveTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 	let energyTriggerError = '';
 	let showEnergyTriggerConfirmation = false;
 	let browserOnline = true;
@@ -1214,6 +1216,7 @@
 		let succeeded = false;
 		try {
 			await triggerAction(triggerId);
+			startTriggerTimer(triggerId);
 			succeeded = true;
 			if (advancedUnlocked && showAdvancedPanel) {
 				markAdvancedActivity();
@@ -1226,6 +1229,29 @@
 				requestWattageRefresh();
 			}
 		}
+	}
+
+	function startTriggerTimer(triggerId: string) {
+		const trigger = advancedTriggers.find((item) => item.id === triggerId);
+		const durationMs = Math.max(0, Number(trigger?.activeDurationMs) || 0);
+		if (durationMs === 0) return;
+
+		const activeUntil = Date.now() + durationMs;
+		const nextActiveUntilById = new Map(triggerActiveUntilById);
+		nextActiveUntilById.set(triggerId, activeUntil);
+		triggerActiveUntilById = nextActiveUntilById;
+
+		const existingTimeout = triggerActiveTimeouts.get(triggerId);
+		if (existingTimeout) clearTimeout(existingTimeout);
+		triggerActiveTimeouts.set(
+			triggerId,
+			setTimeout(() => {
+				const next = new Map(triggerActiveUntilById);
+				next.delete(triggerId);
+				triggerActiveUntilById = next;
+				triggerActiveTimeouts.delete(triggerId);
+			}, durationMs)
+		);
 	}
 
 	async function handleEnergyTriggerPress() {
@@ -1343,6 +1369,8 @@
 		}
 		transientActiveTimeouts.forEach((timeout) => clearTimeout(timeout));
 		transientActiveTimeouts.clear();
+		triggerActiveTimeouts.forEach((timeout) => clearTimeout(timeout));
+		triggerActiveTimeouts.clear();
 		clearUpdatePoll();
 		clearAdvancedIdleTimer();
 		clearDisplayDimTimer();
@@ -1846,6 +1874,7 @@
 									<TriggerCard
 										{trigger}
 										{loadingTriggerId}
+										activeUntil={triggerActiveUntilById.get(trigger.id) ?? null}
 										on:trigger={({ detail }) => handleTriggerPress(detail.triggerId)}
 									/>
 								{/each}

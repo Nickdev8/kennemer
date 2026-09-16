@@ -18,7 +18,7 @@ export const devices: ShellyDevice[] = [
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
-					payload: { id: '1781190610396' },
+					payload: { id: '1789560412180' },
 					requiresAuthKey: true
 				}
 			},
@@ -27,7 +27,7 @@ export const devices: ShellyDevice[] = [
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
-					payload: { id: '1784811195554' },
+					payload: { id: '1789560433138' },
 					requiresAuthKey: true
 				}
 			}
@@ -46,7 +46,7 @@ export const devices: ShellyDevice[] = [
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
-					payload: { id: 'x' },
+					payload: { id: '1789560339941' },
 					requiresAuthKey: true
 				}
 			},
@@ -55,7 +55,7 @@ export const devices: ShellyDevice[] = [
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
-					payload: { id: 'x' },
+					payload: { id: '1789560362113' },
 					requiresAuthKey: true
 				}
 			}
@@ -74,7 +74,7 @@ export const devices: ShellyDevice[] = [
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
-					payload: { id: 'x' },
+					payload: { id: '1789560289492' },
 					requiresAuthKey: true
 				}
 			},
@@ -83,7 +83,7 @@ export const devices: ShellyDevice[] = [
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
-					payload: { id: 'x' },
+					payload: { id: '1789560313748' },
 					requiresAuthKey: true
 				}
 			}
@@ -102,7 +102,7 @@ export const devices: ShellyDevice[] = [
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
-					payload: { id: 'x' },
+					payload: { id: '1789560234895' },
 					requiresAuthKey: true
 				}
 			},
@@ -111,7 +111,7 @@ export const devices: ShellyDevice[] = [
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
-					payload: { id: 'x' },
+					payload: { id: '1789560262228' },
 					requiresAuthKey: true
 				}
 			}
@@ -151,7 +151,7 @@ export const devices: ShellyDevice[] = [
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
-					payload: { id: 'x' },
+					payload: { id: '1789560154701' },
 					requiresAuthKey: true
 				}
 			},
@@ -160,7 +160,7 @@ export const devices: ShellyDevice[] = [
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
-					payload: { id: 'x' },
+					payload: { id: '1789560202028' },
 					requiresAuthKey: true
 				}
 			}
@@ -179,7 +179,7 @@ export const devices: ShellyDevice[] = [
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
-					payload: { id: 'x' },
+					payload: { id: '1789559627914' },
 					requiresAuthKey: true
 				}
 			},
@@ -188,7 +188,7 @@ export const devices: ShellyDevice[] = [
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
-					payload: { id: 'x' },
+					payload: { id: '1789559664484' },
 					requiresAuthKey: true
 				}
 			}
@@ -207,7 +207,7 @@ export const devices: ShellyDevice[] = [
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
-					payload: { id: 'x' },
+					payload: { id: '1789559514915' },
 					requiresAuthKey: true
 				}
 			},
@@ -216,7 +216,7 @@ export const devices: ShellyDevice[] = [
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
-					payload: { id: 'x' },
+					payload: { id: '1789559559159' },
 					requiresAuthKey: true
 				}
 			}

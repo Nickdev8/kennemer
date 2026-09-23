@@ -327,7 +327,7 @@
 <section class={cardClassName} style={cardStyle}>
 	<div class="flex items-center justify-between gap-4">
 		<div class="min-w-0">
-			<h3 class="truncate text-lg font-semibold tracking-tight text-slate-800 sm:text-xl">
+			<h3 class="truncate text-lg font-semibold text-slate-800">
 				{device.label}
 			</h3>
 			{#if showType}

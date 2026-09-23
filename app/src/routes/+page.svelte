@@ -118,7 +118,7 @@
 		publicEnv.PUBLIC_ADVANCED_PIN
 	);
 	const advancedPatternConfigured = acceptedAdvancedPatterns.length > 0;
-	const patternNodes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
+	const pinNodes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
 	const wattageDebug = readBooleanFlag(publicEnv.PUBLIC_DEBUG_WATTAGE);
 
 	export let data: PageData;
@@ -243,10 +243,7 @@
 	let showSceneIdEditor = false;
 	let advancedUnlocked = false;
 	let advancedAccessError = '';
-	let patternSequence: number[] = [];
-	let patternActive = false;
-	let patternStatus: 'idle' | 'success' | 'error' = 'idle';
-	let activePointerId: number | null = null;
+	let advancedPin = '';
 	let advancedIdleTimeout: ReturnType<typeof setTimeout> | null = null;
 	let advancedPanelPinned = false;
 	let displayDimTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -923,14 +920,14 @@
 			return;
 		}
 		advancedAccessError = '';
-		cancelPattern();
+		clearAdvancedPin();
 		showAdvancedPrompt = true;
 		markAdvancedActivity();
 	}
 
 	function closeAdvancedPrompt() {
 		showAdvancedPrompt = false;
-		cancelPattern();
+		clearAdvancedPin();
 		advancedAccessError = '';
 		clearAdvancedIdleTimer();
 	}
@@ -939,86 +936,43 @@
 		showAdvancedPanel = false;
 		showSceneIdEditor = false;
 		advancedPanelPinned = false;
-		cancelPattern();
+		clearAdvancedPin();
 		advancedAccessError = '';
 		advancedUnlocked = false;
 		cacheMessage = '';
 		clearAdvancedIdleTimer();
 	}
 
-	function addNodeToPattern(node: number) {
-		if (!patternSequence.includes(node)) {
-			patternSequence = [...patternSequence, node];
-		}
-		markAdvancedActivity();
-	}
-
-	function startPattern(node: number, event: PointerEvent | TouchEvent) {
-		if (!advancedPatternConfigured) {
-			advancedAccessError = 'Stel PUBLIC_ADVANCED_PATTERN in je .env bestand in.';
-			return;
-		}
-		event.preventDefault();
-		if ('pointerId' in event) {
-			activePointerId = event.pointerId;
-			(event.target as HTMLElement | null)?.setPointerCapture?.(event.pointerId);
-		}
-		patternActive = true;
-		patternStatus = 'idle';
-		addNodeToPattern(node);
-		advancedAccessError = '';
-		markAdvancedActivity();
-	}
-
-	function extendPattern(node: number, event: PointerEvent | TouchEvent) {
-		if (!patternActive) return;
-		event.preventDefault();
-		addNodeToPattern(node);
-		markAdvancedActivity();
-	}
-
-	function stopPattern(event?: Event) {
-		if (!patternActive) return;
-		patternActive = false;
-	}
-
-	function submitPattern(event?: Event) {
+	function submitAdvancedPin(event?: Event) {
 		event?.preventDefault();
-		if (patternSequence.length === 0) return;
+		if (!advancedPin.trim()) return;
 
-		if (!advancedPatternConfigured) {
-			advancedAccessError = 'Stel PUBLIC_ADVANCED_PATTERN in je .env bestand in.';
-			patternSequence = [];
-			return;
-		}
-
-		const submitted = patternSequence.join('');
-		patternActive = false;
-
-		if (acceptedAdvancedPatterns.includes(submitted)) {
+		if (advancedPatternConfigured && acceptedAdvancedPatterns.includes(advancedPin.trim())) {
 			advancedUnlocked = true;
 			advancedPanelPinned = false;
 			showAdvancedPrompt = false;
 			advancedAccessError = '';
-			patternStatus = 'success';
+			advancedPin = '';
 			showAdvancedPanel = true;
 			markAdvancedActivity();
 			void checkGitUpdate();
 		} else {
-			patternStatus = 'error';
-			advancedAccessError = 'Onjuist patroon. Probeer het opnieuw.';
-			setTimeout(() => {
-				patternStatus = 'idle';
-			}, 600);
+			advancedErrorMsg = '';
+			advancedAccessError = 'Onjuiste PIN. Probeer het opnieuw.';
+			advancedPin = '';
 		}
 	}
 
-	function cancelPattern(event?: Event) {
+	function appendAdvancedPinDigit(digit: number) {
+		if (advancedPin.length >= 32) return;
+		advancedPin += String(digit);
+		advancedAccessError = '';
+		markAdvancedActivity();
+	}
+
+	function clearAdvancedPin(event?: Event) {
 		event?.preventDefault();
-		patternActive = false;
-		patternSequence = [];
-		patternStatus = 'idle';
-		activePointerId = null;
+		advancedPin = '';
 		markAdvancedActivity();
 	}
 
@@ -1782,16 +1736,16 @@
 			on:keydown|stopPropagation
 		>
 			<div class="space-y-1">
-				<h2 id="advanced-prompt-title" class="text-lg font-semibold text-slate-900">Patroon vereist</h2>
+				<h2 id="advanced-prompt-title" class="text-lg font-semibold text-slate-900">PIN vereist</h2>
 				<p class="text-sm text-slate-600">
-					Verbind het patroon om geavanceerde bediening te ontgrendelen.
+					Vul de PIN in om geavanceerde bediening te ontgrendelen.
 				</p>
 			</div>
 			{#if !advancedPatternConfigured}
 				<p
 					class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
 				>
-					Stel PUBLIC_ADVANCED_PATTERN in je .env bestand in om toegang te krijgen.
+					Stel PUBLIC_ADVANCED_PATTERN of PUBLIC_ADVANCED_PIN in je .env bestand in.
 				</p>
 			{/if}
 			{#if advancedAccessError}
@@ -1801,88 +1755,32 @@
 					{advancedAccessError}
 				</p>
 			{/if}
-			<div
-				class="space-y-4"
-				role="application"
-				aria-label="Ontgrendelpatroon"
-				tabindex="-1"
-				on:pointerup={(event) => {
-					stopPattern(event);
-					activePointerId = null;
-				}}
-				on:mouseup={stopPattern}
-				on:pointercancel={cancelPattern}
-				on:pointermove={(event) => {
-					if (!patternActive) return;
-					if (activePointerId !== null && event.pointerId !== activePointerId) return;
-					const target = document.elementFromPoint(
-						event.clientX,
-						event.clientY
-					) as HTMLElement | null;
-					const nodeValue = target?.dataset?.node;
-					if (nodeValue !== undefined) {
-						extendPattern(Number(nodeValue), event);
-					}
-				}}
-			>
-				<div class="grid grid-cols-3 justify-items-center gap-4 select-none">
-					{#each patternNodes as node (node)}
-						{@const activeIndex = patternSequence.indexOf(node)}
-						<button
-							type="button"
-							class={`relative flex h-16 w-16 items-center justify-center rounded-full border-2 transition ${
-								patternStatus === 'error'
-									? 'border-rose-400'
-									: patternStatus === 'success'
-										? 'border-emerald-400'
-										: 'border-slate-300'
-							} ${
-								activeIndex >= 0
-									? 'bg-emerald-500 text-white shadow-lg shadow-emerald-200'
-									: 'bg-white text-slate-500'
-							} ${node === 0 ? 'col-span-3 justify-self-center' : ''}`}
-							data-node={node}
-							on:pointerdown={(event) => startPattern(node, event)}
-							on:pointerenter={(event) => extendPattern(node, event)}
-						>
-							<span class="text-lg font-semibold">{node}</span>
-							{#if activeIndex >= 0}
-								<span
-									class="pointer-events-none absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white text-xs font-bold text-emerald-700"
-								>
-									{activeIndex + 1}
-								</span>
-							{/if}
-						</button>
-					{/each}
-				</div>
-				<div class="flex items-center justify-between gap-3">
+			<div class="grid grid-cols-3 justify-items-center gap-4 select-none" aria-label="PIN toetsenbord">
+				{#each pinNodes as node (node)}
 					<button
 						type="button"
-						class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-						on:click={closeAdvancedPrompt}
+						class={`flex h-16 w-16 items-center justify-center rounded-full border-2 text-lg font-semibold transition-colors ${
+							advancedPin.includes(String(node))
+								? 'border-slate-800 bg-slate-800 text-white'
+								: 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100'
+						} ${node === 0 ? 'col-span-3 justify-self-center' : ''}`}
+						aria-label={`PIN ${node}`}
+						on:click={() => appendAdvancedPinDigit(node)}
 					>
-						Annuleren
+						{node}
 					</button>
-					<div class="flex items-center gap-3">
-						<button
-							type="button"
-						class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
-							on:click={cancelPattern}
-							disabled={patternSequence.length === 0}
-						>
-							Reset
-						</button>
-						<button
-							type="button"
-						class="rounded-md bg-slate-800 px-4 py-2 text-sm font-semibold text-white transition-colors duration-150 hover:bg-slate-900 disabled:opacity-60"
-							on:click={submitPattern}
-							disabled={!advancedPatternConfigured || patternSequence.length === 0}
-						>
-							Ontgrendel
-						</button>
-					</div>
-				</div>
+				{/each}
+			</div>
+			<div class="flex justify-end gap-2">
+				<button type="button" class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100" on:click={closeAdvancedPrompt}>
+					Annuleren
+				</button>
+				<button type="button" class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60" on:click={clearAdvancedPin} disabled={!advancedPin}>
+					Reset
+				</button>
+				<button type="button" class="rounded-md bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-900 disabled:opacity-60" on:click={submitAdvancedPin} disabled={!advancedPin.trim()}>
+					Ontgrendel
+				</button>
 			</div>
 		</div>
 	</div>
@@ -2108,10 +2006,8 @@
 						</div>
 					</div>
 
-					<div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-						<p class="text-xs font-semibold tracking-wide text-slate-500 uppercase">
-							Wattage diagnostiek
-						</p>
+					<div class="rounded-lg border border-slate-300 bg-white p-4">
+						<h3 class="text-base font-semibold text-slate-900">Wattage diagnostiek</h3>
 						{#if wattageDisabled}
 							<p class="mt-3 text-sm text-slate-600">Wattage is uitgeschakeld.</p>
 						{:else if wattageError}
@@ -2138,9 +2034,9 @@
 					</div>
 
 					{#if wattageDebug}
-						<details class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+						<details class="rounded-lg border border-slate-300 bg-white p-4">
 							<summary
-								class="cursor-pointer text-xs font-semibold tracking-wide text-slate-500 uppercase"
+								class="cursor-pointer text-sm font-semibold text-slate-700"
 							>
 								Wattage debug lijst
 							</summary>

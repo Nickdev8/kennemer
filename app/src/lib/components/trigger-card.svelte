@@ -29,7 +29,7 @@
 </script>
 
 <section class={baseCardClass}>
-	<p class="text-sm font-semibold text-slate-700">{trigger.label}</p>
+	<p class="text-lg font-semibold text-slate-800">{trigger.label}</p>
 	<button
 		type="button"
 		class={baseButtonClass}

@@ -59,7 +59,7 @@ rate limits before shortening it.
 - Pinning is temporary; reopening the panel starts unpinned.
 - An update keeps the advanced panel from disappearing and then covers the
   whole page with a clear progress view.
-- When idle, the black overlay is visually at zero brightness. The wake touch
+- When idle, the black overlay shows a small muted sleep marker. The wake touch
   is consumed and cannot press a button beneath it.
 - While the idle overlay is active, pause device-status, connectivity, wattage,
   hardware polling, and the local SSE stream. Wake must immediately refresh

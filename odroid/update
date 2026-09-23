@@ -7,8 +7,28 @@ IMAGE=kennemer:prod
 ROLLBACK_IMAGE=kennemer:rollback
 MIN_FREE_MB=2048
 CANDIDATE_DIR=/var/lib/kennemer/candidate
+RUNTIME_DIR=$REPO/runtime
+SCENE_OVERRIDE_FILE=$RUNTIME_DIR/scene-overrides.json
+SCENE_OVERRIDE_BACKUP=$RUNTIME_DIR/scene-overrides.json.bak
 
 cd "$REPO"
+
+prepare_runtime_config() {
+	install -d -m 0777 "$RUNTIME_DIR"
+	if [[ ! -f "$SCENE_OVERRIDE_FILE" ]]; then
+		if docker compose exec -T web test -f /data/scene-overrides.json >/dev/null 2>&1; then
+			docker compose cp web:/data/scene-overrides.json "$SCENE_OVERRIDE_FILE"
+		else
+			printf '%s\n' '{"version":1,"revision":"44136fa355b3678a","updatedAt":1,"overrides":{}}' > "$SCENE_OVERRIDE_FILE"
+		fi
+		chmod 0666 "$SCENE_OVERRIDE_FILE"
+	fi
+	if [[ -f "$SCENE_OVERRIDE_BACKUP" ]]; then
+		chmod 0666 "$SCENE_OVERRIDE_BACKUP"
+	fi
+}
+
+prepare_runtime_config
 
 log() {
 	printf '[%s] %s\n' "$(date --iso-8601=seconds)" "$*"

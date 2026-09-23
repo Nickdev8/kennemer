@@ -10,6 +10,10 @@ The checkout is expected at `/opt/kennemer`. `install-maintenance-links`
 creates stable commands in `/usr/local/sbin` that point back to scripts in this
 checkout.
 
+Runtime scene-ID overrides are stored at
+`/opt/kennemer/runtime/scene-overrides.json`. This directory is outside the
+Git-managed source and survives update worktrees.
+
 Main operator commands:
 
 - `update`: deploy the latest `origin/main`.

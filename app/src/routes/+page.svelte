@@ -1681,7 +1681,26 @@
 			aria-label="Scherm actief maken"
 			on:click={wakeDisplay}
 			on:keydown={wakeDisplay}
-		></button>
+		>
+			<svg
+				class="pointer-events-none h-20 w-28 text-emerald-800/70"
+				viewBox="0 0 120 80"
+				fill="none"
+				aria-hidden="true"
+			>
+				<path
+					d="M48 10c-17 5-27 21-23 37 4 17 21 27 38 22 9-3 16-9 20-17-7 3-15 3-22-1-15-8-20-26-13-41z"
+					fill="currentColor"
+				/>
+				<path
+					d="M78 18h14L78 33h15M91 43h10L91 56h11"
+					stroke="currentColor"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					stroke-width="4"
+				/>
+			</svg>
+		</button>
 	{/if}
 </main>
 

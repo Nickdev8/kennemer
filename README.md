@@ -64,9 +64,10 @@ Let bij een gewone knop op:
 
 In het paneel **Geavanceerde bediening** kunnen scène-ID's runtime worden
 aangepast. Hiervoor moet `KENNEMER_CONFIG_EDIT_PIN` in `app/.env` staan. De
-wijzigingen worden in de Docker-volume onder `/data` bewaard en blijven dus
-staan na een update. Alleen bestaande scène-ID's kunnen worden aangepast; de
-endpoint en Shelly-sleutel blijven serverconfiguratie.
+wijzigingen worden op de ODROID bewaard in
+`/opt/kennemer/runtime/scene-overrides.json` en blijven dus staan na een
+update. Alleen bestaande scène-ID's kunnen worden aangepast; de endpoint en
+Shelly-sleutel blijven serverconfiguratie.
 
 Test een gewijzigde scene niet zomaar op locatie: een API-call kan echte
 verlichting of schermen bedienen.

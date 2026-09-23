@@ -6,3 +6,4 @@ yarn.lock
 app/device-states.json
 .last_update
 update.log
+runtime/

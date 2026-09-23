@@ -167,7 +167,8 @@ Trigger cards use `POST /triggers`. Server routes only accept IDs and commands
 that exist in config; clients cannot submit arbitrary URLs.
 
 Scene IDs may be overridden from the authenticated advanced editor. Overrides
-are stored under `/data`, validated against the checked-in control list, and
+are stored on the ODROID at `/opt/kennemer/runtime/scene-overrides.json`,
+validated against the checked-in control list, and
 never change endpoints, credentials, or control metadata. Saving an override
 does not execute a scene.
 
@@ -185,7 +186,7 @@ provides a LAN target.
 - `/api/hardware` proxies the host maintenance service and reports whether the
   expected touchscreen USB ID is present.
 - The physical display is deliberately kept awake. After the configured idle
-  timeout, the web UI draws a black overlay (zero visible brightness). The
+ timeout, the web UI draws a black overlay with a small muted sleep marker. The
   first touch only wakes the UI and must never activate the control underneath.
   While the overlay is active, device-status, cloud-connectivity, wattage, and
   touchscreen polling plus the local SSE stream pause. Waking performs one

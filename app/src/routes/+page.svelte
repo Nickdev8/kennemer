@@ -279,7 +279,7 @@
 	const fastWattageRefreshMs = 2 * 60 * 1000;
 	const fastWattageWindowMs = 10 * 60 * 1000;
 	const liveStatusRefreshMs = 2_500;
-	const statusDeviceWarningDurationMs = 7_000;
+	const statusDeviceWarningDurationMs = 15_000;
 	const statusDeviceWarningFailureThreshold = 2;
 	const statusFollowupDelaysMs = [1200, 2500, 5000, 10000, 20000, 45000, 90000];
 	const connectivityRefreshMs = 15000;

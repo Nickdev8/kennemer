@@ -273,7 +273,7 @@
 	const normalWattageRefreshMs = 5 * 60 * 1000;
 	const fastWattageRefreshMs = 2 * 60 * 1000;
 	const fastWattageWindowMs = 10 * 60 * 1000;
-	const liveStatusRefreshMs = 5_000;
+	const liveStatusRefreshMs = 3_000;
 	const statusFollowupDelaysMs = [1200, 2500, 5000, 10000, 20000, 45000, 90000];
 	const connectivityRefreshMs = 15000;
 	const connectivityFailureThreshold = 2;
@@ -564,6 +564,7 @@
 	let statusAutomaticRefreshTimeout: ReturnType<typeof setTimeout> | null = null;
 	let statusRefreshLoading = false;
 	let statusFollowupTimeouts: ReturnType<typeof setTimeout>[] = [];
+	let deviceStateRefreshInterval: ReturnType<typeof setInterval> | null = null;
 	let fastWattageRefreshUntil = 0;
 
 	function scheduleAutomaticWattageRefresh() {
@@ -621,10 +622,6 @@
 	) {
 		const nextStatusStates = new Map(statusDeviceStates);
 		const nextDeviceStates = new Map(deviceStates);
-
-		unavailableIds.forEach((id) => {
-			nextStatusStates.delete(id);
-		});
 
 		Object.entries(states).forEach(([id, entry]) => {
 			if (entry?.lastCommand === 'on' || entry?.lastCommand === 'off') {
@@ -810,20 +807,42 @@
 		deviceStates = next;
 	}
 
-	function applyDeviceStates(states: Record<string, { lastCommand: DeviceCommandKey }>) {
+	function applyDeviceStates(
+		states: Record<string, { lastCommand: DeviceCommandKey; source?: string }>
+	) {
 		const next = new Map<string, DeviceCommandKey>();
+		const nextStatusStates = new Map(statusDeviceStates);
 		Object.entries(states).forEach(([id, entry]) => {
 			if (entry?.lastCommand) {
 				next.set(id, entry.lastCommand);
+				const statusDeviceId = statusDeviceIds.includes(id)
+					? id
+					: deviceById.get(id)?.statusdeviceid;
+				if (statusDeviceId && (entry.source === 'status-lan' || entry.source === 'status-poll')) {
+					nextStatusStates.set(statusDeviceId, entry.lastCommand);
+				} else if (statusDeviceId && entry.source === 'action') {
+					nextStatusStates.delete(statusDeviceId);
+				}
 			}
 		});
 		deviceStates = next;
+		statusDeviceStates = nextStatusStates;
 	}
 
 	function applyDeviceStateUpdate(deviceId: string, command: DeviceCommandKey, source?: string) {
 		const next = new Map(deviceStates);
 		next.set(deviceId, command);
 		deviceStates = next;
+
+		if (source === 'action') {
+			const statusDeviceId = deviceById.get(deviceId)?.statusdeviceid;
+			if (statusDeviceId) {
+				const nextStatusStates = new Map(statusDeviceStates);
+				nextStatusStates.delete(statusDeviceId);
+				statusDeviceStates = nextStatusStates;
+			}
+			return;
+		}
 
 		if (source === 'status-lan' || source === 'status-poll') {
 			const statusDeviceId = statusDeviceIds.includes(deviceId)
@@ -842,7 +861,7 @@
 			if (!res.ok) return;
 			const payload = (await res.json()) as {
 				ok: boolean;
-				states: Record<string, { lastCommand: DeviceCommandKey }>;
+				states: Record<string, { lastCommand: DeviceCommandKey; source?: string }>;
 			};
 			if (!payload?.ok || !payload.states) return;
 			applyDeviceStates(payload.states);
@@ -1337,6 +1356,10 @@
 			clearTimeout(statusAutomaticRefreshTimeout);
 			statusAutomaticRefreshTimeout = null;
 		}
+		if (deviceStateRefreshInterval) {
+			clearInterval(deviceStateRefreshInterval);
+			deviceStateRefreshInterval = null;
+		}
 		clearStatusFollowups();
 		if (stateStream) {
 			stateStream.close();
@@ -1357,9 +1380,13 @@
 		if (!hardwareInterval) {
 			hardwareInterval = setInterval(() => void checkHardware(), hardwareRefreshMs);
 		}
+		if (!deviceStateRefreshInterval) {
+			deviceStateRefreshInterval = setInterval(() => void loadDeviceStates(), 5_000);
+		}
 		startStateStream();
 
 		if (refreshImmediately) {
+			void loadDeviceStates();
 			void checkConnectivity();
 			void checkHardware();
 			void refreshStatusDevices();

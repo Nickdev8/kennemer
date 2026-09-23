@@ -23,7 +23,17 @@ export function authorizeSceneConfig(
 	origin: string
 ): SceneConfigAuthFailure | null {
 	const requestOrigin = request.headers.get('origin');
-	if (requestOrigin && requestOrigin !== origin) {
+	const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
+	const requestHost = forwardedHost || request.headers.get('host');
+	let originHostMatchesRequest = false;
+	if (requestOrigin && requestHost) {
+		try {
+			originHostMatchesRequest = new URL(requestOrigin).host === requestHost;
+		} catch {
+			originHostMatchesRequest = false;
+		}
+	}
+	if (requestOrigin && requestOrigin !== origin && !originHostMatchesRequest) {
 		return { status: 403, error: 'Ongeldige aanvraag.' };
 	}
 

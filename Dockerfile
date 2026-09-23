@@ -12,14 +12,13 @@ FROM node:24-bookworm AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends libcap2-bin openssl && rm -rf /var/lib/apt/lists/*
 RUN useradd -r -s /usr/sbin/nologin nodeuser
 WORKDIR /app
-COPY --from=builder /work/build ./build
-COPY --from=builder /work/server.js ./server.js
-COPY --from=builder /work/node_modules ./node_modules
+COPY --from=builder --chown=nodeuser:nodeuser /work/build ./build
+COPY --from=builder --chown=nodeuser:nodeuser /work/server.js ./server.js
+COPY --from=builder --chown=nodeuser:nodeuser /work/node_modules ./node_modules
 COPY container-entrypoint.sh /usr/local/bin/kennemer-entrypoint
 RUN mkdir -p /certs /data \
 	&& chmod 755 /usr/local/bin/kennemer-entrypoint \
 	&& chown -R nodeuser:nodeuser /certs /data
-RUN chown -R nodeuser:nodeuser /app
 RUN setcap 'cap_net_bind_service=+ep' /usr/local/bin/node
 USER nodeuser
 ENV HOST=0.0.0.0

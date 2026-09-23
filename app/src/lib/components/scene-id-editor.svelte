@@ -23,6 +23,7 @@
 	}>();
 	let entries: SceneEditorEntry[] = [];
 	let originalValues: Record<string, string> = {};
+	let defaultValues: Record<string, string> = {};
 	let values: Record<string, string> = {};
 	let revision = '';
 	let editPin = '';
@@ -64,13 +65,18 @@
 		revision = payload.revision ?? '';
 		editable = payload.editable === true;
 		const next: Record<string, string> = {};
+		const defaults: Record<string, string> = {};
 		for (const entry of entries) {
 			for (const [slot, value] of Object.entries(entry.slots)) {
 				next[fieldKey(entry.controlId, slot as SceneSlot)] = value ?? '';
 			}
+			for (const [slot, value] of Object.entries(entry.defaults)) {
+				defaults[fieldKey(entry.controlId, slot as SceneSlot)] = value ?? '';
+			}
 		}
 		values = next;
 		originalValues = { ...next };
+		defaultValues = defaults;
 	}
 
 	async function loadConfig() {
@@ -94,7 +100,7 @@
 	}
 
 	function resetValue(key: string) {
-		values = { ...values, [key]: originalValues[key] ?? '' };
+		values = { ...values, [key]: defaultValues[key] ?? '' };
 	}
 
 	function collectChanges() {
@@ -279,15 +285,19 @@
 										{#each Object.entries(entry.slots) as [slot, baseValue] (slot)}
 											{@const key = fieldKey(entry.controlId, slot as SceneSlot)}
 											<label class="flex items-center gap-2">
-								<span class="w-20 shrink-0 text-xs font-semibold text-slate-500">{slotLabel(slot as SceneSlot)}</span>
+												<span class="w-20 shrink-0 text-xs font-semibold text-slate-500">{slotLabel(slot as SceneSlot)}</span>
 												<input
-													class="min-w-0 flex-1 rounded border border-slate-300 px-2 py-1 font-mono text-sm"
+													class={`min-w-0 flex-1 rounded border px-2 py-1 font-mono text-sm ${
+														(values[key] ?? baseValue) !== (defaultValues[key] ?? '')
+															? 'border-amber-400 bg-amber-50'
+															: 'border-slate-300 bg-white'
+													}`}
 													value={values[key] ?? baseValue}
 													on:input={(event) => updateValue(key, event)}
 													inputmode="numeric"
 													aria-label={`${entry.label} ${slot}`}
 												/>
-												<button type="button" class="text-xs font-semibold text-slate-500 hover:text-slate-800" on:click={() => resetValue(key)}>
+													<button type="button" class="text-xs font-semibold text-slate-500 hover:text-slate-800" on:click={() => resetValue(key)}>
 													Reset
 												</button>
 											</label>

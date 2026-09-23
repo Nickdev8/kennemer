@@ -16,7 +16,6 @@
 	import type { PageData } from './$types';
 	import RefreshCw from 'lucide-svelte/icons/refresh-cw';
 	import Pin from 'lucide-svelte/icons/pin';
-	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
 	import TouchpadOff from 'lucide-svelte/icons/touchpad-off';
 	import WifiOff from 'lucide-svelte/icons/wifi-off';
 
@@ -264,10 +263,6 @@
 	let touchscreenConnected: boolean | null = null;
 	let hardwareChecking = false;
 	let hardwareInterval: ReturnType<typeof setInterval> | null = null;
-	let statusDeviceWarningVisible = false;
-	let statusDeviceWarningTimeout: ReturnType<typeof setTimeout> | null = null;
-	let unavailableStatusDeviceIds = new Set<string>();
-	let statusDeviceFailureCounts = new Map<string, number>();
 	let transientActiveUntilByDevice = new Map<string, number>();
 	const transientActiveTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -279,8 +274,6 @@
 	const fastWattageRefreshMs = 2 * 60 * 1000;
 	const fastWattageWindowMs = 10 * 60 * 1000;
 	const liveStatusRefreshMs = 5_000;
-	const statusDeviceWarningDurationMs = 15_000;
-	const statusDeviceWarningFailureThreshold = 2;
 	const statusFollowupDelaysMs = [1200, 2500, 5000, 10000, 20000, 45000, 90000];
 	const connectivityRefreshMs = 15000;
 	const connectivityFailureThreshold = 2;
@@ -613,50 +606,20 @@
 	) {
 		const nextStatusStates = new Map(statusDeviceStates);
 		const nextDeviceStates = new Map(deviceStates);
-		const nextUnavailableIds = new Set(unavailableStatusDeviceIds);
-		const nextFailureCounts = new Map(statusDeviceFailureCounts);
-		let hasNewUnavailableDevice = false;
 
 		unavailableIds.forEach((id) => {
 			nextStatusStates.delete(id);
-			const failureCount = (nextFailureCounts.get(id) ?? 0) + 1;
-			nextFailureCounts.set(id, failureCount);
-			if (failureCount >= statusDeviceWarningFailureThreshold) {
-				if (!unavailableStatusDeviceIds.has(id)) {
-					hasNewUnavailableDevice = true;
-				}
-				nextUnavailableIds.add(id);
-			}
 		});
 
 		Object.entries(states).forEach(([id, entry]) => {
 			if (entry?.lastCommand === 'on' || entry?.lastCommand === 'off') {
 				nextStatusStates.set(id, entry.lastCommand);
 				nextDeviceStates.set(id, entry.lastCommand);
-				nextUnavailableIds.delete(id);
-				nextFailureCounts.delete(id);
 			}
 		});
 
 		statusDeviceStates = nextStatusStates;
 		deviceStates = nextDeviceStates;
-		unavailableStatusDeviceIds = nextUnavailableIds;
-		statusDeviceFailureCounts = nextFailureCounts;
-
-		if (hasNewUnavailableDevice) {
-			showStatusDeviceWarning();
-		}
-	}
-
-	function showStatusDeviceWarning() {
-		if (statusDeviceWarningTimeout) {
-			clearTimeout(statusDeviceWarningTimeout);
-		}
-		statusDeviceWarningVisible = true;
-		statusDeviceWarningTimeout = setTimeout(() => {
-			statusDeviceWarningVisible = false;
-			statusDeviceWarningTimeout = null;
-		}, statusDeviceWarningDurationMs);
 	}
 
 	async function refreshStatusDevices(ids = statusDeviceIds) {
@@ -1412,10 +1375,6 @@
 			window.removeEventListener('offline', handleBrowserOffline);
 		}
 		pauseIdleSensitivePolling();
-		if (statusDeviceWarningTimeout) {
-			clearTimeout(statusDeviceWarningTimeout);
-			statusDeviceWarningTimeout = null;
-		}
 		transientActiveTimeouts.forEach((timeout) => clearTimeout(timeout));
 		transientActiveTimeouts.clear();
 		triggerActiveTimeouts.forEach((timeout) => clearTimeout(timeout));
@@ -1436,22 +1395,6 @@
 			<RefreshCw class="h-20 w-20 animate-spin" aria-hidden="true" />
 			<p class="mt-8 text-4xl font-semibold">Bezig met updaten</p>
 			<p class="mt-3 text-xl text-slate-300">Even geduld. Het scherm start vanzelf opnieuw.</p>
-		</div>
-	</div>
-{/if}
-
-{#if statusDeviceWarningVisible}
-	<div
-		class="fixed top-4 right-4 z-[90] flex max-w-sm items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-950 shadow-sm transition-opacity duration-150"
-		role="status"
-		aria-live="polite"
-	>
-		<TriangleAlert class="mt-0.5 h-5 w-5 shrink-0 text-amber-700" aria-hidden="true" />
-		<div>
-			<p class="font-semibold">Pushknoppenpaneel niet gevonden</p>
-			<p class="mt-1 text-sm text-amber-900">
-				De actuele stand kan niet worden gecontroleerd. De bediening is daardoor minder betrouwbaar.
-			</p>
 		</div>
 	</div>
 {/if}

@@ -49,4 +49,5 @@ export type SceneEditorEntry = {
 	placement: ControlPlacement;
 	controlType: DashboardControl['controlType'];
 	slots: Partial<Record<SceneSlot, string>>;
+	defaults: Partial<Record<SceneSlot, string>>;
 };

@@ -148,6 +148,9 @@ export async function readSceneEditorEntries(): Promise<{
 					slot,
 					file.overrides[control.id]?.[slot] ?? baseSceneId(control, slot) ?? ''
 				])
+			) as Partial<Record<SceneSlot, string>>,
+			defaults: Object.fromEntries(
+				editableSlots(control).map((slot) => [slot, baseSceneId(control, slot) ?? ''])
 			) as Partial<Record<SceneSlot, string>>
 		}))
 	};

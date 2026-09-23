@@ -4,9 +4,9 @@
 	import { resolveControlColor } from '$lib/components/control-colors';
 
 	const baseCardClass =
-		'flex h-full max-h-[18rem] min-h-[12rem] flex-col gap-3 rounded-lg border border-rose-500 bg-white px-5 py-5';
+		'flex h-full max-h-[18rem] min-h-[12rem] flex-col gap-3 rounded-lg border border-slate-300 bg-white px-5 py-5';
 	const baseButtonClass =
-		'relative flex flex-1 w-full items-center justify-center rounded-lg border border-rose-700 bg-rose-600 px-5 py-6 text-xl font-semibold text-white transition-colors duration-150 hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60';
+		'relative flex flex-1 w-full items-center justify-center rounded-lg border border-slate-800 bg-slate-800 px-5 py-6 text-xl font-semibold text-white transition-colors duration-150 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60';
 
 	export let trigger: TimedShellyTrigger;
 	export let loadingTriggerId: string | null = null;

@@ -185,7 +185,15 @@
 			return;
 		}
 		if (pendingOperation === 'save') {
-			if (!window.confirm('Deze wijziging kan een andere scène uitvoeren. Opslaan?')) return;
+			const controlCount = pendingChanges.length;
+			const noun = controlCount === 1 ? 'bedieningselement' : 'bedieningselementen';
+			const sceneLabel = controlCount === 1 ? 'scène-ID' : "scène-ID's";
+			if (
+				!window.confirm(
+					`Weet je zeker dat je de ${sceneLabel} van ${controlCount} ${noun} wilt wijzigen?`
+				)
+			)
+				return;
 			showPinPrompt = false;
 			await persistChanges(pendingChanges);
 		} else if (pendingOperation === 'reset') {

@@ -1920,6 +1920,7 @@
 					<div class="rounded-lg border border-slate-300 bg-white p-4">
 						<h3 class="text-base font-semibold text-slate-900">Systeem</h3>
 						<div class="mt-3 grid gap-4">
+							{#if false}
 							<div class="border-t border-slate-200 pt-3">
 								<div class="flex items-center justify-between gap-3">
 									<p class="text-sm font-semibold text-slate-800">Software-update</p>
@@ -1973,6 +1974,7 @@
 									</button>
 								{/if}
 							</div>
+							{/if}
 							<button
 								type="button"
 								class="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 transition-colors duration-150 hover:bg-slate-100 disabled:opacity-60"

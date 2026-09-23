@@ -114,6 +114,10 @@ The script may use destructive Git operations only against its validated
 production checkout or disposable candidate worktree. Never generalize those
 paths or use unresolved broad environment variables.
 
+The web image runs on the current Node.js 24 LTS line. Its default self-signed
+HTTPS certificate is generated at container start and renewed when it has less
+than 30 days remaining. Mounted certificates are left unchanged.
+
 The scheduled timer runs around 03:00 with a randomized delay. A manual update
 and a timer update must not be able to corrupt each other; preserve systemd's
 single-unit execution semantics.

@@ -1949,7 +1949,7 @@
 								</p>
 								{#if updateStatus?.currentShort || updateStatus?.targetShort}
 									<p class="mt-2 font-mono text-xs text-slate-500">
-										{updateStatus.currentShort ?? 'onbekend'} → {updateStatus.targetShort ??
+										{updateStatus?.currentShort ?? 'onbekend'} → {updateStatus?.targetShort ??
 											'onbekend'}
 									</p>
 								{/if}
@@ -1963,7 +1963,7 @@
 										<RefreshCw class="h-4 w-4 animate-spin" />
 										{updatePhase === 'starting' ? 'Update starten…' : 'Update installeren…'}
 									</button>
-								{:else if updatePhase === 'available' || (updatePhase === 'error' && updateStatus?.updateAvailable && updateStatus.fastForward !== false)}
+								{:else if updatePhase === 'available' || (updatePhase === 'error' && updateStatus?.updateAvailable && updateStatus?.fastForward !== false)}
 									<button
 										type="button"
 										class="mt-3 w-full rounded-lg bg-slate-800 px-4 py-3 text-sm font-semibold text-white transition-colors duration-150 hover:bg-slate-900 disabled:opacity-60"

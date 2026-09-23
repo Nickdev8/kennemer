@@ -13,8 +13,8 @@ export const advancedControls: DashboardControl[] = [
 		type: 'Advanced',
 		buttonMode: 'toggle',
 		commands: {
-			on: {
-				label: 'Status: Aan',
+				on: {
+				label: 'Status: Uit',
 				color: 'green',
 				cloud: {
 					endpoint: shellySceneEndpoint,
@@ -23,8 +23,8 @@ export const advancedControls: DashboardControl[] = [
 					requiresAuthKey: true
 				}
 			},
-			off: {
-				label: 'Status: Uit',
+				off: {
+				label: 'Status: Aan',
 				color: 'red',
 				cloud: {
 					endpoint: shellySceneEndpoint,

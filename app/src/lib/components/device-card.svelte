@@ -265,9 +265,8 @@
 			forceToggleNeutral: !showGreenAction
 		});
 		const actionLabel = actionConfigured
-			? actionCommand === 'on'
-				? 'Uit'
-				: 'Aan'
+			? (device.commands[actionCommand]?.label ??
+				(actionCommand === 'on' ? 'Uit' : 'Aan'))
 			: device.type === 'Scene'
 				? 'Scène niet ingesteld'
 				: 'Niet ingesteld';

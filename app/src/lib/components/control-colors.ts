@@ -19,6 +19,7 @@ const namedColors: Record<string, ControlColor> = {
 	orange: { background: '#ea580c', border: '#c2410c', text: '#ffffff', soft: '#ffedd5' },
 	purple: { background: '#9333ea', border: '#7e22ce', text: '#ffffff', soft: '#f3e8ff' },
 	pink: { background: '#db2777', border: '#be185d', text: '#ffffff', soft: '#fce7f3' },
+	white: { background: '#ffffff', border: '#cbd5e1', text: '#334155', soft: '#ffffff' },
 	neutral: { background: '#334155', border: '#1e293b', text: '#ffffff', soft: '#f1f5f9' },
 	none: { background: '#334155', border: '#1e293b', text: '#ffffff', soft: '#f1f5f9' }
 };

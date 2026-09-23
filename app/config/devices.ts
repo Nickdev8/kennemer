@@ -27,7 +27,7 @@ export const devices: DashboardControl[] = [
 			},
 			off: {
 				label: 'Uit',
-				color: 'red',
+				color: 'white',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
@@ -59,7 +59,7 @@ export const devices: DashboardControl[] = [
 			},
 			off: {
 				label: 'Uit',
-				color: 'red',
+				color: 'white',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
@@ -91,7 +91,7 @@ export const devices: DashboardControl[] = [
 			},
 			off: {
 				label: 'Uit',
-				color: 'red',
+				color: 'white',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
@@ -123,7 +123,7 @@ export const devices: DashboardControl[] = [
 			},
 			off: {
 				label: 'Uit',
-				color: 'red',
+				color: 'white',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
@@ -179,7 +179,7 @@ export const devices: DashboardControl[] = [
 			},
 			off: {
 				label: 'Uit',
-				color: 'red',
+				color: 'white',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
@@ -211,7 +211,7 @@ export const devices: DashboardControl[] = [
 			},
 			off: {
 				label: 'Uit',
-				color: 'red',
+				color: 'white',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
@@ -243,7 +243,7 @@ export const devices: DashboardControl[] = [
 			},
 			off: {
 				label: 'Uit',
-				color: 'red',
+				color: 'white',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
@@ -275,7 +275,7 @@ export const devices: DashboardControl[] = [
 			},
 			off: {
 				label: 'Uit',
-				color: 'red',
+				color: 'white',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',

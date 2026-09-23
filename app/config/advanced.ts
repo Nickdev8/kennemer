@@ -15,7 +15,7 @@ export const advancedControls: DashboardControl[] = [
 		commands: {
 				on: {
 				label: 'Status: Aan',
-				color: 'green',
+				color: 'red',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
@@ -25,7 +25,7 @@ export const advancedControls: DashboardControl[] = [
 			},
 				off: {
 				label: 'Status: Uit',
-				color: 'red',
+				color: 'white',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',

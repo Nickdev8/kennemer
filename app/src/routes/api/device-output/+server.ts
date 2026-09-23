@@ -4,6 +4,7 @@ import { resolve as resolvePath } from 'node:path';
 import type { RequestHandler } from './$types';
 import { fetchShellyJson } from '$lib/server/shelly-http';
 import { fetchShellyStatus } from '$lib/server/shelly-rpc';
+import { readEffectiveControls } from '$lib/server/scene-config-store';
 import { updateDeviceStateIfNewer } from '$lib/server/device-state-store';
 import { publishDeviceState } from '$lib/server/device-state-events';
 import type { DeviceCommandKey } from '$lib/config/schema';
@@ -204,12 +205,24 @@ function extractOutput(payload: unknown, channel: number): boolean | null {
 async function saveOutputState(
 	deviceId: string,
 	output: boolean,
-	source: 'status-lan' | 'status-poll'
+	source: 'status-lan' | 'status-poll',
+	logicalDeviceIds: string[] = []
 ): Promise<OutputState> {
 	const command: DeviceCommandKey = output ? 'on' : 'off';
 	const updatedAt = Date.now();
 	const { state } = await updateDeviceStateIfNewer(deviceId, command, updatedAt, source);
 	publishDeviceState({ deviceId, state });
+
+	for (const logicalDeviceId of logicalDeviceIds) {
+		if (logicalDeviceId === deviceId) continue;
+		const logicalResult = await updateDeviceStateIfNewer(
+			logicalDeviceId,
+			command,
+			updatedAt,
+			source
+		);
+		publishDeviceState({ deviceId: logicalDeviceId, state: logicalResult.state });
+	}
 
 	return {
 		lastCommand: state.lastCommand,
@@ -220,7 +233,8 @@ async function saveOutputState(
 
 async function fetchLocalDeviceOutputs(
 	deviceIds: string[],
-	cache: DeviceCache | null
+	cache: DeviceCache | null,
+	logicalDeviceIdsByStatusId: Map<string, string[]>
 ): Promise<Array<{ deviceId: string; state: OutputState | null }>> {
 	const deviceIdsByBaseId = new Map<string, string[]>();
 	for (const deviceId of deviceIds) {
@@ -245,7 +259,15 @@ async function fetchLocalDeviceOutputs(
 					const output = extractOutput(localStatus, channel);
 					return {
 						deviceId,
-						state: output === null ? null : await saveOutputState(deviceId, output, 'status-lan')
+						state:
+							output === null
+								? null
+								: await saveOutputState(
+										deviceId,
+										output,
+										'status-lan',
+										logicalDeviceIdsByStatusId.get(deviceId) ?? []
+									)
 					};
 				})
 			);
@@ -257,7 +279,8 @@ async function fetchLocalDeviceOutputs(
 
 async function fetchCloudDeviceOutput(
 	deviceId: string,
-	beforeCloudRequest: () => Promise<void>
+	beforeCloudRequest: () => Promise<void>,
+	logicalDeviceIdsByStatusId: Map<string, string[]>
 ): Promise<OutputState | null> {
 	const { baseDeviceId, channel } = splitStatusDeviceId(deviceId);
 	await beforeCloudRequest();
@@ -270,7 +293,12 @@ async function fetchCloudDeviceOutput(
 	});
 	const output = extractOutput(payload, channel);
 	if (output === null) return null;
-	return saveOutputState(deviceId, output, 'status-poll');
+	return saveOutputState(
+		deviceId,
+		output,
+		'status-poll',
+		logicalDeviceIdsByStatusId.get(deviceId) ?? []
+	);
 }
 
 export const GET: RequestHandler = async ({ url }) => {
@@ -281,6 +309,15 @@ export const GET: RequestHandler = async ({ url }) => {
 
 	const states: Record<string, OutputState> = {};
 	const errors: Record<string, string> = {};
+	const logicalDeviceIdsByStatusId = new Map<string, string[]>();
+	for (const control of await readEffectiveControls()) {
+		if (control.controlType !== 'device') continue;
+		const statusDeviceId = control.statusdeviceid?.trim();
+		if (!statusDeviceId) continue;
+		const owners = logicalDeviceIdsByStatusId.get(statusDeviceId) ?? [];
+		owners.push(control.id);
+		logicalDeviceIdsByStatusId.set(statusDeviceId, owners);
+	}
 	const cache = await readDeviceCache();
 	let lastCloudRequestAt = 0;
 
@@ -290,7 +327,7 @@ export const GET: RequestHandler = async ({ url }) => {
 		lastCloudRequestAt = Date.now();
 	};
 
-	const localResults = await fetchLocalDeviceOutputs(ids, cache).catch(() =>
+	const localResults = await fetchLocalDeviceOutputs(ids, cache, logicalDeviceIdsByStatusId).catch(() =>
 		ids.map((deviceId) => ({ deviceId, state: null }))
 	);
 
@@ -305,7 +342,11 @@ export const GET: RequestHandler = async ({ url }) => {
 
 	for (const deviceId of cloudFallbackIds) {
 		try {
-			const state = await fetchCloudDeviceOutput(deviceId, beforeCloudRequest);
+			const state = await fetchCloudDeviceOutput(
+				deviceId,
+				beforeCloudRequest,
+				logicalDeviceIdsByStatusId
+			);
 			if (state) {
 				states[deviceId] = state;
 			} else {

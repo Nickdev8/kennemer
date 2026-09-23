@@ -62,6 +62,12 @@ Let bij een gewone knop op:
 - `statusdeviceid` is het Shelly-apparaat waarvan de echte status wordt gelezen.
 - Een lege scene-ID maakt een actie bewust niet klikbaar.
 
+In het paneel **Geavanceerde bediening** kunnen scène-ID's runtime worden
+aangepast. Hiervoor moet `KENNEMER_CONFIG_EDIT_PIN` in `app/.env` staan. De
+wijzigingen worden in de Docker-volume onder `/data` bewaard en blijven dus
+staan na een update. Alleen bestaande scène-ID's kunnen worden aangepast; de
+endpoint en Shelly-sleutel blijven serverconfiguratie.
+
 Test een gewijzigde scene niet zomaar op locatie: een API-call kan echte
 verlichting of schermen bedienen.
 
@@ -70,10 +76,10 @@ verlichting of schermen bedienen.
 De lokale instellingen staan in `app/.env`. Dit bestand bevat onder andere de
 Shelly API-sleutel en het onderhoudstoken en mag niet in Git komen.
 
-Een overzicht van de beschikbare instellingen staat in `app/env.temp`:
+Een overzicht van de beschikbare instellingen staat in `app/.env.example`:
 
 ```bash
-cp app/env.temp app/.env
+cp app/.env.example app/.env
 ```
 
 Vul daarna de echte waarden in. Herstart de app na een wijziging aan `.env`.

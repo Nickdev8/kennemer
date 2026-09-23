@@ -1,7 +1,6 @@
 import type { RequestHandler } from './$types';
-import { devices } from '$lib/config/devices';
-import { advancedDevices } from '$lib/config/advanced';
-import type { DeviceCommandKey } from '$lib/config/schema';
+import type { DashboardControl, DeviceCommandKey } from '$lib/config/schema';
+import { readEffectiveControls } from '$lib/server/scene-config-store';
 import { sendDeviceCommand, ShellyHttpError } from '$lib/server/shelly-http';
 import { updateDeviceState } from '$lib/server/device-state-store';
 import { publishDeviceState } from '$lib/server/device-state-events';
@@ -29,7 +28,10 @@ export const POST: RequestHandler = async ({ request }) => {
 		return jsonResponse({ error: 'Invalid command payload' }, 400);
 	}
 
-	const device = [...devices, ...advancedDevices].find((item) => item.id === deviceId);
+	const device = (await readEffectiveControls()).find(
+		(item): item is Extract<DashboardControl, { controlType: 'device' }> =>
+			item.controlType === 'device' && item.id === deviceId
+	);
 
 	if (!device) {
 		return jsonResponse({ error: 'Unknown device' }, 404);

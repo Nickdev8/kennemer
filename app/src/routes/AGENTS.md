@@ -11,6 +11,8 @@ These instructions cover Svelte pages and server endpoints below
 | `/actions`                   | POST     | Execute a configured device command      |
 | `/triggers`                  | POST     | Execute a configured scene trigger       |
 | `/api/connectivity`          | GET      | Probe Shelly Cloud reachability          |
+| `/api/config/scenes`         | GET/POST | Read or save validated scene-ID overrides |
+| `/api/config/scenes/reset`   | POST     | Reset validated scene-ID overrides       |
 | `/api/device-output`         | GET      | Read physical output status              |
 | `/api/device-state`          | GET      | Read remembered action states            |
 | `/api/device-state/callback` | GET/POST | Accept configured external state updates |
@@ -33,6 +35,10 @@ routine verification against a real deployment.
 Action and trigger routes must resolve submitted identifiers against the
 checked-in config. Do not accept client-provided endpoints, auth keys, or
 arbitrary payloads.
+
+Scene-ID override routes may accept only known control IDs and known scene
+slots, require `KENNEMER_CONFIG_EDIT_PIN` for writes, and must not execute a
+scene while saving configuration.
 
 Use JSON responses with meaningful HTTP status codes. Operational errors should
 be understandable in the Dutch UI, but server logs may retain concise

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
 	import type { ShellyTrigger } from '$lib/config/schema';
+	import { resolveControlColor } from '$lib/components/control-colors';
 
 	const baseCardClass =
 		'flex h-full max-h-[18rem] min-h-[12rem] flex-col gap-3 rounded-lg border border-slate-300 bg-white px-5 py-5';
@@ -16,6 +17,10 @@
 
 	$: isLoading = loadingTriggerId === trigger.id;
 	$: isConfigured = Boolean(trigger.sceneId?.trim());
+	$: triggerColor = resolveControlColor(trigger.color);
+	$: triggerStyle = triggerColor
+		? `background:${triggerColor.background};border-color:${triggerColor.border};color:${triggerColor.text}`
+		: undefined;
 
 	function handleTrigger() {
 		if (!isConfigured) return;
@@ -28,6 +33,7 @@
 	<button
 		type="button"
 		class={baseButtonClass}
+		style={triggerStyle}
 		disabled={isLoading || !isConfigured}
 		on:click={handleTrigger}
 	>

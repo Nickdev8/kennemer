@@ -15,3 +15,5 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
 ips.json
+scene-overrides.json
+scene-overrides.json.bak

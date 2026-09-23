@@ -1,13 +1,12 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
-	import DeviceCard from '$lib/components/device-card.svelte';
-	import TimedTriggerCard from '$lib/components/timed-trigger-card.svelte';
-	import TriggerCard from '$lib/components/trigger-card.svelte';
-	import { devices as configuredPrimaryDevices } from '$lib/config/devices';
-	import { advancedDevices, advancedTimedTriggers, advancedTriggers } from '$lib/config/advanced';
-	import { energyDevicesTrigger } from '$lib/config/triggers';
+	import ControlCard from '$lib/components/control-card.svelte';
+	import SceneIdEditor from '$lib/components/scene-id-editor.svelte';
+	import { devices } from '$lib/config/devices';
+	import { advancedControls as configuredAdvancedControls } from '$lib/config/advanced';
+	import { energyDevicesTrigger as defaultEnergyDevicesTrigger, triggers } from '$lib/config/triggers';
 	import { env as publicEnv } from '$env/dynamic/public';
-	import type { DeviceCommandKey, ShellyDevice } from '$lib/config/schema';
+	import type { DashboardControl, DeviceCommandKey, ShellyDevice } from '$lib/config/schema';
 	import {
 		getDeviceConfigurationIssues,
 		isDeviceCommandConfigured,
@@ -132,34 +131,70 @@
 	);
 	let statusDeviceStates = new Map<string, DeviceCommandKey>();
 
-	const primaryDevices = [...configuredPrimaryDevices].sort(
-		(left, right) =>
-			(left.pushNumber ?? Number.MAX_SAFE_INTEGER) - (right.pushNumber ?? Number.MAX_SAFE_INTEGER)
+	const baseControls: DashboardControl[] = [...devices, ...configuredAdvancedControls, ...triggers];
+	let sceneControls: DashboardControl[] = data?.controls ?? baseControls;
+	let mainControls: DashboardControl[] = [];
+	let advancedControls: DashboardControl[] = [];
+	let energyDevicesTrigger = defaultEnergyDevicesTrigger;
+	let primaryDevices: Extract<DashboardControl, { controlType: 'device' }>[] = [];
+	let allDevices: Extract<DashboardControl, { controlType: 'device' }>[] = [];
+	let primaryDeviceCount = 0;
+	let deviceById = new Map<string, Extract<DashboardControl, { controlType: 'device' }>>();
+	let statusDeviceIds: string[] = [];
+	let configurationDiagnostics: DiagnosticEntry[] = [];
+	let triggerConfigurationDiagnostics: DiagnosticEntry[] = [];
+	let advancedControlCount = 0;
+
+	$: mainControls = [...sceneControls]
+		.filter((control) => control.placement === 'main')
+		.sort(
+			(left, right) => {
+				const leftPosition = left.controlType === 'device' ? left.pushNumber : undefined;
+				const rightPosition = right.controlType === 'device' ? right.pushNumber : undefined;
+				return (
+					(leftPosition ?? Number.MAX_SAFE_INTEGER) -
+					(rightPosition ?? Number.MAX_SAFE_INTEGER)
+				);
+			}
+		);
+	$: advancedControls = sceneControls.filter((control) => control.placement === 'advanced');
+	$: energyDevicesTrigger =
+		sceneControls.find(
+			(control): control is Extract<DashboardControl, { controlType: 'trigger' }> =>
+				control.controlType === 'trigger' && control.placement === 'energy'
+		) ?? defaultEnergyDevicesTrigger;
+	$: primaryDevices = mainControls.filter(
+		(control): control is Extract<DashboardControl, { controlType: 'device' }> =>
+			control.controlType === 'device'
 	);
-	const primaryDeviceCount = primaryDevices.length;
-	const allDevices = [...primaryDevices, ...advancedDevices];
-	const deviceById = new Map(allDevices.map((device) => [device.id, device]));
-	const statusDeviceIds = Array.from(
+	$: allDevices = [...sceneControls].filter(
+		(control): control is Extract<DashboardControl, { controlType: 'device' }> =>
+			control.controlType === 'device'
+	);
+	$: primaryDeviceCount = mainControls.length;
+	$: deviceById = new Map(allDevices.map((device) => [device.id, device]));
+	$: statusDeviceIds = Array.from(
 		new Set(
 			allDevices
 				.map((device) => device.statusdeviceid?.trim())
 				.filter((deviceId): deviceId is string => isValidStatusDeviceId(deviceId))
 		)
 	);
-	const configurationDiagnostics: DiagnosticEntry[] = allDevices.flatMap((device) => {
+	$: configurationDiagnostics = allDevices.flatMap((device) => {
 		const issues = getDeviceConfigurationIssues(device);
 		return issues.length > 0
 			? [{ id: device.id, name: device.label, detail: issues.join(' · ') }]
 			: [];
 	});
-	const triggerConfigurationDiagnostics: DiagnosticEntry[] = [...advancedTriggers, ...advancedTimedTriggers]
+	$: triggerConfigurationDiagnostics = [...sceneControls]
+		.filter((control) => control.controlType !== 'device')
 		.filter((trigger) => trigger.type !== 'placeholder' && !trigger.sceneId?.trim())
 		.map((trigger) => ({
 			id: trigger.id,
 			name: trigger.label,
-			detail: 'Scène-ID ontbreekt'
+			 detail: 'Scène-ID ontbreekt'
 		}));
-	const advancedControlCount = advancedDevices.length + advancedTriggers.length + advancedTimedTriggers.length;
+	$: advancedControlCount = advancedControls.length;
 
 	const wattageRoomId = -1;
 	let wattageLabel = `Room ${wattageRoomId}`;
@@ -205,6 +240,7 @@
 
 	let showAdvancedPrompt = false;
 	let showAdvancedPanel = false;
+	let showSceneIdEditor = false;
 	let advancedUnlocked = false;
 	let advancedAccessError = '';
 	let patternSequence: number[] = [];
@@ -226,6 +262,7 @@
 	let cloudReachable = true;
 	let connectivityChecked = false;
 	let connectivityChecking = false;
+	let connectivityFailureCount = 0;
 	let connectivityInterval: ReturnType<typeof setInterval> | null = null;
 	let touchscreenConnected: boolean | null = null;
 	let hardwareChecking = false;
@@ -249,11 +286,19 @@
 	const statusDeviceWarningFailureThreshold = 2;
 	const statusFollowupDelaysMs = [1200, 2500, 5000, 10000, 20000, 45000, 90000];
 	const connectivityRefreshMs = 15000;
+	const connectivityFailureThreshold = 2;
 	const hardwareRefreshMs = 15000;
 	const updatePollIntervalMs = 4000;
 	const updatePollMaxMs = 35 * 60 * 1000;
 
-	$: connectionOffline = connectivityChecked && (!browserOnline || !cloudReachable);
+	$: connectionOffline =
+		connectivityChecked && (!browserOnline || connectivityFailureCount >= connectivityFailureThreshold);
+	$: connectionWarningTitle = browserOnline
+		? 'Geen verbinding met Shelly Cloud'
+		: 'Geen internetverbinding';
+	$: connectionWarningDetail = browserOnline
+		? 'Shelly-bediening is tijdelijk niet beschikbaar.'
+		: 'Controleer de internetverbinding van de kiosk.';
 
 	$: topWattageDevices = [...wattageDevices]
 		.filter(
@@ -506,6 +551,8 @@
 	}
 
 	type PressOptions = { suppressRefresh?: boolean; stateless?: boolean };
+	const timeoutRetryDelaySeconds = 5;
+	const maxTimeoutRetries = 2;
 
 	let wattageRefreshTimeout: ReturnType<typeof setTimeout> | null = null;
 	let wattageAutomaticRefreshTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -716,7 +763,8 @@
 	async function handlePress(
 		deviceId: string,
 		command: DeviceCommandKey,
-		options: PressOptions = {}
+		options: PressOptions = {},
+		retryAttempt = 0
 	): Promise<void> {
 		const device = deviceById.get(deviceId);
 		if (!device || !isDeviceCommandConfigured(device, command)) {
@@ -726,6 +774,7 @@
 		const key = commandKey(deviceId, command);
 		loadingCommandKey = key;
 		errorMsg = '';
+		advancedErrorMsg = '';
 		let succeeded = false;
 		try {
 			const response = await triggerDeviceCommand(deviceId, command);
@@ -748,9 +797,18 @@
 			}
 		} catch (err) {
 			const error = err as Error & { code?: string };
+			if (error?.code === 'TIMEOUT' && retryAttempt < maxTimeoutRetries) {
+				for (let seconds = timeoutRetryDelaySeconds; seconds > 0; seconds -= 1) {
+					const message = `Shelly reageert niet. Opnieuw proberen over ${seconds}s…`;
+					errorMsg = message;
+					advancedErrorMsg = message;
+					await sleep(1000);
+				}
+				return handlePress(deviceId, command, options, retryAttempt + 1);
+			}
 			if (error?.code === 'RATE_LIMIT') {
 				await sleep(1000);
-				return handlePress(deviceId, command);
+				return handlePress(deviceId, command, options, retryAttempt);
 			}
 			errorMsg = error instanceof Error ? error.message : 'Unknown error';
 		} finally {
@@ -879,6 +937,7 @@
 
 	function closeAdvancedPanel() {
 		showAdvancedPanel = false;
+		showSceneIdEditor = false;
 		advancedPanelPinned = false;
 		cancelPattern();
 		advancedAccessError = '';
@@ -1162,6 +1221,7 @@
 		browserOnline = navigator.onLine;
 		if (!browserOnline) {
 			cloudReachable = false;
+			connectivityFailureCount = connectivityFailureThreshold;
 			connectivityChecked = true;
 			return;
 		}
@@ -1171,8 +1231,10 @@
 			const res = await fetch('/api/connectivity', { cache: 'no-store' });
 			const payload = (await res.json().catch(() => null)) as { online?: boolean } | null;
 			cloudReachable = res.ok && payload?.online === true;
+			connectivityFailureCount = cloudReachable ? 0 : connectivityFailureCount + 1;
 		} catch {
 			cloudReachable = false;
+			connectivityFailureCount += 1;
 		} finally {
 			connectivityChecked = true;
 			connectivityChecking = false;
@@ -1181,6 +1243,7 @@
 
 	function handleBrowserOnline() {
 		browserOnline = true;
+		connectivityFailureCount = 0;
 		if (!displayDimmed) {
 			void checkConnectivity();
 		}
@@ -1189,6 +1252,7 @@
 	function handleBrowserOffline() {
 		browserOnline = false;
 		cloudReachable = false;
+		connectivityFailureCount = connectivityFailureThreshold;
 		connectivityChecked = true;
 	}
 
@@ -1211,7 +1275,7 @@
 		}
 	}
 
-	async function handleTriggerPress(triggerId: string) {
+	async function handleTriggerPress(triggerId: string, retryAttempt = 0) {
 		loadingTriggerId = triggerId;
 		advancedErrorMsg = '';
 		let succeeded = false;
@@ -1223,7 +1287,15 @@
 				markAdvancedActivity();
 			}
 		} catch (err) {
-			advancedErrorMsg = err instanceof Error ? err.message : 'Unknown error';
+			const error = err as Error & { code?: string };
+			if (error?.code === 'TIMEOUT' && retryAttempt < maxTimeoutRetries) {
+				for (let seconds = timeoutRetryDelaySeconds; seconds > 0; seconds -= 1) {
+					advancedErrorMsg = `Shelly reageert niet. Opnieuw proberen over ${seconds}s…`;
+					await sleep(1000);
+				}
+				return handleTriggerPress(triggerId, retryAttempt + 1);
+			}
+			advancedErrorMsg = error instanceof Error ? error.message : 'Unknown error';
 		} finally {
 			loadingTriggerId = null;
 			if (succeeded) {
@@ -1232,8 +1304,15 @@
 		}
 	}
 
+	function handleSceneControlsUpdate(nextControls: DashboardControl[]) {
+		sceneControls = nextControls;
+	}
+
 	function startTriggerTimer(triggerId: string) {
-		const trigger = advancedTimedTriggers.find((item) => item.id === triggerId);
+		const trigger = advancedControls.find(
+			(control): control is Extract<DashboardControl, { controlType: 'timed-trigger' }> =>
+				control.controlType === 'timed-trigger' && control.id === triggerId
+		);
 		const durationMs = Math.max(0, Number(trigger?.activeDurationMs) || 0);
 		if (durationMs === 0) return;
 
@@ -1255,14 +1334,22 @@
 		);
 	}
 
-	async function handleEnergyTriggerPress() {
+	async function handleEnergyTriggerPress(retryAttempt = 0) {
 		loadingTriggerId = energyDevicesTrigger.id;
 		energyTriggerError = '';
 		try {
 			await triggerAction(energyDevicesTrigger.id);
 			requestWattageRefresh();
 		} catch (err) {
-			energyTriggerError = err instanceof Error ? err.message : 'Scène kon niet worden uitgevoerd';
+			const error = err as Error & { code?: string };
+			if (error?.code === 'TIMEOUT' && retryAttempt < maxTimeoutRetries) {
+				for (let seconds = timeoutRetryDelaySeconds; seconds > 0; seconds -= 1) {
+					energyTriggerError = `Shelly reageert niet. Opnieuw proberen over ${seconds}s…`;
+					await sleep(1000);
+				}
+				return handleEnergyTriggerPress(retryAttempt + 1);
+			}
+			energyTriggerError = error instanceof Error ? error.message : 'Scène kon niet worden uitgevoerd';
 		} finally {
 			loadingTriggerId = null;
 		}
@@ -1426,8 +1513,8 @@
 		>
 			<WifiOff class="h-6 w-6 shrink-0" aria-hidden="true" />
 			<div>
-				<p class="text-base font-bold">Geen internetverbinding</p>
-				<p class="text-sm text-red-100">Shelly-bediening is tijdelijk niet beschikbaar.</p>
+				<p class="text-base font-bold">{connectionWarningTitle}</p>
+				<p class="text-sm text-red-100">{connectionWarningDetail}</p>
 			</div>
 		</div>
 	{/if}
@@ -1597,18 +1684,29 @@
 				</p>
 			{/if}
 			<div class="grid h-full flex-1 grid-flow-row grid-cols-3 grid-rows-3 gap-6 pr-1 pb-2">
-				{#each primaryDevices as device (device.id)}
-					<DeviceCard
-						{device}
+				{#each mainControls as control (control.id)}
+					<ControlCard
+						{control}
 						{commandOrder}
 						{commandKey}
 						{commandLabel}
 						{resolveToggleCommand}
 						{loadingCommandKey}
-						transientActive={isTransientDeviceActive(device.id)}
-						initialStatus={resolveCardStatus(device, deviceStates, statusDeviceStates)}
+						loadingTriggerId={loadingTriggerId}
+						transientActive={
+							control.controlType === 'device' && isTransientDeviceActive(control.id)
+						}
+						initialStatus={
+							control.controlType === 'device'
+								? resolveCardStatus(control, deviceStates, statusDeviceStates)
+								: null
+						}
+						activeUntil={triggerActiveUntilById.get(control.id) ?? null}
 						on:command={({ detail }) =>
-							handlePress(detail.deviceId, detail.command, { stateless: device.stateless })}
+							handlePress(detail.deviceId, detail.command, {
+								stateless: deviceById.get(detail.deviceId)?.stateless
+							})}
+						on:trigger={({ detail }) => handleTriggerPress(detail.triggerId)}
 					/>
 				{/each}
 			</div>
@@ -1668,37 +1766,46 @@
 
 {#if showAdvancedPrompt}
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 px-4"
+		class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4"
+		role="presentation"
 		tabindex="-1"
 		on:click={closeAdvancedPrompt}
 		on:keydown={markAdvancedActivity}
 	>
 		<div
-			class="w-full max-w-md space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
+			class="w-full max-w-md space-y-4 rounded-lg border border-slate-300 bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.12)]"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="advanced-prompt-title"
+			tabindex="-1"
 			on:click|stopPropagation
+			on:keydown|stopPropagation
 		>
 			<div class="space-y-1">
-				<h2 class="text-lg font-semibold text-slate-800">Patroon vereist</h2>
+				<h2 id="advanced-prompt-title" class="text-lg font-semibold text-slate-900">Patroon vereist</h2>
 				<p class="text-sm text-slate-600">
 					Verbind het patroon om geavanceerde bediening te ontgrendelen.
 				</p>
 			</div>
 			{#if !advancedPatternConfigured}
 				<p
-					class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold tracking-wide text-amber-800 uppercase"
+					class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
 				>
 					Stel PUBLIC_ADVANCED_PATTERN in je .env bestand in om toegang te krijgen.
 				</p>
 			{/if}
 			{#if advancedAccessError}
 				<p
-					class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold tracking-wide text-red-700 uppercase"
+					class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700"
 				>
 					{advancedAccessError}
 				</p>
 			{/if}
 			<div
-				class="space-y-6"
+				class="space-y-4"
+				role="application"
+				aria-label="Ontgrendelpatroon"
+				tabindex="-1"
 				on:pointerup={(event) => {
 					stopPattern(event);
 					activePointerId = null;
@@ -1718,12 +1825,12 @@
 					}
 				}}
 			>
-				<div class="grid grid-cols-3 justify-items-center gap-6 select-none">
+				<div class="grid grid-cols-3 justify-items-center gap-4 select-none">
 					{#each patternNodes as node (node)}
 						{@const activeIndex = patternSequence.indexOf(node)}
 						<button
 							type="button"
-							class={`relative flex h-20 w-20 items-center justify-center rounded-full border-2 transition ${
+							class={`relative flex h-16 w-16 items-center justify-center rounded-full border-2 transition ${
 								patternStatus === 'error'
 									? 'border-rose-400'
 									: patternStatus === 'success'
@@ -1741,7 +1848,7 @@
 							<span class="text-lg font-semibold">{node}</span>
 							{#if activeIndex >= 0}
 								<span
-									class="pointer-events-none absolute -top-2 -right-2 flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs font-bold text-emerald-600 shadow-md shadow-emerald-100"
+									class="pointer-events-none absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white text-xs font-bold text-emerald-700"
 								>
 									{activeIndex + 1}
 								</span>
@@ -1752,7 +1859,7 @@
 				<div class="flex items-center justify-between gap-3">
 					<button
 						type="button"
-						class="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+						class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
 						on:click={closeAdvancedPrompt}
 					>
 						Annuleren
@@ -1760,7 +1867,7 @@
 					<div class="flex items-center gap-3">
 						<button
 							type="button"
-							class="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-60"
+						class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
 							on:click={cancelPattern}
 							disabled={patternSequence.length === 0}
 						>
@@ -1768,7 +1875,7 @@
 						</button>
 						<button
 							type="button"
-							class="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold tracking-wide text-white transition-colors duration-150 ease-out hover:bg-slate-900 disabled:opacity-60"
+						class="rounded-md bg-slate-800 px-4 py-2 text-sm font-semibold text-white transition-colors duration-150 hover:bg-slate-900 disabled:opacity-60"
 							on:click={submitPattern}
 							disabled={!advancedPatternConfigured || patternSequence.length === 0}
 						>
@@ -1855,34 +1962,28 @@
 							<p class="text-sm text-slate-600">Geen tijdelijke knoppen ingesteld.</p>
 						{:else}
 							<div class="grid auto-rows-fr grid-cols-1 gap-4 pb-4 md:grid-cols-2">
-								{#each advancedDevices as device (device.id)}
-									<DeviceCard
-										{device}
+								{#each advancedControls as control (control.id)}
+									<ControlCard
+										{control}
 										{commandOrder}
 										{commandKey}
 										{commandLabel}
 										{resolveToggleCommand}
 										{loadingCommandKey}
-										transientActive={isTransientDeviceActive(device.id)}
-										initialStatus={resolveCardStatus(device, deviceStates, statusDeviceStates)}
+										loadingTriggerId={loadingTriggerId}
+										transientActive={
+											control.controlType === 'device' && isTransientDeviceActive(control.id)
+										}
+										initialStatus={
+											control.controlType === 'device'
+												? resolveCardStatus(control, deviceStates, statusDeviceStates)
+												: null
+										}
+										activeUntil={triggerActiveUntilById.get(control.id) ?? null}
 										on:command={({ detail }) =>
 											handlePress(detail.deviceId, detail.command, {
-												stateless: device.stateless
+												stateless: deviceById.get(detail.deviceId)?.stateless
 											})}
-									/>
-								{/each}
-								{#each advancedTriggers as trigger (trigger.id)}
-									<TriggerCard
-										{trigger}
-										{loadingTriggerId}
-										on:trigger={({ detail }) => handleTriggerPress(detail.triggerId)}
-									/>
-								{/each}
-								{#each advancedTimedTriggers as trigger (trigger.id)}
-									<TimedTriggerCard
-										{trigger}
-										{loadingTriggerId}
-										activeUntil={triggerActiveUntilById.get(trigger.id) ?? null}
 										on:trigger={({ detail }) => handleTriggerPress(detail.triggerId)}
 									/>
 								{/each}
@@ -2067,12 +2168,33 @@
 							{/if}
 						</details>
 					{/if}
+
+					<div class="border-t border-slate-300 pt-4">
+						<button
+							type="button"
+							class="flex w-full items-center justify-between rounded-md border border-slate-300 bg-white px-4 py-3 text-left text-sm font-semibold text-slate-800 hover:bg-slate-100"
+							aria-expanded={showSceneIdEditor}
+							on:click={() => {
+								showSceneIdEditor = !showSceneIdEditor;
+								markAdvancedActivity();
+							}}
+						>
+							<span>Scène-ID's beheren</span>
+							<span aria-hidden="true">{showSceneIdEditor ? '−' : '+'}</span>
+						</button>
+						{#if showSceneIdEditor}
+							<SceneIdEditor
+								on:controls={({ detail }) => handleSceneControlsUpdate(detail)}
+								on:close={() => (showSceneIdEditor = false)}
+							/>
+						{/if}
+					</div>
 				</aside>
 			</div>
 			<footer
 				class="shrink-0 border-t border-slate-200 px-6 py-2 text-right text-xs text-slate-500"
 			>
-				© 2026 Nick Esselman en Kennemer Lyceum Haarlem. Alle rechten voorbehouden.
+				© 2026 Nick Esselman en Kennemer Lyceum Overveen. Alle rechten voorbehouden.
 			</footer>
 		</div>
 	</div>

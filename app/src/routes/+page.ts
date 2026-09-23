@@ -1,4 +1,5 @@
 import type { PageLoad } from './$types';
+import type { DashboardControl } from '$lib/config/schema';
 
 type DeviceStatePayload = {
 	ok: boolean;
@@ -6,15 +7,24 @@ type DeviceStatePayload = {
 };
 
 export const load: PageLoad = async ({ fetch }) => {
+	let controls: DashboardControl[] | undefined;
+	try {
+		const configResponse = await fetch('/api/config/scenes', { cache: 'no-store' });
+		const configPayload = (await configResponse.json().catch(() => null)) as {
+			controls?: DashboardControl[];
+		} | null;
+		controls = configPayload?.controls;
+	} catch {}
+
 	try {
 		const res = await fetch('/api/device-state', { cache: 'no-store' });
 		if (!res.ok) {
-			return { deviceStates: {} };
+			return { deviceStates: {}, controls };
 		}
 
 		const payload = (await res.json()) as DeviceStatePayload;
 		if (!payload?.ok || !payload.states) {
-			return { deviceStates: {} };
+			return { deviceStates: {}, controls };
 		}
 
 		const flattened = Object.entries(payload.states).reduce<Record<string, 'on' | 'off'>>(
@@ -27,8 +37,8 @@ export const load: PageLoad = async ({ fetch }) => {
 			{}
 		);
 
-		return { deviceStates: flattened };
+		return { deviceStates: flattened, controls };
 	} catch {
-		return { deviceStates: {} };
+		return { deviceStates: {}, controls };
 	}
 };

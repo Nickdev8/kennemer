@@ -7,7 +7,7 @@ import type {
 	ShellyTargetConfig
 } from '$lib/config/schema';
 
-export type ShellyErrorCode = 'RATE_LIMIT' | 'HTTP_ERROR';
+export type ShellyErrorCode = 'RATE_LIMIT' | 'TIMEOUT' | 'HTTP_ERROR';
 
 export class ShellyHttpError extends Error {
 	constructor(
@@ -207,7 +207,7 @@ async function executeRequest(
 		}
 
 		if ((error as Error).name === 'AbortError') {
-			throw new ShellyHttpError('Shelly request timed out', 504, 'HTTP_ERROR');
+			throw new ShellyHttpError('Shelly request timed out', 504, 'TIMEOUT');
 		}
 
 		throw new ShellyHttpError(

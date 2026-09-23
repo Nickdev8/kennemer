@@ -1,9 +1,8 @@
 import type { RequestHandler } from './$types';
-import { devices } from '$lib/config/devices';
-import { advancedDevices } from '$lib/config/advanced';
+import { readEffectiveControls } from '$lib/server/scene-config-store';
 import { updateDeviceStateIfNewer, updateDeviceStateIfNewerTransient } from '$lib/server/device-state-store';
 import { publishDeviceState } from '$lib/server/device-state-events';
-import type { DeviceCommandKey } from '$lib/config/schema';
+import type { DashboardControl, DeviceCommandKey } from '$lib/config/schema';
 
 type CallbackPayload = {
 	deviceId?: string;
@@ -38,7 +37,10 @@ async function handleCallback(payload: CallbackInput | null) {
 		return jsonError('Invalid deviceId', 400);
 	}
 
-	const device = [...devices, ...advancedDevices].find((item) => item.id === id);
+	const device = (await readEffectiveControls()).find(
+		(item): item is Extract<DashboardControl, { controlType: 'device' }> =>
+			item.controlType === 'device' && item.id === id
+	);
 	if (!device && !payload.transient) {
 		return jsonError('Unknown device', 404);
 	}

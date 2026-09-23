@@ -11,10 +11,12 @@ export type ShellyTargetConfig = ShellyHttpTarget | ShellyHttpTarget[];
 
 export type DeviceCommandKey = 'on' | 'off';
 export type DeviceButtonMode = 'toggle' | 'dual' | 'single';
+export type ControlPlacement = 'main' | 'advanced' | 'energy';
 
 export interface ShellyDeviceCommand {
 	label?: string;
 	icon?: 'arrow-up';
+	color?: string;
 	type?: string;
 	typeBorder?: string;
 	cloud?: ShellyTargetConfig;
@@ -37,6 +39,7 @@ export interface ShellyDevice {
 export interface ShellyTrigger {
 	id: string;
 	label: string;
+	color?: string;
 	type?: string;
 	typeBorder?: string;
 	sceneId: string;
@@ -46,3 +49,8 @@ export interface TimedShellyTrigger extends ShellyTrigger {
 	buttonLabel: string;
 	activeDurationMs: number;
 }
+
+export type DashboardControl =
+	| (ShellyDevice & { controlType: 'device'; placement: ControlPlacement })
+	| (ShellyTrigger & { controlType: 'trigger'; placement: ControlPlacement })
+	| (TimedShellyTrigger & { controlType: 'timed-trigger'; placement: ControlPlacement });

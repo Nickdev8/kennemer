@@ -1,8 +1,7 @@
 import type { RequestHandler } from './$types';
-import { advancedTimedTriggers, advancedTriggers } from '$lib/config/advanced';
-import { energyDevicesTrigger } from '$lib/config/triggers';
 import { sendDeviceCommand, ShellyHttpError } from '$lib/server/shelly-http';
-import type { ShellyDevice } from '$lib/config/schema';
+import { readEffectiveControls } from '$lib/server/scene-config-store';
+import type { DashboardControl, ShellyDevice } from '$lib/config/schema';
 
 const shellySceneEndpoint = 'https://shelly-115-eu.shelly.cloud/scene/manual_run';
 
@@ -19,8 +18,9 @@ export const POST: RequestHandler = async ({ request, fetch, url }) => {
 		});
 	}
 
-	const trigger = [energyDevicesTrigger, ...advancedTriggers, ...advancedTimedTriggers].find(
-		(item) => item.id === triggerId
+	const trigger = (await readEffectiveControls()).find(
+		(item): item is Exclude<DashboardControl, { controlType: 'device' }> =>
+			item.controlType !== 'device' && item.id === triggerId
 	);
 
 	if (!trigger) {

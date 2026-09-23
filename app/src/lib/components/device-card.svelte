@@ -3,6 +3,7 @@
 	import ArrowUp from 'lucide-svelte/icons/arrow-up';
 	import type { DeviceCommandKey, ShellyDevice } from '$lib/config/schema';
 	import { isDeviceCommandConfigured } from '$lib/config/device-validation';
+	import { resolveControlColor } from '$lib/components/control-colors';
 
 	const baseCardClass =
 		'flex h-full max-h-[18rem] min-h-[12rem] flex-col gap-3 rounded-lg border border-slate-300 bg-white px-5 py-5 transition-colors duration-150';
@@ -91,9 +92,15 @@
 
 		if (optimisticStatus === 'on') {
 			const onCommand = device.commands.on;
+			const configuredColor = onCommand ? resolveControlColor(onCommand.color) : null;
 			const hexColor = onCommand ? normalizeHexColor(onCommand.type ?? '') : null;
 			const borderHex =
 				onCommand && onCommand.typeBorder ? normalizeHexColor(onCommand.typeBorder) : hexColor;
+
+			if (configuredColor) {
+				cardStyle = [`border-color:${configuredColor.border}`, `background:${configuredColor.soft}`].join(';');
+				return `${baseCardClass} ${cardCustomClass}`;
+			}
 
 			if (hexColor) {
 				const borderColor = borderHex ?? hexColor;
@@ -172,6 +179,7 @@
 		options: { forceProminent?: boolean; forceNeutral?: boolean; forceToggleNeutral?: boolean } = {}
 	): ButtonVisual {
 		const config = device.commands[command];
+		const configuredColor = resolveControlColor(config?.color);
 		const typeValue = config?.type;
 		const typeString =
 			typeof typeValue === 'string' ? typeValue : typeValue === undefined ? '' : String(typeValue);
@@ -186,6 +194,13 @@
 			classes.push(buttonToggleNeutralClass);
 		} else if (options.forceNeutral) {
 			classes.push(buttonNeutralClass);
+		} else if (configuredColor) {
+			classes.push(buttonCustomClass);
+			style = [
+				`background:${configuredColor.background}`,
+				`border-color:${configuredColor.border}`,
+				`color:${configuredColor.text}`
+			].join(';');
 		} else if (hexColor) {
 			const textColor = getTextColor(hexColor);
 			const borderColor = borderHex ?? hexColor;

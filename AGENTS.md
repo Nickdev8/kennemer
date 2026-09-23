@@ -56,7 +56,7 @@ token.
 │   ├── src/lib/config/         Config schemas and import shims
 │   ├── src/lib/server/         Shelly calls, state storage, SSE helpers
 │   ├── src/routes/             Main page and server API endpoints
-│   ├── env.temp                Safe environment template
+│   ├── .env.example            Safe environment template
 │   └── server.js               Production HTTP/HTTPS wrapper
 ├── odroid/                     Host scripts and systemd units
 ├── Dockerfile                  Production image build
@@ -75,9 +75,12 @@ Additional instructions:
 
 ## Control model
 
-The dashboard is configuration-driven. The primary source is
-`app/config/devices.ts`; the files below `app/src/lib/config/` re-export the
-root config and define its TypeScript schema.
+The dashboard is configuration-driven. Main controls live in the array in
+`app/config/devices.ts`; advanced controls live in `app/config/advanced.ts`;
+standalone global scene triggers live in `app/config/triggers.ts`. Each entry
+selects its renderer with `controlType` and records its surface with `placement`.
+The files below `app/src/lib/config/` re-export the root config and define its
+TypeScript schema.
 
 The normal 3-by-3 grid currently contains:
 
@@ -93,23 +96,33 @@ The normal 3-by-3 grid currently contains:
 | 8        | Aula vide      | On/off scene toggle                |
 | 9        | Kopje          | On/off scene toggle                |
 
-`pushNumber`, not source-array position, defines the grid position. Keep values
-unique and within 1 through 9.
+`pushNumber`, not source-array position, defines the main grid position. Keep
+values unique and within 1 through 9. Devices, scene triggers, and timed
+triggers can appear in either the main or advanced control array and share the
+`ControlCard` renderer.
 
 Every toggle has two independent Shelly scene IDs:
 
-- `commands.on` means **Aan** and results in the green state.
-- `commands.off` means **Uit** and results in the neutral/off state.
+- `commands.on` is the scene that turns equipment on and results in the green state.
+- `commands.off` is the scene that turns equipment off and results in the neutral/off state.
+
+The toggle card displays the current state, not the next action: when it displays
+**Aan**, pressing it sends `commands.off`; when it displays **Uit**, pressing it
+sends `commands.on`.
 
 The central screen button is `single` and `stateless`; it fires a scene but
 must not pretend to know a persistent on/off state.
 
+Colors are optional per control or per device command. `commands.on` and
+`commands.off` can have different named or hex colors; absent colors preserve
+the existing fallback styling.
+
 The red **ALLES UIT** button is configured in `app/config/triggers.ts`. The UI
 asks `Ja` or `Nee`; only confirmation may call its scene.
 
-Advanced controls are intentionally placeholders in
-`app/config/advanced.ts`. Empty actions are disabled and must remain harmless
-until real IDs are deliberately configured.
+Advanced controls live in `app/config/advanced.ts`; empty actions are disabled
+and remain harmless until real IDs are deliberately configured. Runtime scene
+ID overrides are kept separately under `/data`.
 
 ## Device status model
 
@@ -152,6 +165,11 @@ DeviceCard click
 
 Trigger cards use `POST /triggers`. Server routes only accept IDs and commands
 that exist in config; clients cannot submit arbitrary URLs.
+
+Scene IDs may be overridden from the authenticated advanced editor. Overrides
+are stored under `/data`, validated against the checked-in control list, and
+never change endpoints, credentials, or control metadata. Saving an override
+does not execute a scene.
 
 Scene targets always use Shelly Cloud because the configured endpoint is a
 Shelly scene API. `USE_LAN_DEVICES=1` only prefers LAN when a command actually
@@ -202,7 +220,7 @@ edits. Make changes in a development checkout, commit and push them, then run
 
 ## Environment
 
-`app/.env` is runtime-only and ignored by Git. Start from `app/env.temp`.
+`app/.env` is runtime-only and ignored by Git. Start from `app/.env.example`.
 
 Main variables:
 
@@ -216,6 +234,8 @@ Main variables:
 | `DEVICE_STATE_PATH`              | Optional remembered-state file path          |
 | `KENNEMER_MAINTENANCE_TOKEN`     | Shared container-to-host API secret          |
 | `KENNEMER_MAINTENANCE_URL`       | Host maintenance API URL                     |
+| `KENNEMER_CONFIG_EDIT_PIN`       | Private PIN for saving scene-ID overrides    |
+| `SCENE_OVERRIDE_PATH`            | Optional persistent scene override file      |
 | `PUBLIC_ADVANCED_PATTERN`        | Comma-separated unlock patterns              |
 | `PUBLIC_ADVANCED_PIN`            | Backward-compatible additional unlock value  |
 | `PUBLIC_DISABLE_WATTAGE`         | Hide and stop wattage requests               |

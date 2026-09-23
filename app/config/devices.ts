@@ -1,11 +1,13 @@
 import { env } from '$env/dynamic/public';
-import type { ShellyDevice } from '../src/lib/config/schema';
+import type { DashboardControl } from '../src/lib/config/schema';
 
 const shellySceneEndpoint =
 	env.PUBLIC_SHELLY_SCENE_ENDPOINT ?? 'https://shelly-115-eu.shelly.cloud/scene/manual_run';
 
-export const devices: ShellyDevice[] = [
+export const devices: DashboardControl[] = [
 	{
+		controlType: 'device',
+		placement: 'main',
 		id: 'push-1',
 		label: '1ste etage',
 		type: 'Scene',
@@ -15,6 +17,7 @@ export const devices: ShellyDevice[] = [
 		commands: {
 			on: {
 				label: 'Aan',
+				color: 'green',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
@@ -24,6 +27,7 @@ export const devices: ShellyDevice[] = [
 			},
 			off: {
 				label: 'Uit',
+				color: 'red',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
@@ -34,6 +38,8 @@ export const devices: ShellyDevice[] = [
 		}
 	},
 	{
+		controlType: 'device',
+		placement: 'main',
 		id: 'scene-aula-plafond',
 		label: 'Aula plafond',
 		type: 'Scene',
@@ -43,6 +49,7 @@ export const devices: ShellyDevice[] = [
 		commands: {
 			on: {
 				label: 'Aan',
+				color: 'green',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
@@ -52,6 +59,7 @@ export const devices: ShellyDevice[] = [
 			},
 			off: {
 				label: 'Uit',
+				color: 'red',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
@@ -62,6 +70,8 @@ export const devices: ShellyDevice[] = [
 		}
 	},
 	{
+		controlType: 'device',
+		placement: 'main',
 		id: 'scene-gang-entree',
 		label: 'Gang + entree',
 		type: 'Scene',
@@ -71,6 +81,7 @@ export const devices: ShellyDevice[] = [
 		commands: {
 			on: {
 				label: 'Aan',
+				color: 'green',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
@@ -80,6 +91,7 @@ export const devices: ShellyDevice[] = [
 			},
 			off: {
 				label: 'Uit',
+				color: 'red',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
@@ -90,6 +102,8 @@ export const devices: ShellyDevice[] = [
 		}
 	},
 	{
+		controlType: 'device',
+		placement: 'main',
 		id: 'scene-1ste',
 		label: '1ste',
 		type: 'Scene',
@@ -99,6 +113,7 @@ export const devices: ShellyDevice[] = [
 		commands: {
 			on: {
 				label: 'Aan',
+				color: 'green',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
@@ -108,6 +123,7 @@ export const devices: ShellyDevice[] = [
 			},
 			off: {
 				label: 'Uit',
+				color: 'red',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
@@ -118,6 +134,8 @@ export const devices: ShellyDevice[] = [
 		}
 	},
 	{
+		controlType: 'device',
+		placement: 'main',
 		id: 'scene-screen-lokalen',
 		label: 'Screen lokalen',
 		type: 'Scene',
@@ -128,6 +146,7 @@ export const devices: ShellyDevice[] = [
 		commands: {
 			on: {
 				label: 'Screens omhoog',
+				color: 'blue',
 				icon: 'arrow-up',
 				cloud: {
 					endpoint: shellySceneEndpoint,
@@ -139,6 +158,8 @@ export const devices: ShellyDevice[] = [
 		}
 	},
 	{
+		controlType: 'device',
+		placement: 'main',
 		id: 'scene-kantine',
 		label: 'Kantine',
 		type: 'Scene',
@@ -148,6 +169,7 @@ export const devices: ShellyDevice[] = [
 		commands: {
 			on: {
 				label: 'Aan',
+				color: 'green',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
@@ -157,6 +179,7 @@ export const devices: ShellyDevice[] = [
 			},
 			off: {
 				label: 'Uit',
+				color: 'red',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
@@ -167,6 +190,8 @@ export const devices: ShellyDevice[] = [
 		}
 	},
 	{
+		controlType: 'device',
+		placement: 'main',
 		id: 'scene-parterre',
 		label: 'Parterre',
 		type: 'Scene',
@@ -176,6 +201,7 @@ export const devices: ShellyDevice[] = [
 		commands: {
 			on: {
 				label: 'Aan',
+				color: 'green',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
@@ -185,6 +211,7 @@ export const devices: ShellyDevice[] = [
 			},
 			off: {
 				label: 'Uit',
+				color: 'red',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
@@ -195,6 +222,8 @@ export const devices: ShellyDevice[] = [
 		}
 	},
 	{
+		controlType: 'device',
+		placement: 'main',
 		id: 'scene-aula-vide',
 		label: 'Aula vide',
 		type: 'Scene',
@@ -204,6 +233,7 @@ export const devices: ShellyDevice[] = [
 		commands: {
 			on: {
 				label: 'Aan',
+				color: 'green',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
@@ -213,6 +243,7 @@ export const devices: ShellyDevice[] = [
 			},
 			off: {
 				label: 'Uit',
+				color: 'red',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
@@ -223,6 +254,8 @@ export const devices: ShellyDevice[] = [
 		}
 	},
 	{
+		controlType: 'device',
+		placement: 'main',
 		id: 'scene-kopje-gang',
 		label: 'Kopje',
 		type: 'Scene',
@@ -232,6 +265,7 @@ export const devices: ShellyDevice[] = [
 		commands: {
 			on: {
 				label: 'Aan',
+				color: 'green',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',
@@ -241,6 +275,7 @@ export const devices: ShellyDevice[] = [
 			},
 			off: {
 				label: 'Uit',
+				color: 'red',
 				cloud: {
 					endpoint: shellySceneEndpoint,
 					method: 'POST',

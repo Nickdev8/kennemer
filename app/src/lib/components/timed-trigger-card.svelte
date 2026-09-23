@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { createEventDispatcher, onMount } from 'svelte';
 	import type { TimedShellyTrigger } from '$lib/config/schema';
+	import { resolveControlColor } from '$lib/components/control-colors';
 
 	const baseCardClass =
 		'flex h-full max-h-[18rem] min-h-[12rem] flex-col gap-3 rounded-lg border border-rose-500 bg-white px-5 py-5';
@@ -22,6 +23,10 @@
 	$: elapsedMs = isActive && activeUntil ? trigger.activeDurationMs - (activeUntil - now) : 0;
 	$: progressPercent = Math.min(100, (elapsedMs / trigger.activeDurationMs) * 100);
 	$: buttonText = isActive ? formatElapsed(elapsedMs) : trigger.buttonLabel;
+	$: triggerColor = resolveControlColor(trigger.color);
+	$: triggerStyle = triggerColor
+		? `background:${triggerColor.background};border-color:${triggerColor.border};color:${triggerColor.text}`
+		: undefined;
 
 	onMount(() => {
 		clockInterval = setInterval(() => {
@@ -50,6 +55,7 @@
 	<button
 		type="button"
 		class={baseButtonClass}
+		style={triggerStyle}
 		disabled={isLoading || isActive}
 		on:click={handleTrigger}
 	>

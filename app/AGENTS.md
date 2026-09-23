@@ -117,5 +117,5 @@ Do not commit or depend on development copies of:
 - `build/`
 - `node_modules/`
 
-`env.temp` is the documented, non-secret template and should be updated when a
+`.env.example` is the documented, non-secret template and should be updated when a
 new environment variable becomes operationally relevant.

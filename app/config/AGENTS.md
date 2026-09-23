@@ -5,12 +5,16 @@ This directory is the maintainer-facing source for dashboard controls. Follow
 
 ## Files
 
-- `devices.ts`: the nine primary dashboard positions.
-- `triggers.ts`: the red **ALLES UIT** scene.
-- `advanced.ts`: devices and triggers shown after advanced unlock.
+- `devices.ts`: the editable main-placement control array.
+- `advanced.ts`: the editable advanced-placement control array.
+- `triggers.ts`: standalone scene triggers, currently including **ALLES UIT**.
 
 Types come from `src/lib/config/schema.ts`. Use those types instead of creating
-parallel config shapes.
+parallel config shapes. Each control has a `controlType` (`device`, `trigger`,
+or `timed-trigger`) and a `placement` (`main`, `advanced`, or `energy`). The
+shared control renderer selects the matching card component, so device and
+trigger types can be used in either page array. Keep `ALLES UIT` in
+`triggers.ts` because it is a separately confirmed global action.
 
 ## Device contract
 
@@ -56,8 +60,11 @@ the current default scene endpoint. Their JSON payload is `{ id: 'SCENE_ID' }`.
 
 Mapping is strict:
 
-- `commands.on` has label `Aan` and the scene that turns equipment on.
-- `commands.off` has label `Uit` and the scene that turns equipment off.
+- `commands.on` is the scene that turns equipment on.
+- `commands.off` is the scene that turns equipment off.
+
+For toggle cards, the displayed label is the current state, not the next
+action: **Aan** sends `commands.off`, while **Uit** sends `commands.on`.
 
 Never swap these to compensate for UI styling. Fix styling in the component.
 
@@ -83,6 +90,13 @@ serve different buttons.
 A missing status ID means the UI cannot read live state. That alone must not
 make a valid scene unclickable.
 
+Controls may define an optional `color`. Supported names include `green`, `red`,
+`grey`/`gray`, `slate`, `blue`, `cyan`, `teal`, `yellow`, `amber`, `orange`,
+`purple`, `pink`, `neutral`, and `none`; six- or three-digit hex values such as
+`#2563eb` are also accepted. Device command colors belong on the individual
+`commands.on` and `commands.off` entries. If omitted, the existing component
+fallback styling remains active.
+
 ## Current special controls
 
 `Screen lokalen` is position 5, uses `buttonMode: 'single'`, is stateless, and
@@ -93,8 +107,13 @@ running again for one minute.
 `energyDevicesTrigger` is the **ALLES UIT** scene. It is presented under the
 wattage section and requires a Dutch authorization confirmation in the UI.
 
-The two advanced controls are currently harmless placeholders. Keep both
-payloads empty until the maintainer provides explicit IDs.
+Advanced controls may include toggles, timed triggers, and plain scene
+triggers. Empty actions remain disabled and harmless until real IDs are
+deliberately configured.
+
+Runtime scene-ID overrides are stored separately from these source files. The
+advanced editor can change only the scene ID for an existing configured action;
+it cannot change endpoints, credentials, labels, placement, or button type.
 
 ## Validation checklist
 

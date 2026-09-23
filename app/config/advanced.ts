@@ -66,20 +66,64 @@ export const advancedControls: DashboardControl[] = [
 		sceneId: '1789568570313'
 	},
 	{
-		controlType: 'trigger',
+		controlType: 'device',
 		placement: 'advanced',
 		id: 'winder-mode',
-		label: 'Winder Mode',
-		color: 'purple',
-		sceneId: '0000'
+		label: 'Vakantie mode',
+		type: 'Advanced',
+		buttonMode: 'toggle',
+		commands: {
+				on: {
+				label: 'Status: Aan',
+				color: 'red',
+				cloud: {
+					endpoint: shellySceneEndpoint,
+					method: 'POST',
+					payload: { id: '0000' },
+					requiresAuthKey: true
+				}
+			},
+				off: {
+				label: 'Status: Uit',
+				color: 'white',
+				cloud: {
+					endpoint: shellySceneEndpoint,
+					method: 'POST',
+					payload: { id: '0000' },
+					requiresAuthKey: true
+				}
+			}
+		}
 	},
-	{
-		controlType: 'trigger',
+		{
+		controlType: 'device',
 		placement: 'advanced',
 		id: 'zomer-mode',
-		label: 'Zomer Mode',
-		color: 'blue',
-		sceneId: '0000'
+		label: 'Vakantie mode',
+		type: 'Advanced',
+		buttonMode: 'toggle',
+		commands: {
+				on: {
+				label: 'Status: Aan',
+				color: 'red',
+				cloud: {
+					endpoint: shellySceneEndpoint,
+					method: 'POST',
+					payload: { id: '0000' },
+					requiresAuthKey: true
+				}
+			},
+				off: {
+				label: 'Status: Uit',
+				color: 'white',
+				cloud: {
+					endpoint: shellySceneEndpoint,
+					method: 'POST',
+					payload: { id: '0000' },
+					requiresAuthKey: true
+				}
+			}
+		}
 	}
 ];
 

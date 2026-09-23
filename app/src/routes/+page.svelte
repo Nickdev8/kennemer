@@ -1677,7 +1677,7 @@
 	{#if displayDimmed}
 		<button
 			type="button"
-			class="fixed inset-0 z-[70] cursor-default bg-black"
+			class="fixed inset-0 z-[70] flex cursor-default items-center justify-center bg-black"
 			aria-label="Scherm actief maken"
 			on:click={wakeDisplay}
 			on:keydown={wakeDisplay}

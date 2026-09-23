@@ -310,6 +310,9 @@
 				{/if}
 			{/each}
 			<div class="flex flex-wrap gap-2">
+				<button type="button" class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100" on:click={closeEditor} disabled={saving}>
+					Annuleren
+				</button>
 				<button type="button" class="rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60" on:click={save} disabled={saving}>
 					{saving ? 'Opslaan…' : 'Wijzigingen opslaan'}
 				</button>

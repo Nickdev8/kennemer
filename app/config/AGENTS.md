@@ -112,8 +112,9 @@ triggers. Empty actions remain disabled and harmless until real IDs are
 deliberately configured.
 
 Runtime scene-ID overrides are stored separately from these source files. The
-advanced editor can change only the scene ID for an existing configured action;
-it cannot change endpoints, credentials, labels, placement, or button type.
+advanced editor can change only scene IDs and valid status-device IDs for an
+existing configured control; it cannot change endpoints, credentials, labels,
+placement, or button type.
 
 ## Validation checklist
 

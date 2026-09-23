@@ -7,8 +7,14 @@ export const sceneIdSchema = z
 	.regex(/^\d+$/, 'Gebruik alleen cijfers.')
 	.max(32, 'Scène-ID is te lang.');
 
-export const sceneSlotSchema = z.enum(['on', 'off', 'scene']);
-export const sceneOverrideSchema = z.partialRecord(sceneSlotSchema, sceneIdSchema);
+export const statusDeviceIdSchema = z
+	.string()
+	.trim()
+	.regex(/^[0-9a-f]{12}(?:_\d+)?$/i, 'Gebruik een geldig Shelly statusdevice-ID.');
+
+export const sceneSlotSchema = z.enum(['on', 'off', 'scene', 'status']);
+const overrideValueSchema = z.string().trim().min(1).max(32);
+export const sceneOverrideSchema = z.partialRecord(sceneSlotSchema, overrideValueSchema);
 
 export const sceneOverridesFileSchema = z.object({
 	version: z.literal(1),
@@ -23,7 +29,7 @@ export const sceneOverrideRequestSchema = z.object({
 		z.object({
 			controlId: z.string().min(1),
 			slot: sceneSlotSchema,
-			sceneId: sceneIdSchema
+			sceneId: overrideValueSchema
 		})
 	).max(100)
 });

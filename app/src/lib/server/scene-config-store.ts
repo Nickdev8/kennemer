@@ -9,6 +9,7 @@ import { triggers } from '$lib/config/triggers';
 import type { DashboardControl } from '$lib/config/schema';
 import {
 	sceneIdSchema,
+	statusDeviceIdSchema,
 	sceneOverrideRequestSchema,
 	sceneOverridesFileSchema,
 	sceneResetRequestSchema,
@@ -78,12 +79,17 @@ async function readOverrides(): Promise<SceneOverridesFile> {
 
 function editableSlots(control: DashboardControl): SceneSlot[] {
 	if (control.controlType === 'device') {
-		return (['on', 'off'] as SceneSlot[]).filter((slot) => Boolean(control.commands[slot as 'on' | 'off']));
+		const slots = (['on', 'off'] as SceneSlot[]).filter((slot) =>
+			Boolean(control.commands[slot as 'on' | 'off'])
+		);
+		if (control.statusdeviceid?.trim()) slots.push('status');
+		return slots;
 	}
 	return ['scene'];
 }
 
 function baseSceneId(control: DashboardControl, slot: SceneSlot): string | undefined {
+	if (control.controlType === 'device' && slot === 'status') return control.statusdeviceid;
 	if (control.controlType !== 'device' && slot === 'scene') return control.sceneId;
 	if (control.controlType !== 'device' || slot === 'scene') return undefined;
 	const command = control.commands[slot as 'on' | 'off'];
@@ -106,7 +112,9 @@ export async function readEffectiveControls(): Promise<DashboardControl[]> {
 		for (const slot of editableSlots(next)) {
 			const sceneId = override[slot];
 			if (!sceneId) continue;
-			if (next.controlType === 'device' && slot !== 'scene') {
+			if (next.controlType === 'device' && slot === 'status') {
+				if (statusDeviceIdSchema.safeParse(sceneId).success) next.statusdeviceid = sceneId;
+			} else if (next.controlType === 'device' && slot !== 'scene') {
 				const command = next.commands[slot as 'on' | 'off'];
 				if (!command?.cloud) continue;
 				const targets = Array.isArray(command.cloud) ? command.cloud : [command.cloud];
@@ -155,7 +163,10 @@ function validateChanges(
 		if (!control || !editableSlots(control).includes(change.slot)) {
 			throw new Error('Onbekende scène-actie.');
 		}
-		const sceneId = sceneIdSchema.parse(change.sceneId);
+		const sceneId =
+			change.slot === 'status'
+				? statusDeviceIdSchema.parse(change.sceneId)
+				: sceneIdSchema.parse(change.sceneId);
 		next[change.controlId] ??= {};
 		next[change.controlId][change.slot] = sceneId;
 	}

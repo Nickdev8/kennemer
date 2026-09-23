@@ -172,6 +172,9 @@ validated against the checked-in control list, and
 never change endpoints, credentials, or control metadata. Saving an override
 does not execute a scene.
 
+The advanced editor also permits valid `statusdeviceid` overrides for device
+controls; these change physical-state lookup only and do not execute a scene.
+
 Scene targets always use Shelly Cloud because the configured endpoint is a
 Shelly scene API. `USE_LAN_DEVICES=1` only prefers LAN when a command actually
 provides a LAN target.

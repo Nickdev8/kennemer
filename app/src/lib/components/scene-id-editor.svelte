@@ -3,6 +3,7 @@
 	import type { DashboardControl } from '$lib/config/schema';
 	import {
 		sceneIdSchema,
+		statusDeviceIdSchema,
 		type SceneEditorEntry,
 		type SceneSlot
 	} from '$lib/config/scene-config-schema';
@@ -50,6 +51,12 @@
 
 	function fieldKey(controlId: string, slot: SceneSlot) {
 		return `${controlId}:${slot}`;
+	}
+
+	function slotLabel(slot: SceneSlot) {
+		if (slot === 'status') return 'Status-ID';
+		if (slot === 'scene') return 'Scène';
+		return slot;
 	}
 
 	function hydrate(payload: SceneConfigResponse) {
@@ -108,8 +115,15 @@
 		successMessage = '';
 		const changes = collectChanges();
 		for (const change of changes) {
-			if (!sceneIdSchema.safeParse(change.sceneId).success) {
+			const valid =
+				change.slot === 'status'
+					? statusDeviceIdSchema.safeParse(change.sceneId).success
+					: sceneIdSchema.safeParse(change.sceneId).success;
+			if (!valid) {
 				errorMessage = 'Gebruik voor elke scène-ID alleen cijfers.';
+				if (change.slot === 'status') {
+					errorMessage = 'Gebruik een geldig Shelly statusdevice-ID.';
+				}
 				return;
 			}
 		}
@@ -265,7 +279,7 @@
 										{#each Object.entries(entry.slots) as [slot, baseValue] (slot)}
 											{@const key = fieldKey(entry.controlId, slot as SceneSlot)}
 											<label class="flex items-center gap-2">
-												<span class="w-14 shrink-0 text-xs font-semibold text-slate-500 uppercase">{slot}</span>
+								<span class="w-20 shrink-0 text-xs font-semibold text-slate-500">{slotLabel(slot as SceneSlot)}</span>
 												<input
 													class="min-w-0 flex-1 rounded border border-slate-300 px-2 py-1 font-mono text-sm"
 													value={values[key] ?? baseValue}

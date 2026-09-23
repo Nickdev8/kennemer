@@ -41,7 +41,7 @@ while true; do
 	fi
 
 	if [[ "$status" == "running" && "$health" == "healthy" ]] &&
-		curl --fail --silent --max-time 5 http://127.0.0.1/healthz >/dev/null; then
+		curl --fail --silent --max-time 5 http://127.0.0.1/ >/dev/null; then
 		failures=0
 		continue
 	fi

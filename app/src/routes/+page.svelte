@@ -820,14 +820,18 @@
 		deviceStates = next;
 	}
 
-	function applyDeviceStateUpdate(deviceId: string, command: DeviceCommandKey) {
+	function applyDeviceStateUpdate(deviceId: string, command: DeviceCommandKey, source?: string) {
 		const next = new Map(deviceStates);
 		next.set(deviceId, command);
 		deviceStates = next;
 
-		if (statusDeviceIds.includes(deviceId)) {
+		if (source === 'status-lan' || source === 'status-poll') {
+			const statusDeviceId = statusDeviceIds.includes(deviceId)
+				? deviceId
+				: deviceById.get(deviceId)?.statusdeviceid;
+			if (!statusDeviceId) return;
 			const nextStatusStates = new Map(statusDeviceStates);
-			nextStatusStates.set(deviceId, command);
+			nextStatusStates.set(statusDeviceId, command);
 			statusDeviceStates = nextStatusStates;
 		}
 	}
@@ -866,10 +870,14 @@
 			try {
 				const payload = JSON.parse(data) as {
 					deviceId: string;
-					state: { lastCommand: DeviceCommandKey };
+					state: { lastCommand: DeviceCommandKey; source?: string };
 				};
 				if (payload?.deviceId && payload.state?.lastCommand) {
-					applyDeviceStateUpdate(payload.deviceId, payload.state.lastCommand);
+					applyDeviceStateUpdate(
+						payload.deviceId,
+						payload.state.lastCommand,
+						payload.state.source
+					);
 				}
 			} catch {}
 		});

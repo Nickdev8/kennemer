@@ -69,7 +69,7 @@ export const advancedControls: DashboardControl[] = [
 		controlType: 'device',
 		placement: 'advanced',
 		id: 'winder-mode',
-		label: 'Vakantie mode',
+		label: 'Winder mode',
 		type: 'Advanced',
 		buttonMode: 'toggle',
 		commands: {
@@ -99,7 +99,7 @@ export const advancedControls: DashboardControl[] = [
 		controlType: 'device',
 		placement: 'advanced',
 		id: 'zomer-mode',
-		label: 'Vakantie mode',
+		label: 'Zomer mode',
 		type: 'Advanced',
 		buttonMode: 'toggle',
 		commands: {

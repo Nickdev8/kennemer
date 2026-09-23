@@ -9,13 +9,13 @@
 		'relative flex flex-1 w-full items-center justify-center rounded-lg border border-slate-800 bg-slate-800 px-5 py-6 text-xl font-semibold text-white transition-colors duration-150 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60';
 
 	export let trigger: ShellyTrigger;
-	export let loadingTriggerId: string | null = null;
+	export let loadingTriggerIds: ReadonlySet<string> = new Set();
 
 	const dispatch = createEventDispatcher<{
 		trigger: { triggerId: string };
 	}>();
 
-	$: isLoading = loadingTriggerId === trigger.id;
+	$: isLoading = loadingTriggerIds.has(trigger.id);
 	$: isConfigured = Boolean(trigger.sceneId?.trim());
 	$: triggerColor = resolveControlColor(trigger.color);
 	$: triggerStyle = triggerColor

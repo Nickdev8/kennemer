@@ -9,7 +9,7 @@
 		'relative flex flex-1 w-full items-center justify-center rounded-lg border border-slate-800 bg-slate-800 px-5 py-6 text-xl font-semibold text-white transition-colors duration-150 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60';
 
 	export let trigger: TimedShellyTrigger;
-	export let loadingTriggerId: string | null = null;
+	export let loadingTriggerIds: ReadonlySet<string> = new Set();
 	export let activeUntil: number | null = null;
 
 	const dispatch = createEventDispatcher<{
@@ -18,7 +18,7 @@
 
 	let now = Date.now();
 	let clockInterval: ReturnType<typeof setInterval> | null = null;
-	$: isLoading = loadingTriggerId === trigger.id;
+	$: isLoading = loadingTriggerIds.has(trigger.id);
 	$: isActive = Boolean(activeUntil && activeUntil > now);
 	$: elapsedMs = isActive && activeUntil ? trigger.activeDurationMs - (activeUntil - now) : 0;
 	$: progressPercent = Math.min(100, (elapsedMs / trigger.activeDurationMs) * 100);

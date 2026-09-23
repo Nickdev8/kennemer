@@ -27,7 +27,7 @@
 	export let commandOrder: DeviceCommandKey[];
 	export let commandKey: (deviceId: string, command: DeviceCommandKey) => string;
 	export let commandLabel: (device: ShellyDevice, command: DeviceCommandKey) => string;
-	export let loadingCommandKey: string | null;
+	export let loadingCommandKeys: ReadonlySet<string> = new Set();
 	export let initialStatus: DeviceCommandKey | null = null;
 	export let transientActive = false;
 	export let showType = false;
@@ -53,7 +53,7 @@
 		optimisticStatus ? commandKey(device.id, optimisticStatus) : null;
 
 	$: deviceLoading =
-		typeof loadingCommandKey === 'string' && loadingCommandKey.startsWith(`${device.id}:`);
+		Array.from(loadingCommandKeys).some((key) => key.startsWith(`${device.id}:`));
 
 	$: isToggle = device.buttonMode === 'toggle';
 
@@ -220,7 +220,7 @@
 			classes.push(options.forceProminent ? buttonOnProminentClass : buttonOnIdleClass);
 		}
 
-		if (loadingCommandKey === key) {
+		if (loadingCommandKeys.has(key)) {
 			classes.push('opacity-70');
 		}
 
@@ -256,17 +256,13 @@
 		const actionCommand = resolveToggleCommand(optimisticStatus);
 		if (!device.commands[stateCommand] || !device.commands[actionCommand]) return null;
 		const actionKey = commandKey(device.id, actionCommand);
-		const key = deviceLoading && loadingCommandKey ? loadingCommandKey : actionKey;
-		const showGreenAction = actionCommand === 'off';
+		const key = actionKey;
 		const actionConfigured = isDeviceCommandConfigured(device, actionCommand);
-		const visualCommand: DeviceCommandKey = showGreenAction ? 'on' : actionCommand;
-		const visual = computeButtonClass(visualCommand, key, {
-			forceProminent: showGreenAction,
-			forceToggleNeutral: !showGreenAction
-		});
+		const displayCommand = stateCommand;
+		const visual = computeButtonClass(displayCommand, key, { forceProminent: true });
 		const actionLabel = actionConfigured
-			? (device.commands[actionCommand]?.label ??
-				(actionCommand === 'on' ? 'Uit' : 'Aan'))
+			? (device.commands[displayCommand]?.label ??
+				(displayCommand === 'on' ? 'Aan' : 'Uit'))
 			: device.type === 'Scene'
 				? 'Scène niet ingesteld'
 				: 'Niet ingesteld';
@@ -275,7 +271,7 @@
 			className: visual.className,
 			style: visual.style,
 			ariaPressed: stateCommand === 'on',
-			disabled: !actionConfigured,
+			disabled: !actionConfigured || deviceLoading,
 			command: actionCommand,
 			label: actionLabel
 		};
@@ -354,7 +350,7 @@
 						{/if}
 						{singleState.label}
 					</span>
-					{#if loadingCommandKey === singleState.key}
+					{#if loadingCommandKeys.has(singleState.key)}
 						<span
 							class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-slate-900/60 text-sm font-semibold text-white"
 						>
@@ -374,7 +370,7 @@
 					on:click={() => handleCommand(toggleState.command)}
 				>
 					<span class="pointer-events-none text-center">{toggleState.label}</span>
-					{#if loadingCommandKey === toggleState.key}
+					{#if loadingCommandKeys.has(toggleState.key)}
 						<span
 							class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-slate-900/60 text-sm font-semibold text-white"
 						>
@@ -397,7 +393,7 @@
 							on:click={() => handleCommand(cmd)}
 						>
 							<span class="pointer-events-none text-center">{commandLabel(device, cmd)}</span>
-							{#if loadingCommandKey === state.key}
+							{#if loadingCommandKeys.has(state.key)}
 								<span
 									class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-slate-900/60 text-sm font-semibold text-white"
 								>

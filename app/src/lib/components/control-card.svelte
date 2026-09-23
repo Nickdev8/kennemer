@@ -9,8 +9,8 @@
 	export let commandOrder: DeviceCommandKey[];
 	export let commandKey: (deviceId: string, command: DeviceCommandKey) => string;
 	export let commandLabel: (device: ShellyDevice, command: DeviceCommandKey) => string;
-	export let loadingCommandKey: string | null;
-	export let loadingTriggerId: string | null;
+	export let loadingCommandKeys: ReadonlySet<string> = new Set();
+	export let loadingTriggerIds: ReadonlySet<string> = new Set();
 	export let initialStatus: DeviceCommandKey | null = null;
 	export let transientActive = false;
 	export let activeUntil: number | null = null;
@@ -31,7 +31,7 @@
 		{commandKey}
 		{commandLabel}
 		{resolveToggleCommand}
-		{loadingCommandKey}
+		{loadingCommandKeys}
 		{initialStatus}
 		{transientActive}
 		on:command={({ detail }) => dispatch('command', detail)}
@@ -39,14 +39,14 @@
 {:else if control.controlType === 'timed-trigger'}
 	<TimedTriggerCard
 		trigger={control}
-		{loadingTriggerId}
+		{loadingTriggerIds}
 		{activeUntil}
 		on:trigger={({ detail }) => dispatch('trigger', detail)}
 	/>
 {:else}
 	<TriggerCard
 		trigger={control}
-		{loadingTriggerId}
+		{loadingTriggerIds}
 		on:trigger={({ detail }) => dispatch('trigger', detail)}
 	/>
 {/if}

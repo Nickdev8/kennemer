@@ -123,7 +123,7 @@
 
 	export let data: PageData;
 
-	let loadingCommandKey: string | null = null;
+	let loadingCommandKeys = new Set<string>();
 	let errorMsg = '';
 	let advancedErrorMsg = '';
 	let deviceStates = new Map<string, DeviceCommandKey>(
@@ -250,7 +250,7 @@
 	let displayDimmed = false;
 	let stateStream: EventSource | null = null;
 	let stateStreamReconnectTimeout: ReturnType<typeof setTimeout> | null = null;
-	let loadingTriggerId: string | null = null;
+	let loadingTriggerIds = new Set<string>();
 	let triggerActiveUntilById = new Map<string, number>();
 	const triggerActiveTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 	let energyTriggerError = '';
@@ -769,7 +769,7 @@
 			return;
 		}
 		const key = commandKey(deviceId, command);
-		loadingCommandKey = key;
+		loadingCommandKeys = new Set([...loadingCommandKeys, key]);
 		errorMsg = '';
 		advancedErrorMsg = '';
 		let succeeded = false;
@@ -809,7 +809,9 @@
 			}
 			errorMsg = error instanceof Error ? error.message : 'Unknown error';
 		} finally {
-			loadingCommandKey = null;
+			const nextLoadingCommandKeys = new Set(loadingCommandKeys);
+			nextLoadingCommandKeys.delete(key);
+			loadingCommandKeys = nextLoadingCommandKeys;
 			if (succeeded && !options.suppressRefresh) {
 				requestWattageRefresh();
 			}
@@ -1230,7 +1232,7 @@
 	}
 
 	async function handleTriggerPress(triggerId: string, retryAttempt = 0) {
-		loadingTriggerId = triggerId;
+		loadingTriggerIds = new Set([...loadingTriggerIds, triggerId]);
 		advancedErrorMsg = '';
 		let succeeded = false;
 		try {
@@ -1251,7 +1253,9 @@
 			}
 			advancedErrorMsg = error instanceof Error ? error.message : 'Unknown error';
 		} finally {
-			loadingTriggerId = null;
+			const nextLoadingTriggerIds = new Set(loadingTriggerIds);
+			nextLoadingTriggerIds.delete(triggerId);
+			loadingTriggerIds = nextLoadingTriggerIds;
 			if (succeeded) {
 				requestWattageRefresh();
 			}
@@ -1289,7 +1293,8 @@
 	}
 
 	async function handleEnergyTriggerPress(retryAttempt = 0) {
-		loadingTriggerId = energyDevicesTrigger.id;
+		const energyTriggerId = energyDevicesTrigger.id;
+		loadingTriggerIds = new Set([...loadingTriggerIds, energyTriggerId]);
 		energyTriggerError = '';
 		try {
 			await triggerAction(energyDevicesTrigger.id);
@@ -1305,7 +1310,9 @@
 			}
 			energyTriggerError = error instanceof Error ? error.message : 'Scène kon niet worden uitgevoerd';
 		} finally {
-			loadingTriggerId = null;
+			const nextLoadingTriggerIds = new Set(loadingTriggerIds);
+			nextLoadingTriggerIds.delete(energyTriggerId);
+			loadingTriggerIds = nextLoadingTriggerIds;
 		}
 	}
 
@@ -1541,10 +1548,10 @@
 				<button
 					type="button"
 					class="relative flex w-full items-center justify-center rounded-lg border border-red-800 bg-red-700 px-5 py-5 text-lg font-bold text-white transition-colors duration-150 hover:bg-red-800 disabled:cursor-wait disabled:opacity-70"
-					disabled={loadingTriggerId === energyDevicesTrigger.id}
+					disabled={loadingTriggerIds.has(energyDevicesTrigger.id)}
 					on:click={openEnergyTriggerConfirmation}
 				>
-					{#if loadingTriggerId === energyDevicesTrigger.id}
+					{#if loadingTriggerIds.has(energyDevicesTrigger.id)}
 						Bezig…
 					{:else}
 						{energyDevicesTrigger.label}
@@ -1645,8 +1652,8 @@
 						{commandKey}
 						{commandLabel}
 						{resolveToggleCommand}
-						{loadingCommandKey}
-						loadingTriggerId={loadingTriggerId}
+						loadingCommandKeys={loadingCommandKeys}
+						loadingTriggerIds={loadingTriggerIds}
 						transientActive={
 							control.controlType === 'device' && isTransientDeviceActive(control.id)
 						}
@@ -1867,8 +1874,8 @@
 										{commandKey}
 										{commandLabel}
 										{resolveToggleCommand}
-										{loadingCommandKey}
-										loadingTriggerId={loadingTriggerId}
+										loadingCommandKeys={loadingCommandKeys}
+										loadingTriggerIds={loadingTriggerIds}
 										transientActive={
 											control.controlType === 'device' && isTransientDeviceActive(control.id)
 										}

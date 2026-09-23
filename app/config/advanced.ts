@@ -14,7 +14,7 @@ export const advancedControls: DashboardControl[] = [
 		buttonMode: 'toggle',
 		commands: {
 				on: {
-				label: 'Status: Uit',
+				label: 'Status: Aan',
 				color: 'green',
 				cloud: {
 					endpoint: shellySceneEndpoint,
@@ -24,7 +24,7 @@ export const advancedControls: DashboardControl[] = [
 				}
 			},
 				off: {
-				label: 'Status: Aan',
+				label: 'Status: Uit',
 				color: 'red',
 				cloud: {
 					endpoint: shellySceneEndpoint,

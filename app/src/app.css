@@ -2,6 +2,11 @@
 @plugin '@tailwindcss/typography';
 
 @layer base {
+	html.touch-cursor-hidden,
+	html.touch-cursor-hidden * {
+		cursor: none !important;
+	}
+
 	body {
 		@apply select-none;
 		font-family: 'Avenir Next', 'Avenir', 'Montserrat', 'Segoe UI', sans-serif;

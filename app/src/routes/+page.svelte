@@ -436,6 +436,21 @@
 		scheduleDisplayDim();
 	}
 
+	function handlePointerDown(event: PointerEvent) {
+		if (event.pointerType === 'touch') {
+			document.documentElement.classList.add('touch-cursor-hidden');
+		}
+		markDisplayActivity();
+	}
+
+	function handlePointerMove(event: PointerEvent) {
+		if (event.pointerType === 'mouse') {
+			document.documentElement.classList.remove('touch-cursor-hidden');
+		} else if (event.pointerType === 'touch') {
+			document.documentElement.classList.add('touch-cursor-hidden');
+		}
+	}
+
 	function wakeDisplay(event?: Event) {
 		event?.preventDefault();
 		event?.stopPropagation();
@@ -1352,7 +1367,8 @@
 	onMount(() => {
 		if (typeof window !== 'undefined') {
 			window.addEventListener('contextmenu', preventContextMenu);
-			window.addEventListener('pointerdown', markDisplayActivity, { passive: true });
+			window.addEventListener('pointerdown', handlePointerDown, { passive: true });
+			window.addEventListener('pointermove', handlePointerMove, { passive: true });
 			window.addEventListener('keydown', markDisplayActivity);
 			window.addEventListener('online', handleBrowserOnline);
 			window.addEventListener('offline', handleBrowserOffline);
@@ -1369,7 +1385,8 @@
 	onDestroy(() => {
 		if (typeof window !== 'undefined') {
 			window.removeEventListener('contextmenu', preventContextMenu);
-			window.removeEventListener('pointerdown', markDisplayActivity);
+			window.removeEventListener('pointerdown', handlePointerDown);
+			window.removeEventListener('pointermove', handlePointerMove);
 			window.removeEventListener('keydown', markDisplayActivity);
 			window.removeEventListener('online', handleBrowserOnline);
 			window.removeEventListener('offline', handleBrowserOffline);

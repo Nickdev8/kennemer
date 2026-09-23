@@ -316,7 +316,7 @@
 				<button type="button" class="rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60" on:click={save} disabled={saving}>
 					{saving ? 'Opslaan…' : 'Wijzigingen opslaan'}
 				</button>
-				<button type="button" class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60" on:click={resetAll} disabled={saving}>
+				<button type="button" class="rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-60" on:click={resetAll} disabled={saving}>
 					Alles terugzetten
 				</button>
 			</div>

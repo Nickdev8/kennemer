@@ -256,7 +256,10 @@
 		const actionCommand = resolveToggleCommand(optimisticStatus);
 		if (!device.commands[stateCommand] || !device.commands[actionCommand]) return null;
 		const actionKey = commandKey(device.id, actionCommand);
-		const key = actionKey;
+		const loadingDeviceKey = Array.from(loadingCommandKeys).find((loadingKey) =>
+			loadingKey.startsWith(`${device.id}:`)
+		);
+		const key = loadingDeviceKey ?? actionKey;
 		const actionConfigured = isDeviceCommandConfigured(device, actionCommand);
 		const displayCommand = stateCommand;
 		const visual = computeButtonClass(displayCommand, key, { forceProminent: true });

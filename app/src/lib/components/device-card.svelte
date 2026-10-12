@@ -3,10 +3,15 @@
 	import ArrowUp from 'lucide-svelte/icons/arrow-up';
 	import type { DeviceCommandKey, ShellyDevice } from '$lib/config/schema';
 	import { isDeviceCommandConfigured } from '$lib/config/device-validation';
-	import { resolveControlColor } from '$lib/components/control-colors';
+	import {
+		resolveControlColor,
+		normalizeHexColor,
+		lightenHex,
+		getTextColor
+	} from '$lib/components/control-colors';
 
 	const baseCardClass =
-		'flex h-full max-h-[18rem] min-h-[12rem] flex-col gap-3 rounded-lg border border-slate-300 bg-white px-5 py-5 transition-colors duration-150';
+		'flex h-full max-h-[18rem] min-h-[12rem] flex-col gap-3 rounded-[var(--control-radius)] border border-slate-300 bg-white p-[var(--control-padding)] transition-colors duration-150';
 	const cardNeutralClass = 'bg-white';
 	const cardOnClass = 'border-emerald-500 bg-emerald-50';
 	const cardOffClass = 'bg-slate-50';
@@ -31,6 +36,7 @@
 	export let initialStatus: DeviceCommandKey | null = null;
 	export let transientActive = false;
 	export let showType = false;
+	export let cardNumber: number | undefined = undefined;
 	export let resolveToggleCommand: (status: DeviceCommandKey | null) => DeviceCommandKey = (
 		status
 	) => (status === 'on' ? 'off' : 'on');
@@ -52,8 +58,7 @@
 	const currentOptimisticKey = () =>
 		optimisticStatus ? commandKey(device.id, optimisticStatus) : null;
 
-	$: deviceLoading =
-		Array.from(loadingCommandKeys).some((key) => key.startsWith(`${device.id}:`));
+	$: deviceLoading = Array.from(loadingCommandKeys).some((key) => key.startsWith(`${device.id}:`));
 
 	$: isToggle = device.buttonMode === 'toggle';
 
@@ -92,13 +97,18 @@
 
 		if (optimisticStatus === 'on') {
 			const onCommand = device.commands.on;
-			const configuredColor = onCommand ? resolveControlColor(onCommand.color) : null;
+			const configuredColor = onCommand
+				? resolveControlColor(onCommand.color ?? (onCommand.type ? undefined : 'green'))
+				: null;
 			const hexColor = onCommand ? normalizeHexColor(onCommand.type ?? '') : null;
 			const borderHex =
 				onCommand && onCommand.typeBorder ? normalizeHexColor(onCommand.typeBorder) : hexColor;
 
 			if (configuredColor) {
-				cardStyle = [`border-color:${configuredColor.border}`, `background:${configuredColor.soft}`].join(';');
+				cardStyle = [
+					`border-color:${configuredColor.border}`,
+					`background:${configuredColor.soft}`
+				].join(';');
 				return `${baseCardClass} ${cardCustomClass}`;
 			}
 
@@ -137,41 +147,7 @@
 	};
 	let singleState: SingleButtonState | null = null;
 
-	const hexColorRegex = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
-
-	function normalizeHexColor(color: string): string | null {
-		const trimmed = color.trim();
-		if (!hexColorRegex.test(trimmed)) return null;
-		if (trimmed.length === 4) {
-			const [, r, g, b] = trimmed.split('');
-			return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
-		}
-		return trimmed.toLowerCase();
-	}
-
-	function getTextColor(hexColor: string): string {
-		const r = parseInt(hexColor.slice(1, 3), 16);
-		const g = parseInt(hexColor.slice(3, 5), 16);
-		const b = parseInt(hexColor.slice(5, 7), 16);
-		const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-		return brightness > 150 ? '#0f172a' : '#ffffff';
-	}
-
-	function lightenHex(hexColor: string, weight = 0.9): string {
-		const r = parseInt(hexColor.slice(1, 3), 16);
-		const g = parseInt(hexColor.slice(3, 5), 16);
-		const b = parseInt(hexColor.slice(5, 7), 16);
-		const mix = (channel: number) =>
-			Math.round(channel + (255 - channel) * weight)
-				.toString(16)
-				.padStart(2, '0');
-		return `#${mix(r)}${mix(g)}${mix(b)}`;
-	}
-
-	type ButtonVisual = {
-		className: string;
-		style?: string;
-	};
+	type ButtonVisual = { className: string; style?: string };
 
 	function computeButtonClass(
 		command: DeviceCommandKey,
@@ -179,7 +155,9 @@
 		options: { forceProminent?: boolean; forceNeutral?: boolean; forceToggleNeutral?: boolean } = {}
 	): ButtonVisual {
 		const config = device.commands[command];
-		const configuredColor = resolveControlColor(config?.color);
+		const configuredColor = resolveControlColor(
+			config?.color ?? (config?.type ? undefined : command === 'on' ? 'green' : 'white')
+		);
 		const typeValue = config?.type;
 		const typeString =
 			typeof typeValue === 'string' ? typeValue : typeValue === undefined ? '' : String(typeValue);
@@ -264,8 +242,7 @@
 		const displayCommand = stateCommand;
 		const visual = computeButtonClass(displayCommand, key, { forceProminent: true });
 		const actionLabel = actionConfigured
-			? (device.commands[displayCommand]?.label ??
-				(displayCommand === 'on' ? 'Aan' : 'Uit'))
+			? (device.commands[displayCommand]?.label ?? (displayCommand === 'on' ? 'Aan' : 'Uit'))
 			: device.type === 'Scene'
 				? 'Scène niet ingesteld'
 				: 'Niet ingesteld';
@@ -325,13 +302,23 @@
 <section class={cardClassName} style={cardStyle}>
 	<div class="flex items-center justify-between gap-4">
 		<div class="min-w-0">
-			<h3 class="truncate text-lg font-semibold text-slate-800">
+			<h3 class="truncate text-[length:var(--control-label-size)] font-semibold text-slate-800">
 				{device.label}
 			</h3>
 			{#if showType}
 				<p class="text-xs tracking-wide text-slate-400 uppercase">{device.type}</p>
 			{/if}
 		</div>
+		{#if cardNumber !== undefined}
+			<div class="min-w-0">
+				<h3
+					class="truncate text-[length:var(--control-label-size)] font-semibold text-slate-800"
+					aria-label={`Knop ${cardNumber}`}
+				>
+					{cardNumber}
+				</h3>
+			</div>
+		{/if}
 	</div>
 
 	<div class={`grid flex-1 ${commandGridClass} gap-4`}>

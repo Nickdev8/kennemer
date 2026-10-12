@@ -26,7 +26,7 @@ const namedColors: Record<string, ControlColor> = {
 
 const hexColorRegex = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 
-function normalizeHexColor(value: string): string | null {
+export function normalizeHexColor(value: string): string | null {
 	const trimmed = value.trim();
 	if (!hexColorRegex.test(trimmed)) return null;
 	if (trimmed.length === 4) {
@@ -36,7 +36,7 @@ function normalizeHexColor(value: string): string | null {
 	return trimmed.toLowerCase();
 }
 
-function getTextColor(hexColor: string): string {
+export function getTextColor(hexColor: string): string {
 	const r = parseInt(hexColor.slice(1, 3), 16);
 	const g = parseInt(hexColor.slice(3, 5), 16);
 	const b = parseInt(hexColor.slice(5, 7), 16);
@@ -44,7 +44,7 @@ function getTextColor(hexColor: string): string {
 	return brightness > 150 ? '#0f172a' : '#ffffff';
 }
 
-function lightenHex(hexColor: string, weight = 0.88): string {
+export function lightenHex(hexColor: string, weight = 0.88): string {
 	const r = parseInt(hexColor.slice(1, 3), 16);
 	const g = parseInt(hexColor.slice(3, 5), 16);
 	const b = parseInt(hexColor.slice(5, 7), 16);

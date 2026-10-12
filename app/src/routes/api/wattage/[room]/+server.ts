@@ -111,7 +111,7 @@ type ErrorResponse = {
 const DEVICE_LIST_ENDPOINT = 'https://shelly-115-eu.shelly.cloud/interface/device/get_all_lists';
 const CLOUD_STATUS_ENDPOINT = 'https://shelly-115-eu.shelly.cloud/device/status';
 const HTTP_TIMEOUT_MS = 4000;
-const IP_CACHE_PATH = resolvePath(process.cwd(), 'ips.json');
+const IP_CACHE_PATH = resolvePath(process.cwd(), env.IP_CACHE_PATH ?? 'ips.json');
 const CACHE_TTL_MS = 2 * 60 * 1000;
 
 const useLanWattage = (() => {

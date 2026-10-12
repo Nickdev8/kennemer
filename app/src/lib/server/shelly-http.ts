@@ -1,3 +1,5 @@
+import { env as publicEnv } from '$env/dynamic/public';
+import { sendDirectCommand } from './direct-device';
 import { env } from '$env/dynamic/private';
 import type {
 	DeviceCommandKey,
@@ -285,6 +287,10 @@ export async function sendDeviceCommand(device: ShellyDevice, commandKey: Device
 		return;
 	}
 
+	if (device.directDeviceId) {
+		await sendDirectCommand(device.directDeviceId, commandKey);
+		return;
+	}
 	const command = device.commands[commandKey];
 
 	if (!command) {
@@ -306,6 +312,7 @@ export async function sendDeviceCommand(device: ShellyDevice, commandKey: Device
 		const resolvedTarget = sceneCommand
 			? {
 					...target,
+					endpoint: publicEnv.PUBLIC_SHELLY_SCENE_ENDPOINT ?? target.endpoint,
 					// Scenes require form-encoded auth.
 					encoding: 'form' as const,
 					headers: stripHeaderKeys(target.headers, ['content-type', 'authorization'])

@@ -6,6 +6,7 @@
 	import type { DashboardControl, DeviceCommandKey, ShellyDevice } from '$lib/config/schema';
 
 	export let control: DashboardControl;
+	export let cardNumber: number | undefined = undefined;
 	export let commandOrder: DeviceCommandKey[];
 	export let commandKey: (deviceId: string, command: DeviceCommandKey) => string;
 	export let commandLabel: (device: ShellyDevice, command: DeviceCommandKey) => string;
@@ -26,6 +27,7 @@
 
 {#if control.controlType === 'device'}
 	<DeviceCard
+		{cardNumber}
 		device={control}
 		{commandOrder}
 		{commandKey}
@@ -38,6 +40,7 @@
 	/>
 {:else if control.controlType === 'timed-trigger'}
 	<TimedTriggerCard
+		{cardNumber}
 		trigger={control}
 		{loadingTriggerIds}
 		{activeUntil}
@@ -45,6 +48,7 @@
 	/>
 {:else}
 	<TriggerCard
+		{cardNumber}
 		trigger={control}
 		{loadingTriggerIds}
 		on:trigger={({ detail }) => dispatch('trigger', detail)}

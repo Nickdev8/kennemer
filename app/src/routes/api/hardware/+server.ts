@@ -16,7 +16,7 @@ function jsonResponse(body: unknown, status = 200) {
 
 export const GET: RequestHandler = async () => {
 	if (!maintenanceToken) {
-		return jsonResponse({ ok: false, message: 'Maintenance token is not configured' }, 503);
+		return jsonResponse({ ok: false, message: 'Hostonderhoud is niet geconfigureerd.' }, 503);
 	}
 
 	try {
@@ -28,14 +28,14 @@ export const GET: RequestHandler = async () => {
 		});
 		const payload = await response.json().catch(() => ({
 			ok: false,
-			message: 'Maintenance service returned an invalid response'
+			message: 'Hostonderhoud gaf een ongeldig antwoord.'
 		}));
 		return jsonResponse(payload, response.status);
 	} catch (error) {
 		return jsonResponse(
 			{
 				ok: false,
-				message: error instanceof Error ? error.message : 'Maintenance service is unreachable'
+				message: error instanceof Error ? error.message : 'Hostonderhoud is niet bereikbaar.'
 			},
 			502
 		);

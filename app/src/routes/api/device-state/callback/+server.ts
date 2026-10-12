@@ -42,7 +42,7 @@ async function handleCallback(payload: CallbackInput | null) {
 			item.controlType === 'device' && item.id === id
 	);
 	if (!device && !payload.transient) {
-		return jsonError('Unknown device', 404);
+		return jsonError('Onbekend apparaat.', 404);
 	}
 
 	const deviceId = device?.id ?? id;

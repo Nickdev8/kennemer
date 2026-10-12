@@ -4,17 +4,22 @@
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
-		"dev": "vite dev",
-		"build": "vite build",
+		"dev": "node scripts/dev.mjs mock",
+		"build": "npm run validate:config && vite build",
 		"start": "node server.js",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"format": "prettier --write .",
-		"lint": "prettier --check ."
+		"lint": "prettier --check .",
+		"dev:live": "node scripts/dev.mjs live",
+		"validate:config": "node scripts/validate-config.mjs",
+		"test": "node --experimental-strip-types --test tests/*.test.mjs",
+		"test:ui": "node scripts/test-ui.mjs"
 	},
 	"devDependencies": {
+		"@playwright/test": "^1.64.0",
 		"@sveltejs/adapter-node": "^5.2.5",
 		"@sveltejs/kit": "^2.43.2",
 		"@sveltejs/vite-plugin-svelte": "^6.2.0",

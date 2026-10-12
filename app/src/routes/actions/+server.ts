@@ -25,7 +25,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	const { deviceId, command }: ActionRequest = await request.json();
 
 	if (!deviceId || !command || !['on', 'off'].includes(command)) {
-		return jsonResponse({ error: 'Invalid command payload' }, 400);
+		return jsonResponse({ error: 'Ongeldige opdracht.' }, 400);
 	}
 
 	const device = (await readEffectiveControls()).find(
@@ -34,7 +34,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	);
 
 	if (!device) {
-		return jsonResponse({ error: 'Unknown device' }, 404);
+		return jsonResponse({ error: 'Onbekend apparaat.' }, 404);
 	}
 
 	if (!isDeviceCommandConfigured(device, command)) {
@@ -103,7 +103,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			return jsonResponse({ error: err.message, errorCode: err.code }, err.status || 502);
 		}
 
-		const msg = err instanceof Error ? err.message : 'Action failed';
+		const msg = err instanceof Error ? err.message : 'Bediening mislukt.';
 		return jsonResponse({ error: msg }, 502);
 	}
 };

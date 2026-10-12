@@ -4,11 +4,12 @@
 	import { resolveControlColor } from '$lib/components/control-colors';
 
 	const baseCardClass =
-		'flex h-full max-h-[18rem] min-h-[12rem] flex-col gap-3 rounded-lg border border-slate-300 bg-white px-5 py-5';
+		'flex h-full max-h-[18rem] min-h-[12rem] flex-col gap-3 rounded-[var(--control-radius)] border border-slate-300 bg-white p-[var(--control-padding)]';
 	const baseButtonClass =
 		'relative flex flex-1 w-full items-center justify-center rounded-lg border border-slate-800 bg-slate-800 px-5 py-6 text-xl font-semibold text-white transition-colors duration-150 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60';
 
 	export let trigger: TimedShellyTrigger;
+	export let cardNumber: number | undefined = undefined;
 	export let loadingTriggerIds: ReadonlySet<string> = new Set();
 	export let activeUntil: number | null = null;
 
@@ -38,7 +39,7 @@
 	});
 
 	function handleTrigger() {
-		if (isActive) return;
+		if (isActive || trigger.enabled === false || !trigger.sceneId?.trim()) return;
 		dispatch('trigger', { triggerId: trigger.id });
 	}
 
@@ -51,12 +52,24 @@
 </script>
 
 <section class={baseCardClass}>
-	<p class="text-lg font-semibold text-slate-800">{trigger.label}</p>
+	<div class="flex items-center justify-between gap-4">
+		<h3
+			class="min-w-0 truncate text-[length:var(--control-label-size)] font-semibold text-slate-800"
+		>
+			{trigger.label}
+		</h3>
+		{#if cardNumber !== undefined}<h3
+				class="text-[length:var(--control-label-size)] font-semibold text-slate-800"
+				aria-label={`Knop ${cardNumber}`}
+			>
+				{cardNumber}
+			</h3>{/if}
+	</div>
 	<button
 		type="button"
 		class={baseButtonClass}
 		style={triggerStyle}
-		disabled={isLoading || isActive}
+		disabled={isLoading || isActive || trigger.enabled === false || !trigger.sceneId?.trim()}
 		on:click={handleTrigger}
 	>
 		<span class="pointer-events-none text-center" aria-live={isActive ? 'polite' : undefined}>

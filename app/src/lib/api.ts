@@ -19,7 +19,7 @@ export async function triggerDeviceCommand(deviceId: string, command: DeviceComm
 
 	if (!res.ok) {
 		const payload = await res.json().catch(() => ({}));
-		const error = new Error(typeof payload.error === 'string' ? payload.error : 'Request failed');
+		const error = new Error(typeof payload.error === 'string' ? payload.error : 'Aanvraag mislukt.');
 		if (payload.errorCode) {
 			(error as Error & { code?: string }).code = payload.errorCode;
 		}
@@ -39,7 +39,7 @@ export async function triggerAction(triggerId: string) {
 
 	if (!res.ok) {
 		const payload = await res.json().catch(() => ({}));
-		const error = new Error(typeof payload.error === 'string' ? payload.error : 'Request failed');
+		const error = new Error(typeof payload.error === 'string' ? payload.error : 'Aanvraag mislukt.');
 		if (payload.errorCode) {
 			(error as Error & { code?: string }).code = payload.errorCode;
 		}

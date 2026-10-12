@@ -1,9 +1,8 @@
+import { triggerDevice } from '$lib/config/control-helpers';
 import type { RequestHandler } from './$types';
 import { sendDeviceCommand, ShellyHttpError } from '$lib/server/shelly-http';
 import { readEffectiveControls } from '$lib/server/scene-config-store';
-import type { DashboardControl, ShellyDevice } from '$lib/config/schema';
-
-const shellySceneEndpoint = 'https://shelly-115-eu.shelly.cloud/scene/manual_run';
+import type { DashboardControl } from '$lib/config/schema';
 
 type TriggerRequest = {
 	triggerId?: string;
@@ -13,7 +12,7 @@ export const POST: RequestHandler = async ({ request, fetch, url }) => {
 	const { triggerId }: TriggerRequest = await request.json();
 
 	if (!triggerId) {
-		return new Response(JSON.stringify({ error: 'Invalid trigger payload' }), {
+		return new Response(JSON.stringify({ error: 'Ongeldige actie.' }), {
 			status: 400
 		});
 	}
@@ -24,10 +23,10 @@ export const POST: RequestHandler = async ({ request, fetch, url }) => {
 	);
 
 	if (!trigger) {
-		return new Response(JSON.stringify({ error: 'Unknown trigger' }), { status: 404 });
+		return new Response(JSON.stringify({ error: 'Onbekende actie.' }), { status: 404 });
 	}
 
-	if (!trigger.sceneId?.trim()) {
+	if (trigger.enabled === false || !trigger.sceneId?.trim() || /^0+$/.test(trigger.sceneId)) {
 		return new Response(JSON.stringify({ error: 'Actie niet ingesteld: scène-ID ontbreekt' }), {
 			status: 409,
 			headers: { 'content-type': 'application/json' }
@@ -35,30 +34,7 @@ export const POST: RequestHandler = async ({ request, fetch, url }) => {
 	}
 
 	try {
-		const sceneDevice: ShellyDevice = {
-			id: `trigger-${trigger.id}`,
-			label: trigger.label,
-			type: 'Trigger',
-			stateless: true,
-			commands: {
-				on: {
-					cloud: {
-						endpoint: shellySceneEndpoint,
-						method: 'POST',
-						payload: { id: trigger.sceneId },
-						requiresAuthKey: true
-					}
-				},
-				off: {
-					cloud: {
-						endpoint: shellySceneEndpoint,
-						method: 'POST',
-						payload: { id: trigger.sceneId },
-						requiresAuthKey: true
-					}
-				}
-			}
-		};
+		const sceneDevice = triggerDevice(`trigger-${trigger.id}`, trigger.label, trigger.sceneId);
 		await sendDeviceCommand(sceneDevice, 'on');
 		const callbackUrl = new URL('/api/device-state/callback', url).toString();
 		const postTransientState = (state: 'on' | 'off') =>
@@ -85,7 +61,7 @@ export const POST: RequestHandler = async ({ request, fetch, url }) => {
 			});
 		}
 
-		const msg = err instanceof Error ? err.message : 'Trigger failed';
+		const msg = err instanceof Error ? err.message : 'Actie mislukt.';
 		return new Response(JSON.stringify({ error: msg }), { status: 502 });
 	}
 };

@@ -1,12 +1,12 @@
+import { env } from '$env/dynamic/private';
 import { unlink, writeFile } from 'node:fs/promises';
 import { resolve as resolvePath } from 'node:path';
 
 import type { RequestHandler } from './$types';
 import { fetchShellyJson } from '$lib/server/shelly-http';
 
-const IP_CACHE_PATH = resolvePath(process.cwd(), 'ips.json');
-const DEVICE_LIST_ENDPOINT =
-	'https://shelly-115-eu.shelly.cloud/interface/device/get_all_lists';
+const IP_CACHE_PATH = resolvePath(process.cwd(), env.IP_CACHE_PATH ?? 'ips.json');
+const DEVICE_LIST_ENDPOINT = 'https://shelly-115-eu.shelly.cloud/interface/device/get_all_lists';
 
 export const POST: RequestHandler = async () => {
 	try {
@@ -58,7 +58,9 @@ type ShellyDeviceCachePayload = ShellyDeviceListPayload & {
 async function fetchDeviceListFromCloud(): Promise<ShellyDeviceListPayload | null> {
 	const payload = (await fetchShellyJson({
 		endpoint: DEVICE_LIST_ENDPOINT,
-		method: 'POST', encoding: 'form', payload: { _ts: Date.now() },
+		method: 'POST',
+		encoding: 'form',
+		payload: { _ts: Date.now() },
 		requiresAuthKey: true
 	})) as ShellyDeviceListResponse | null;
 

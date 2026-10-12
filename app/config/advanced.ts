@@ -1,40 +1,16 @@
-import { env } from '$env/dynamic/public';
+import { sceneToggle } from '../src/lib/config/control-helpers';
 import type { DashboardControl } from '../src/lib/config/schema';
 
-const shellySceneEndpoint =
-	env.PUBLIC_SHELLY_SCENE_ENDPOINT ?? 'https://shelly-115-eu.shelly.cloud/scene/manual_run';
-
 export const advancedControls: DashboardControl[] = [
-	{
-		controlType: 'device',
-		placement: 'advanced',
+	sceneToggle({
 		id: 'advanced-vacantie-begin',
-		label: 'Vakantiemodes',
+		label: 'Vakantiemodus',
+		placement: 'advanced',
 		type: 'Advanced',
-		buttonMode: 'toggle',
-		commands: {
-				on: {
-				label: 'Status: Aan',
-				color: 'red',
-				cloud: {
-					endpoint: shellySceneEndpoint,
-					method: 'POST',
-					payload: { id: '1789564319962' },
-					requiresAuthKey: true
-				}
-			},
-				off: {
-				label: 'Status: Uit',
-				color: 'white',
-				cloud: {
-					endpoint: shellySceneEndpoint,
-					method: 'POST',
-					payload: { id: '1789565464427' },
-					requiresAuthKey: true
-				}
-			}
-		}
-	},
+		on: '1789564319962',
+		off: '1789565464427',
+		onColor: 'red'
+	}),
 	{
 		controlType: 'timed-trigger',
 		placement: 'advanced',
@@ -65,66 +41,26 @@ export const advancedControls: DashboardControl[] = [
 		activeDurationMs: 14_400_000,
 		sceneId: '1789568570313'
 	},
-	{
-		controlType: 'device',
-		placement: 'advanced',
+	sceneToggle({
 		id: 'winder-mode',
-		label: 'Windermodes',
-		type: 'Advanced',
-		buttonMode: 'toggle',
-		commands: {
-				on: {
-				label: 'Status: Aan',
-				color: 'red',
-				cloud: {
-					endpoint: shellySceneEndpoint,
-					method: 'POST',
-					payload: { id: '0000' },
-					requiresAuthKey: true
-				}
-			},
-				off: {
-				label: 'Status: Uit',
-				color: 'white',
-				cloud: {
-					endpoint: shellySceneEndpoint,
-					method: 'POST',
-					payload: { id: '0000' },
-					requiresAuthKey: true
-				}
-			}
-		}
-	},
-		{
-		controlType: 'device',
+		label: 'Wintermodus',
 		placement: 'advanced',
-		id: 'zomer-mode',
-		label: 'Zomermodes',
 		type: 'Advanced',
-		buttonMode: 'toggle',
-		commands: {
-				on: {
-				label: 'Status: Aan',
-				color: 'red',
-				cloud: {
-					endpoint: shellySceneEndpoint,
-					method: 'POST',
-					payload: { id: '0000' },
-					requiresAuthKey: true
-				}
-			},
-				off: {
-				label: 'Status: Uit',
-				color: 'white',
-				cloud: {
-					endpoint: shellySceneEndpoint,
-					method: 'POST',
-					payload: { id: '0000' },
-					requiresAuthKey: true
-				}
-			}
-		}
-	}
+		on: '',
+		off: '',
+		onColor: 'red',
+		enabled: false
+	}),
+	sceneToggle({
+		id: 'zomer-mode',
+		label: 'Zomermodus',
+		placement: 'advanced',
+		type: 'Advanced',
+		on: '',
+		off: '',
+		onColor: 'red',
+		enabled: false
+	})
 ];
 
 export const advancedDevices = advancedControls.filter(

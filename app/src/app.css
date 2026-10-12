@@ -2,6 +2,12 @@
 @plugin '@tailwindcss/typography';
 
 @layer base {
+	:root {
+		--control-radius: 0.5rem;
+		--control-padding: 1.25rem;
+		--control-label-size: 1.125rem;
+	}
+
 	html.touch-cursor-hidden,
 	html.touch-cursor-hidden * {
 		cursor: none !important;

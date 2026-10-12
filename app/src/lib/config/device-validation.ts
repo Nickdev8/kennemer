@@ -13,19 +13,15 @@ function toTargets(config?: ShellyTargetConfig): ShellyHttpTarget[] {
 	return Array.isArray(config) ? config : [config];
 }
 
-function hasValue(value: unknown): boolean {
-	if (typeof value === 'string') return value.trim().length > 0;
-	return value !== undefined && value !== null;
-}
-
 function isTargetConfigured(target: ShellyHttpTarget): boolean {
 	if (!target.endpoint?.trim()) return false;
 	if (!target.endpoint.includes('/scene/manual_run')) return true;
-	return hasValue(target.payload?.id);
+	return /^\d{1,32}$/.test(String(target.payload?.id)) && !/^0+$/.test(String(target.payload?.id));
 }
 
 export function isCommandConfigured(command?: ShellyDeviceCommand): boolean {
 	if (!command) return false;
+	if (command.configured !== undefined) return command.configured;
 	return [...toTargets(command.lan), ...toTargets(command.cloud)].some(isTargetConfigured);
 }
 
@@ -33,7 +29,7 @@ export function isDeviceCommandConfigured(
 	device: ShellyDevice,
 	command: DeviceCommandKey
 ): boolean {
-	return isCommandConfigured(device.commands[command]);
+	return device.enabled !== false && isCommandConfigured(device.commands[command]);
 }
 
 export function isValidStatusDeviceId(value?: string): boolean {
@@ -47,7 +43,7 @@ export function isDeviceStatusConfigured(device: ShellyDevice): boolean {
 }
 
 export function getDeviceConfigurationIssues(device: ShellyDevice): string[] {
-	if (device.type === 'Placeholder') return [];
+	if (device.type === 'Placeholder' || device.enabled === false) return [];
 
 	const issues: string[] = [];
 

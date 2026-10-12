@@ -1,146 +1,147 @@
 import { mkdir, readFile } from 'node:fs/promises';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { dirname, resolve } from 'node:path';
 import writeFileAtomic from 'write-file-atomic';
 import { env } from '$env/dynamic/private';
-import { devices } from '$lib/config/devices';
-import { advancedControls } from '$lib/config/advanced';
-import { triggers } from '$lib/config/triggers';
-import type { DashboardControl } from '$lib/config/schema';
+import { controls as baseControls, tabs as baseTabs } from '$lib/config/registry';
 import {
-	sceneIdSchema,
-	statusDeviceIdSchema,
+	configurationSnapshotSchema,
 	sceneOverrideRequestSchema,
 	sceneOverridesFileSchema,
+	sceneOverridesV1Schema,
 	sceneResetRequestSchema,
+	sceneRestoreRequestSchema,
 	type SceneEditorEntry,
 	type SceneOverridesFile,
-	type SceneSlot
+	type ConfigurationSnapshot
 } from '$lib/config/scene-config-schema';
+import {
+	normalizeHomeNumbering,
+	applyConfiguration,
+	baseSceneId,
+	controlMetadata,
+	createMutationQueue,
+	editableSlots
+} from './config-editor-core';
 
-const SCENE_OVERRIDE_PATH = resolve(
+const path = resolve(
 	process.cwd(),
-	env.SCENE_OVERRIDE_PATH ?? (env.NODE_ENV === 'production' ? '/data/scene-overrides.json' : 'scene-overrides.json')
+	env.SCENE_OVERRIDE_PATH ??
+		(env.NODE_ENV === 'production' ? '/data/scene-overrides.json' : 'scene-overrides.json')
 );
-const SCENE_OVERRIDE_BACKUP_PATH = `${SCENE_OVERRIDE_PATH}.bak`;
-const baseControls = [...devices, ...advancedControls, ...triggers];
-const baseControlById = new Map(baseControls.map((control) => [control.id, control]));
-
+const backupPath = `${path}.bak`;
+const previousPath = `${path}.previous.json`;
 let cachedFile: SceneOverridesFile | null = null;
 let loadPromise: Promise<SceneOverridesFile> | null = null;
+let legacySource: string | null = null;
+const serialize = createMutationQueue();
 
-function revisionFor(overrides: SceneOverridesFile['overrides']): string {
-	return createHash('sha256')
-		.update(JSON.stringify(overrides))
-		.digest('hex')
-		.slice(0, 16);
+function freshFile(snapshot: ConfigurationSnapshot): SceneOverridesFile {
+	return { ...snapshot, revision: randomBytes(8).toString('hex'), updatedAt: Date.now() };
 }
-
-function emptyFile(): SceneOverridesFile {
-	const overrides = {};
-	return { version: 1, revision: revisionFor(overrides), updatedAt: Date.now(), overrides };
+function emptySnapshot(): ConfigurationSnapshot {
+	return { version: 2, homeNumbering: 'column', overrides: {}, metadata: {} };
 }
-
-async function parseOverrideFile(path: string): Promise<SceneOverridesFile | null> {
-	try {
-		const parsed = sceneOverridesFileSchema.safeParse(JSON.parse(await readFile(path, 'utf8')));
-		return parsed.success && parsed.data.revision === revisionFor(parsed.data.overrides)
-			? parsed.data
-			: null;
-	} catch {
-		return null;
-	}
-}
-
-async function readOverrideFile(): Promise<SceneOverridesFile> {
-	const current = await parseOverrideFile(SCENE_OVERRIDE_PATH);
-	if (current) return current;
-	const backup = await parseOverrideFile(SCENE_OVERRIDE_BACKUP_PATH);
-	if (backup) return backup;
-	try {
-		await readFile(SCENE_OVERRIDE_PATH, 'utf8');
-		console.warn('[scene-config] Invalid override files; using checked-in scene IDs');
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-			console.warn('[scene-config] Cannot read override files; using checked-in scene IDs');
-		}
-	}
-	return emptyFile();
-}
-
-async function readOverrides(): Promise<SceneOverridesFile> {
-	if (cachedFile) return cachedFile;
-	loadPromise ??= readOverrideFile().then((file) => {
-		cachedFile = file;
-		return file;
+function snapshotOf(file: SceneOverridesFile): ConfigurationSnapshot {
+	return configurationSnapshotSchema.parse({
+		version: 2,
+		homeNumbering: 'column',
+		overrides: file.overrides,
+		metadata: file.metadata,
+		...(file.tabs ? { tabs: file.tabs } : {})
 	});
-	return loadPromise;
 }
-
-function editableSlots(control: DashboardControl): SceneSlot[] {
-	if (control.controlType === 'device') {
-		const slots = (['on', 'off'] as SceneSlot[]).filter((slot) =>
-			Boolean(control.commands[slot as 'on' | 'off'])
-		);
-		if (control.statusdeviceid?.trim()) slots.push('status');
-		return slots;
-	}
-	return ['scene'];
-}
-
-function baseSceneId(control: DashboardControl, slot: SceneSlot): string | undefined {
-	if (control.controlType === 'device' && slot === 'status') return control.statusdeviceid;
-	if (control.controlType !== 'device' && slot === 'scene') return control.sceneId;
-	if (control.controlType !== 'device' || slot === 'scene') return undefined;
-	const command = control.commands[slot as 'on' | 'off'];
-	const targets = command?.cloud
-		? Array.isArray(command.cloud)
-			? command.cloud
-			: [command.cloud]
-		: [];
-	return targets.find((target) => target.endpoint.includes('/scene/manual_run'))?.payload?.id as
-		| string
-		| undefined;
-}
-
-export async function readEffectiveControls(): Promise<DashboardControl[]> {
-	const file = await readOverrides();
-	return baseControls.map((control) => {
-		const override = file.overrides[control.id];
-		if (!override) return control;
-		const next = structuredClone(control);
-		for (const slot of editableSlots(next)) {
-			const sceneId = override[slot];
-			if (!sceneId) continue;
-			if (next.controlType === 'device' && slot === 'status') {
-				if (statusDeviceIdSchema.safeParse(sceneId).success) next.statusdeviceid = sceneId;
-			} else if (next.controlType === 'device' && slot !== 'scene') {
-				const command = next.commands[slot as 'on' | 'off'];
-				if (!command?.cloud) continue;
-				const targets = Array.isArray(command.cloud) ? command.cloud : [command.cloud];
-				for (const target of targets) {
-					if (target.endpoint.includes('/scene/manual_run')) {
-						target.payload = { ...(target.payload ?? {}), id: sceneId };
-					}
-				}
-			} else if (next.controlType !== 'device' && slot === 'scene') {
-				next.sceneId = sceneId;
+async function parseFile(
+	candidate: string,
+	allowLegacy = false
+): Promise<SceneOverridesFile | null> {
+	try {
+		const raw = await readFile(candidate, 'utf8');
+		const json: unknown = JSON.parse(raw);
+		const parsed = sceneOverridesFileSchema.safeParse(json);
+		if (parsed.success) {
+			const normalized = normalizeHomeNumbering(baseControls, parsed.data);
+			applyConfiguration(baseControls, baseTabs, normalized);
+			if (!parsed.data.homeNumbering) {
+				legacySource = raw;
+				return freshFile(normalized);
+			}
+			return parsed.data;
+		}
+		if (allowLegacy) {
+			const legacy = sceneOverridesV1Schema.safeParse(json);
+			if (
+				legacy.success &&
+				legacy.data.revision ===
+					createHash('sha256')
+						.update(JSON.stringify(legacy.data.overrides))
+						.digest('hex')
+						.slice(0, 16)
+			) {
+				// Removed registered controls cannot be used by the new editor or transports.
+				const registered = new Map(baseControls.map((control) => [control.id, control]));
+				const overrides = Object.fromEntries(
+					Object.entries(legacy.data.overrides)
+						.filter(([id]) => registered.has(id))
+						.map(([id, slots]) => [
+							id,
+							Object.fromEntries(
+								Object.entries(slots).filter(([slot]) =>
+									editableSlots(registered.get(id)!).includes(
+										slot as 'on' | 'off' | 'scene' | 'status'
+									)
+								)
+							)
+						])
+				);
+				const migrated = freshFile({
+					version: 2,
+					homeNumbering: 'column',
+					overrides,
+					metadata: {}
+				});
+				applyConfiguration(baseControls, baseTabs, migrated);
+				legacySource = raw;
+				return migrated;
 			}
 		}
-		return next;
-	});
+	} catch {
+		/* A malformed primary can recover from the last validated backup. */
+	}
+	return null;
 }
-
-export async function readSceneEditorEntries(): Promise<{
-	entries: SceneEditorEntry[];
-	revision: string;
-}> {
-	const file = await readOverrides();
+async function readOverrides(): Promise<SceneOverridesFile> {
+	if (cachedFile) return cachedFile;
+	loadPromise ??= (async () => {
+		const current = (await parseFile(path, true)) ?? (await parseFile(backupPath, true));
+		if (current) return (cachedFile = current);
+		try {
+			await readFile(path, 'utf8');
+			console.warn('[config] Invalid runtime configuration; using registered defaults');
+		} catch {
+			/* Missing file is normal. */
+		}
+		return (cachedFile = freshFile(emptySnapshot()));
+	})();
+	return loadPromise;
+}
+export async function readEffectiveConfiguration() {
+	return applyConfiguration(baseControls, baseTabs, await readOverrides());
+}
+export async function readEffectiveControls() {
+	return (await readEffectiveConfiguration()).controls;
+}
+export async function readSceneEditorEntries(
+	file?: SceneOverridesFile
+): Promise<{ entries: SceneEditorEntry[]; revision: string; canRestore: boolean }> {
+	file ??= await readOverrides();
+	const effective = applyConfiguration(baseControls, baseTabs, file);
 	return {
 		revision: file.revision,
-		entries: baseControls.map((control) => ({
+		canRestore: Boolean(await parseFile(previousPath)),
+		entries: baseControls.map((control, index) => ({
 			controlId: control.id,
-			label: control.label,
+			label: effective.controls[index].label,
 			placement: control.placement,
 			controlType: control.controlType,
 			slots: Object.fromEntries(
@@ -148,86 +149,94 @@ export async function readSceneEditorEntries(): Promise<{
 					slot,
 					file.overrides[control.id]?.[slot] ?? baseSceneId(control, slot) ?? ''
 				])
-			) as Partial<Record<SceneSlot, string>>,
+			),
 			defaults: Object.fromEntries(
 				editableSlots(control).map((slot) => [slot, baseSceneId(control, slot) ?? ''])
-			) as Partial<Record<SceneSlot, string>>
+			),
+			metadata: controlMetadata(effective.controls[index]),
+			defaultMetadata: controlMetadata(control)
 		}))
 	};
 }
-
-function validateChanges(
-	changes: Array<{ controlId: string; slot: SceneSlot; sceneId: string }>,
-	current: SceneOverridesFile['overrides']
+async function persist(next: SceneOverridesFile, current: SceneOverridesFile) {
+	await mkdir(dirname(path), { recursive: true });
+	const options = { encoding: 'utf8' as const, fsync: true };
+	await writeFileAtomic(previousPath, JSON.stringify(current, null, 2), options);
+	await writeFileAtomic(backupPath, legacySource ?? JSON.stringify(current, null, 2), options);
+	await writeFileAtomic(path, JSON.stringify(next, null, 2), options);
+	legacySource = null;
+	cachedFile = next;
+}
+async function mutate(
+	revision: string,
+	change: (current: SceneOverridesFile) => ConfigurationSnapshot | Promise<ConfigurationSnapshot>
 ) {
-	const next = structuredClone(current);
-	for (const change of changes) {
-		const control = baseControlById.get(change.controlId);
-		if (!control || !editableSlots(control).includes(change.slot)) {
-			throw new Error('Onbekende scène-actie.');
-		}
-		const sceneId =
-			change.slot === 'status'
-				? statusDeviceIdSchema.parse(change.sceneId)
-				: sceneIdSchema.parse(change.sceneId);
-		next[change.controlId] ??= {};
-		next[change.controlId][change.slot] = sceneId;
-	}
-	return next;
-}
-
-async function persist(file: SceneOverridesFile): Promise<void> {
-	await mkdir(dirname(SCENE_OVERRIDE_PATH), { recursive: true });
-	if (cachedFile) {
-		await writeFileAtomic(SCENE_OVERRIDE_BACKUP_PATH, JSON.stringify(cachedFile, null, 2), {
-			encoding: 'utf8',
-			fsync: true
-		});
-	}
-	await writeFileAtomic(SCENE_OVERRIDE_PATH, JSON.stringify(file, null, 2), {
-		encoding: 'utf8',
-		fsync: true
+	return serialize(async () => {
+		const current = await readOverrides();
+		if (revision !== current.revision) throw new Error('CONFIG_REVISION_CONFLICT');
+		const snapshot = normalizeHomeNumbering(
+			baseControls,
+			configurationSnapshotSchema.parse(await change(current))
+		);
+		applyConfiguration(baseControls, baseTabs, snapshot);
+		const next = freshFile(snapshot);
+		await persist(next, current);
+		return next;
 	});
-	cachedFile = file;
 }
-
-export async function saveSceneOverrides(input: unknown): Promise<SceneOverridesFile> {
+export async function saveSceneOverrides(input: unknown) {
 	const request = sceneOverrideRequestSchema.parse(input);
-	const current = await readOverrides();
-	if (request.revision !== current.revision) throw new Error('CONFIG_REVISION_CONFLICT');
-	const overrides = validateChanges(request.changes, current.overrides);
-	const next: SceneOverridesFile = {
-		version: 1,
-		revision: revisionFor(overrides),
-		updatedAt: Date.now(),
-		overrides
-	};
-	sceneOverridesFileSchema.parse(next);
-	await persist(next);
-	return next;
-}
-
-export async function resetSceneOverrides(input: unknown): Promise<SceneOverridesFile> {
-	const request = sceneResetRequestSchema.parse(input);
-	const current = await readOverrides();
-	if (request.revision !== current.revision) throw new Error('CONFIG_REVISION_CONFLICT');
-	const overrides = structuredClone(current.overrides);
-	if (request.controlId && request.slot) {
-		delete overrides[request.controlId]?.[request.slot];
-		if (Object.keys(overrides[request.controlId] ?? {}).length === 0) {
-			delete overrides[request.controlId];
+	return mutate(request.revision, (current) => {
+		if (request.importSnapshot) {
+			if (request.changes.length || request.metadata || request.tabs)
+				throw new Error('Import kan niet met losse wijzigingen worden gecombineerd.');
+			return request.importSnapshot;
 		}
-	} else if (!request.controlId && !request.slot) {
-		Object.keys(overrides).forEach((id) => delete overrides[id]);
-	} else {
-		throw new Error('Reset vereist een controlId en slot, of geen van beide.');
-	}
-	const next: SceneOverridesFile = {
-		version: 1,
-		revision: revisionFor(overrides),
-		updatedAt: Date.now(),
-		overrides
+		const next = snapshotOf(current);
+		for (const change of request.changes) {
+			next.overrides[change.controlId] ??= {};
+			next.overrides[change.controlId][change.slot] = change.sceneId;
+		}
+		for (const change of request.metadata ?? [])
+			next.metadata[change.controlId] = { ...next.metadata[change.controlId], ...change.values };
+		if (request.tabs) next.tabs = request.tabs;
+		return next;
+	});
+}
+export async function resetSceneOverrides(input: unknown) {
+	const request = sceneResetRequestSchema.parse(input);
+	return mutate(request.revision, (current) => {
+		if (!request.controlId && !request.slot) return emptySnapshot();
+		if (!request.controlId) throw new Error('Een actie terugzetten vereist een bedieningselement.');
+		const control = baseControls.find((control) => control.id === request.controlId);
+		if (!control || (request.slot && !editableSlots(control).includes(request.slot)))
+			throw new Error('Onbekend bedieningselement of onbekende actie.');
+		const next = snapshotOf(current);
+		if (request.slot) {
+			delete next.overrides[request.controlId]?.[request.slot];
+		} else {
+			delete next.overrides[request.controlId];
+			delete next.metadata[request.controlId];
+		}
+		return next;
+	});
+}
+export async function restoreSceneOverrides(input: unknown) {
+	const request = sceneRestoreRequestSchema.parse(input);
+	return mutate(request.revision, async () => {
+		const previous = await parseFile(previousPath);
+		if (!previous) throw new Error('Geen geldige vorige configuratie beschikbaar.');
+		return snapshotOf(previous);
+	});
+}
+export async function exportConfiguration(): Promise<ConfigurationSnapshot> {
+	return snapshotOf(await readOverrides());
+}
+export async function readConfigEditorState() {
+	const file = await readOverrides();
+	return {
+		effective: applyConfiguration(baseControls, baseTabs, file),
+		editor: await readSceneEditorEntries(file),
+		snapshot: snapshotOf(file)
 	};
-	await persist(next);
-	return next;
 }

@@ -7,15 +7,11 @@ type DeviceStateEvent = {
 
 const clients = new Set<ReadableStreamDefaultController<Uint8Array>>();
 
-export function subscribeDeviceState(
-	controller: ReadableStreamDefaultController<Uint8Array>
-) {
+export function subscribeDeviceState(controller: ReadableStreamDefaultController<Uint8Array>) {
 	clients.add(controller);
 }
 
-export function unsubscribeDeviceState(
-	controller: ReadableStreamDefaultController<Uint8Array>
-) {
+export function unsubscribeDeviceState(controller: ReadableStreamDefaultController<Uint8Array>) {
 	clients.delete(controller);
 }
 
@@ -24,6 +20,17 @@ export function publishDeviceState(event: DeviceStateEvent) {
 	const payload = `event: state\ndata: ${JSON.stringify(event)}\n\n`;
 	const encoded = new TextEncoder().encode(payload);
 
+	for (const controller of clients) {
+		try {
+			controller.enqueue(encoded);
+		} catch {
+			clients.delete(controller);
+		}
+	}
+}
+
+export function publishConfiguration() {
+	const encoded = new TextEncoder().encode('event: configuration\ndata: {}\n\n');
 	for (const controller of clients) {
 		try {
 			controller.enqueue(encoded);

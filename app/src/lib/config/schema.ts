@@ -13,7 +13,27 @@ export type DeviceCommandKey = 'on' | 'off';
 export type DeviceButtonMode = 'toggle' | 'dual' | 'single';
 export type ControlPlacement = 'main' | 'advanced' | 'energy';
 
+export interface DashboardTab {
+	id: string;
+	label: string;
+	order: number;
+}
+export interface DeviceInventoryEntry {
+	id: string;
+	label: string;
+	ip: string;
+	component?: 'switch' | 'light' | 'rgb' | 'rgbcct';
+	channel?: number;
+}
+
+export interface ControlMetadata {
+	tabId?: string;
+	enabled?: boolean;
+	pushNumber?: number;
+}
+
 export interface ShellyDeviceCommand {
+	configured?: boolean;
 	label?: string;
 	icon?: 'arrow-up';
 	color?: string;
@@ -23,20 +43,20 @@ export interface ShellyDeviceCommand {
 	lan?: ShellyTargetConfig;
 }
 
-export interface ShellyDevice {
+export interface ShellyDevice extends ControlMetadata {
 	id: string;
 	label: string;
 	type: string;
-	pushNumber?: number;
 	buttonMode?: DeviceButtonMode;
 	statusdeviceid?: string;
 	stateless?: boolean;
 	activeDurationMs?: number;
 	colorCapable?: boolean;
+	directDeviceId?: string;
 	commands: Partial<Record<DeviceCommandKey, ShellyDeviceCommand>>;
 }
 
-export interface ShellyTrigger {
+export interface ShellyTrigger extends ControlMetadata {
 	id: string;
 	label: string;
 	color?: string;

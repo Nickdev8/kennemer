@@ -1,3 +1,5 @@
+import { env } from '$env/dynamic/private';
+import { readDirectOutput } from '$lib/server/direct-device';
 import { readFile } from 'node:fs/promises';
 import { resolve as resolvePath } from 'node:path';
 
@@ -11,7 +13,7 @@ import type { DeviceCommandKey } from '$lib/config/schema';
 
 const CLOUD_STATUS_ENDPOINT = 'https://shelly-115-eu.shelly.cloud/device/status';
 const STATUS_REQUEST_INTERVAL_MS = 1100;
-const IP_CACHE_PATH = resolvePath(process.cwd(), 'ips.json');
+const IP_CACHE_PATH = resolvePath(process.cwd(), env.IP_CACHE_PATH ?? 'ips.json');
 
 type CachedDevice = {
 	id?: string;
@@ -304,7 +306,7 @@ async function fetchCloudDeviceOutput(
 export const GET: RequestHandler = async ({ url }) => {
 	const ids = parseIds(url.searchParams.get('ids'));
 	if (ids.length === 0) {
-		return jsonResponse({ ok: false, message: 'Missing ids' }, 400);
+		return jsonResponse({ ok: false, message: 'Apparaat-ID ontbreekt.' }, 400);
 	}
 
 	const states: Record<string, OutputState> = {};
@@ -327,16 +329,38 @@ export const GET: RequestHandler = async ({ url }) => {
 		lastCloudRequestAt = Date.now();
 	};
 
-	const localResults = await fetchLocalDeviceOutputs(ids, cache, logicalDeviceIdsByStatusId).catch(() =>
-		ids.map((deviceId) => ({ deviceId, state: null }))
+	const localResults = await fetchLocalDeviceOutputs(ids, cache, logicalDeviceIdsByStatusId).catch(
+		() => ids.map((deviceId) => ({ deviceId, state: null }))
 	);
 
+	const directControls = (await readEffectiveControls()).filter(
+		(c) => c.controlType === 'device' && c.directDeviceId
+	);
+	const directIds = new Set(
+		directControls.map((c) => (c.controlType === 'device' ? c.statusdeviceid : ''))
+	);
+	for (const result of localResults) {
+		if (!directIds.has(result.deviceId)) continue;
+		const control = directControls.find(
+			(c) => c.controlType === 'device' && c.statusdeviceid === result.deviceId
+		);
+		if (!control || control.controlType !== 'device') continue;
+		try {
+			const command = await readDirectOutput(control.directDeviceId!);
+			const state = await updateDeviceStateIfNewer(control.id, command, Date.now(), 'status-lan');
+			publishDeviceState({ deviceId: control.id, state: state.state });
+			result.state = { lastCommand: command, updatedAt: Date.now(), source: 'status-lan' };
+		} catch {
+			result.state = null;
+			errors[result.deviceId] = 'Apparaat niet bereikbaar via LAN';
+		}
+	}
 	const cloudFallbackIds: string[] = [];
 	for (const result of localResults) {
 		if (result.state) {
 			states[result.deviceId] = result.state;
 		} else {
-			cloudFallbackIds.push(result.deviceId);
+			if (!directIds.has(result.deviceId)) cloudFallbackIds.push(result.deviceId);
 		}
 	}
 
@@ -350,10 +374,11 @@ export const GET: RequestHandler = async ({ url }) => {
 			if (state) {
 				states[deviceId] = state;
 			} else {
-				errors[deviceId] = 'No output state found';
+				errors[deviceId] = 'Apparaatstatus ontbreekt.';
 			}
 		} catch (error) {
-			errors[deviceId] = error instanceof Error ? error.message : 'Status request failed';
+			errors[deviceId] =
+				error instanceof Error ? error.message : 'Apparaatstatus kon niet worden gelezen.';
 		}
 	}
 

@@ -16,7 +16,7 @@ async function maintenanceRequest(path: '/status' | '/update', method: 'GET' | '
 		return jsonResponse(
 			{
 				ok: false,
-				message: 'KENNEMER_MAINTENANCE_TOKEN is not configured'
+				message: 'Hostonderhoud is niet geconfigureerd.'
 			},
 			503
 		);
@@ -31,14 +31,14 @@ async function maintenanceRequest(path: '/status' | '/update', method: 'GET' | '
 		});
 		const payload = await response.json().catch(() => ({
 			ok: false,
-			message: 'Maintenance service returned an invalid response'
+			message: 'Hostonderhoud gaf een ongeldig antwoord.'
 		}));
 		return jsonResponse(payload, response.status);
 	} catch (error) {
 		return jsonResponse(
 			{
 				ok: false,
-				message: error instanceof Error ? error.message : 'Maintenance service is unreachable'
+				message: error instanceof Error ? error.message : 'Hostonderhoud is niet bereikbaar.'
 			},
 			502
 		);

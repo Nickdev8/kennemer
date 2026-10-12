@@ -1,12 +1,29 @@
 <script lang="ts">
+	import { resolveCardStatus } from '$lib/dashboard/device-status';
+	import { createPollingGroup } from '$lib/dashboard/polling';
+	import { homeGridPosition } from '$lib/config/home-grid';
 	import { onDestroy, onMount } from 'svelte';
+	import EnergyPanel from '$lib/components/energy-panel.svelte';
+	import AdvancedInformation from '$lib/components/advanced-information.svelte';
+	import UpdateProgress from '$lib/components/update-progress.svelte';
+	import TabSelector from '$lib/components/tab-selector.svelte';
+	import AdvancedAccess from '$lib/components/advanced-access.svelte';
+	import AdvancedPanel from '$lib/components/advanced-panel.svelte';
 	import ControlCard from '$lib/components/control-card.svelte';
 	import SceneIdEditor from '$lib/components/scene-id-editor.svelte';
 	import { devices } from '$lib/config/devices';
 	import { advancedControls as configuredAdvancedControls } from '$lib/config/advanced';
-	import { energyDevicesTrigger as defaultEnergyDevicesTrigger, triggers } from '$lib/config/triggers';
+	import {
+		energyDevicesTrigger as defaultEnergyDevicesTrigger,
+		triggers
+	} from '$lib/config/triggers';
 	import { env as publicEnv } from '$env/dynamic/public';
-	import type { DashboardControl, DeviceCommandKey, ShellyDevice } from '$lib/config/schema';
+	import type {
+		DashboardTab,
+		DashboardControl,
+		DeviceCommandKey,
+		ShellyDevice
+	} from '$lib/config/schema';
 	import {
 		getDeviceConfigurationIssues,
 		isDeviceCommandConfigured,
@@ -15,7 +32,6 @@
 	import { triggerAction, triggerDeviceCommand } from '$lib/api';
 	import type { PageData } from './$types';
 	import RefreshCw from 'lucide-svelte/icons/refresh-cw';
-	import Pin from 'lucide-svelte/icons/pin';
 	import TouchpadOff from 'lucide-svelte/icons/touchpad-off';
 	import WifiOff from 'lucide-svelte/icons/wifi-off';
 
@@ -98,6 +114,9 @@
 			.filter(Boolean);
 	}
 
+	export let data: PageData;
+	let hydrated = false;
+
 	const wattageDisabled = readBooleanFlag(publicEnv.PUBLIC_DISABLE_WATTAGE);
 	const displayDimTimeoutMs = readPositiveNumber(
 		publicEnv.PUBLIC_DISPLAY_DIM_TIMEOUT_MS,
@@ -114,13 +133,12 @@
 
 	const acceptedAdvancedPatterns = readAdvancedPatterns(
 		publicEnv.PUBLIC_ADVANCED_PATTERN,
-		publicEnv.PUBLIC_ADVANCED_PIN
+		publicEnv.PUBLIC_ADVANCED_PIN,
+		data?.mode === 'mock' ? '1234' : undefined
 	);
 	const advancedPatternConfigured = acceptedAdvancedPatterns.length > 0;
 	const pinNodes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
 	const wattageDebug = readBooleanFlag(publicEnv.PUBLIC_DEBUG_WATTAGE);
-
-	export let data: PageData;
 
 	let loadingCommandKeys = new Set<string>();
 	let errorMsg = '';
@@ -132,6 +150,14 @@
 
 	const baseControls: DashboardControl[] = [...devices, ...configuredAdvancedControls, ...triggers];
 	let sceneControls: DashboardControl[] = data?.controls ?? baseControls;
+	let dashboardTabs: DashboardTab[] = data?.tabs ?? [
+		{ id: 'home', label: 'Home', order: 0 },
+		{ id: 'devices', label: 'Apparaten', order: 1 }
+	];
+	let selectedTab = 'home';
+	let showAdvancedInformation = false;
+	$: if (!dashboardTabs.some((tab) => tab.id === selectedTab))
+		selectedTab = dashboardTabs[0]?.id ?? 'home';
 	let mainControls: DashboardControl[] = [];
 	let advancedControls: DashboardControl[] = [];
 	let energyDevicesTrigger = defaultEnergyDevicesTrigger;
@@ -145,17 +171,12 @@
 	let advancedControlCount = 0;
 
 	$: mainControls = [...sceneControls]
-		.filter((control) => control.placement === 'main')
-		.sort(
-			(left, right) => {
-				const leftPosition = left.controlType === 'device' ? left.pushNumber : undefined;
-				const rightPosition = right.controlType === 'device' ? right.pushNumber : undefined;
-				return (
-					(leftPosition ?? Number.MAX_SAFE_INTEGER) -
-					(rightPosition ?? Number.MAX_SAFE_INTEGER)
-				);
-			}
-		);
+		.filter((control) => control.placement === 'main' && (control.tabId ?? 'home') === selectedTab)
+		.sort((left, right) => {
+			const leftPosition = left.pushNumber;
+			const rightPosition = right.pushNumber;
+			return (leftPosition ?? Number.MAX_SAFE_INTEGER) - (rightPosition ?? Number.MAX_SAFE_INTEGER);
+		});
 	$: advancedControls = sceneControls.filter((control) => control.placement === 'advanced');
 	$: energyDevicesTrigger =
 		sceneControls.find(
@@ -191,7 +212,7 @@
 		.map((trigger) => ({
 			id: trigger.id,
 			name: trigger.label,
-			 detail: 'Scène-ID ontbreekt'
+			detail: 'Scène-ID ontbreekt'
 		}));
 	$: advancedControlCount = advancedControls.length;
 
@@ -259,10 +280,8 @@
 	let connectivityChecked = false;
 	let connectivityChecking = false;
 	let connectivityFailureCount = 0;
-	let connectivityInterval: ReturnType<typeof setInterval> | null = null;
 	let touchscreenConnected: boolean | null = null;
 	let hardwareChecking = false;
-	let hardwareInterval: ReturnType<typeof setInterval> | null = null;
 	let transientActiveUntilByDevice = new Map<string, number>();
 	const transientActiveTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -282,7 +301,8 @@
 	const updatePollMaxMs = 35 * 60 * 1000;
 
 	$: connectionOffline =
-		connectivityChecked && (!browserOnline || connectivityFailureCount >= connectivityFailureThreshold);
+		connectivityChecked &&
+		(!browserOnline || connectivityFailureCount >= connectivityFailureThreshold);
 	$: connectionWarningTitle = browserOnline
 		? 'Geen verbinding met Shelly Cloud'
 		: 'Geen internetverbinding';
@@ -512,7 +532,7 @@
 			};
 
 			if (!data.ok) {
-				throw new Error('Onverwachte wattage respons');
+				throw new Error('Onverwacht antwoord voor het vermogen.');
 			}
 
 			wattageLabel = data.label;
@@ -564,7 +584,6 @@
 	let statusAutomaticRefreshTimeout: ReturnType<typeof setTimeout> | null = null;
 	let statusRefreshLoading = false;
 	let statusFollowupTimeouts: ReturnType<typeof setTimeout>[] = [];
-	let deviceStateRefreshInterval: ReturnType<typeof setInterval> | null = null;
 	let fastWattageRefreshUntil = 0;
 
 	function scheduleAutomaticWattageRefresh() {
@@ -692,22 +711,6 @@
 		);
 	}
 
-	function resolveCardStatus(
-		device: ShellyDevice,
-		knownDeviceStates: Map<string, DeviceCommandKey>,
-		knownStatusDeviceStates: Map<string, DeviceCommandKey>
-	) {
-		const statusDeviceId = device.statusdeviceid?.trim();
-		if (statusDeviceId && isValidStatusDeviceId(statusDeviceId)) {
-			return (
-				knownStatusDeviceStates.get(statusDeviceId) ?? knownDeviceStates.get(device.id) ?? 'off'
-			);
-		}
-		if (device.type === 'Scene') return null;
-
-		return knownDeviceStates.get(device.id) ?? null;
-	}
-
 	function isTransientDeviceActive(deviceId: string) {
 		return (transientActiveUntilByDevice.get(deviceId) ?? 0) > Date.now();
 	}
@@ -782,7 +785,7 @@
 				await sleep(1000);
 				return handlePress(deviceId, command, options, retryAttempt);
 			}
-			errorMsg = error instanceof Error ? error.message : 'Unknown error';
+			errorMsg = error instanceof Error ? error.message : 'Onbekende fout';
 		} finally {
 			const nextLoadingCommandKeys = new Set(loadingCommandKeys);
 			nextLoadingCommandKeys.delete(key);
@@ -818,7 +821,12 @@
 				const statusDeviceId = statusDeviceIds.includes(id)
 					? id
 					: deviceById.get(id)?.statusdeviceid;
-				if (statusDeviceId && (entry.source === 'status-lan' || entry.source === 'status-poll')) {
+				if (
+					statusDeviceId &&
+					(entry.source === 'status-lan' ||
+						entry.source === 'status-poll' ||
+						entry.source === 'status-demo')
+				) {
 					nextStatusStates.set(statusDeviceId, entry.lastCommand);
 				} else if (statusDeviceId && entry.source === 'action') {
 					nextStatusStates.delete(statusDeviceId);
@@ -844,7 +852,7 @@
 			return;
 		}
 
-		if (source === 'status-lan' || source === 'status-poll') {
+		if (source === 'status-lan' || source === 'status-poll' || source === 'status-demo') {
 			const statusDeviceId = statusDeviceIds.includes(deviceId)
 				? deviceId
 				: deviceById.get(deviceId)?.statusdeviceid;
@@ -883,6 +891,10 @@
 			} catch {}
 		});
 
+		stream.addEventListener('configuration', () => {
+			void refreshDashboardConfiguration(true);
+		});
+
 		stream.addEventListener('state', (event) => {
 			const data = (event as MessageEvent<string>).data;
 			if (!data) return;
@@ -892,11 +904,7 @@
 					state: { lastCommand: DeviceCommandKey; source?: string };
 				};
 				if (payload?.deviceId && payload.state?.lastCommand) {
-					applyDeviceStateUpdate(
-						payload.deviceId,
-						payload.state.lastCommand,
-						payload.state.source
-					);
+					applyDeviceStateUpdate(payload.deviceId, payload.state.lastCommand, payload.state.source);
 				}
 			} catch {}
 		});
@@ -942,6 +950,7 @@
 	function closeAdvancedPanel() {
 		showAdvancedPanel = false;
 		showSceneIdEditor = false;
+		showAdvancedInformation = false;
 		advancedPanelPinned = false;
 		clearAdvancedPin();
 		advancedAccessError = '';
@@ -1114,7 +1123,7 @@
 			const payload = (await res.json().catch(() => ({}))) as UpdateStatus;
 			updateStatus = payload;
 			if (!res.ok || !payload.ok) {
-				updateMessage = payload.message ?? 'Kon update status niet ophalen';
+				updateMessage = payload.message ?? 'Kon de updatestatus niet ophalen';
 				updatePhase = 'error';
 			} else if (payload.updating) {
 				updateRunning = true;
@@ -1256,7 +1265,7 @@
 				}
 				return handleTriggerPress(triggerId, retryAttempt + 1);
 			}
-			advancedErrorMsg = error instanceof Error ? error.message : 'Unknown error';
+			advancedErrorMsg = error instanceof Error ? error.message : 'Onbekende fout';
 		} finally {
 			const nextLoadingTriggerIds = new Set(loadingTriggerIds);
 			nextLoadingTriggerIds.delete(triggerId);
@@ -1267,8 +1276,21 @@
 		}
 	}
 
+	async function refreshDashboardConfiguration(refreshControls = false) {
+		try {
+			const response = await fetch('/api/config/scenes', { cache: 'no-store' });
+			if (!response.ok) return;
+			const payload = await response.json();
+			if (payload.tabs) dashboardTabs = payload.tabs;
+			if (refreshControls && payload.controls) sceneControls = payload.controls;
+		} catch {
+			/* Keep the current navigation when offline. */
+		}
+	}
+
 	function handleSceneControlsUpdate(nextControls: DashboardControl[]) {
 		sceneControls = nextControls;
+		void refreshDashboardConfiguration();
 	}
 
 	function startTriggerTimer(triggerId: string) {
@@ -1313,7 +1335,8 @@
 				}
 				return handleEnergyTriggerPress(retryAttempt + 1);
 			}
-			energyTriggerError = error instanceof Error ? error.message : 'Scène kon niet worden uitgevoerd';
+			energyTriggerError =
+				error instanceof Error ? error.message : 'Scène kon niet worden uitgevoerd';
 		} finally {
 			const nextLoadingTriggerIds = new Set(loadingTriggerIds);
 			nextLoadingTriggerIds.delete(energyTriggerId);
@@ -1335,15 +1358,14 @@
 		await handleEnergyTriggerPress();
 	}
 
+	const polling = createPollingGroup([
+		{ intervalMs: connectivityRefreshMs, run: checkConnectivity },
+		{ intervalMs: hardwareRefreshMs, run: checkHardware },
+		{ intervalMs: 5_000, run: loadDeviceStates }
+	]);
+
 	function pauseIdleSensitivePolling() {
-		if (connectivityInterval) {
-			clearInterval(connectivityInterval);
-			connectivityInterval = null;
-		}
-		if (hardwareInterval) {
-			clearInterval(hardwareInterval);
-			hardwareInterval = null;
-		}
+		polling.pause();
 		if (wattageRefreshTimeout) {
 			clearTimeout(wattageRefreshTimeout);
 			wattageRefreshTimeout = null;
@@ -1355,10 +1377,6 @@
 		if (statusAutomaticRefreshTimeout) {
 			clearTimeout(statusAutomaticRefreshTimeout);
 			statusAutomaticRefreshTimeout = null;
-		}
-		if (deviceStateRefreshInterval) {
-			clearInterval(deviceStateRefreshInterval);
-			deviceStateRefreshInterval = null;
 		}
 		clearStatusFollowups();
 		if (stateStream) {
@@ -1374,15 +1392,7 @@
 	function startIdleSensitivePolling(refreshImmediately = false) {
 		if (displayDimmed || typeof window === 'undefined') return;
 
-		if (!connectivityInterval) {
-			connectivityInterval = setInterval(() => void checkConnectivity(), connectivityRefreshMs);
-		}
-		if (!hardwareInterval) {
-			hardwareInterval = setInterval(() => void checkHardware(), hardwareRefreshMs);
-		}
-		if (!deviceStateRefreshInterval) {
-			deviceStateRefreshInterval = setInterval(() => void loadDeviceStates(), 5_000);
-		}
+		polling.start();
 		startStateStream();
 
 		if (refreshImmediately) {
@@ -1400,6 +1410,7 @@
 	}
 
 	onMount(() => {
+		hydrated = true;
 		if (typeof window !== 'undefined') {
 			window.addEventListener('contextmenu', preventContextMenu);
 			window.addEventListener('pointerdown', handlePointerDown, { passive: true });
@@ -1437,25 +1448,19 @@
 	});
 </script>
 
-{#if updatePhase === 'starting' || updatePhase === 'running'}
-	<div
-		class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900 px-8 text-white"
-		role="status"
-		aria-live="assertive"
-	>
-		<div class="flex flex-col items-center text-center">
-			<RefreshCw class="h-20 w-20 animate-spin" aria-hidden="true" />
-			<p class="mt-8 text-4xl font-semibold">Bezig met updaten</p>
-			<p class="mt-3 text-xl text-slate-300">Even geduld. Het scherm start vanzelf opnieuw.</p>
-		</div>
-	</div>
-{/if}
+<UpdateProgress phase={updatePhase} />
 
-<main class="flex h-screen flex-col overflow-hidden bg-slate-50 text-slate-900">
+<main
+	data-hydrated={hydrated}
+	class="flex h-screen flex-col overflow-hidden bg-slate-50 text-slate-900"
+>
+	{#if data.mode === 'mock'}<p class="absolute top-1 left-4 z-10 text-xs text-slate-500">
+			Demo · geen apparatuur verbonden
+		</p>{/if}
 	<header class="border-b border-slate-300 bg-white px-6 py-4">
 		<div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
 			<div>
-				<h1 class="text-2xl font-semibold text-slate-900">Shelly bediening</h1>
+				<h1 class="text-2xl font-semibold text-slate-900">Shelly-bediening</h1>
 			</div>
 			<div class="flex flex-wrap items-center gap-3"></div>
 		</div>
@@ -1490,145 +1495,40 @@
 	{/if}
 
 	<div class="flex min-h-0 flex-1 gap-4 overflow-hidden px-4 pt-4 pb-4">
-		<section
-			class="flex w-[26rem] shrink-0 flex-col rounded-lg border border-slate-300 bg-white p-5"
+		<EnergyPanel
+			{wattageLabel}
+			{wattageStale}
+			{wattageDisabled}
+			{wattageUpdatedAt}
+			{wattageLoading}
+			{handleManualWattageRefresh}
+			{wattageTotal}
+			{formatTotalWatts}
+			{loadingTriggerIds}
+			{energyDevicesTrigger}
+			{openEnergyTriggerConfirmation}
+			{energyTriggerError}
+			{wattageSummary}
+			{availableWattageMeasurements}
+			{topWattageDevices}
+			{formatWatts}
+			{topWattageMax}
+			{wattageError}
+			{openAdvancedAccess}
 		>
-			<div class="flex items-start justify-between gap-4">
-				<div>
-					<p class="text-sm font-semibold text-slate-700">Energie en apparaten</p>
-					<h2 class="mt-1 text-xl font-semibold text-slate-900">{wattageLabel}</h2>
-					<p
-						class={`mt-1 text-xs ${wattageStale ? 'font-semibold text-amber-700' : 'text-slate-500'}`}
-					>
-						{#if wattageDisabled}
-							Metingen uitgeschakeld
-						{:else if wattageUpdatedAt}
-							{wattageStale ? 'Verouderde data van' : 'Bijgewerkt om'}
-							{new Date(wattageUpdatedAt).toLocaleTimeString([], {
-								hour: '2-digit',
-								minute: '2-digit'
-							})}
-						{:else if wattageLoading}
-							Gegevens ophalen...
-						{:else}
-							Nog geen gegevens
-						{/if}
-					</p>
-				</div>
-				<button
-					type="button"
-					class="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-slate-300 text-slate-700 transition hover:bg-slate-100 active:bg-slate-200 disabled:opacity-50"
-					on:click={handleManualWattageRefresh}
-					disabled={wattageLoading || wattageDisabled}
-				>
-					<RefreshCw class={`h-6 w-6 ${wattageLoading ? 'animate-spin' : ''}`} />
-					<span class="sr-only">Ververs energiegegevens</span>
-				</button>
-			</div>
-
-			<div class="mt-5 border-y border-slate-200 py-4">
-				<p class="text-sm font-medium text-slate-600">Huidig gemeten vermogen</p>
-				<p class="mt-1 text-5xl font-bold text-slate-950">
-					{#if wattageDisabled}
-						Uit
-					{:else if wattageUpdatedAt}
-						{formatTotalWatts(wattageTotal)}
-					{:else}
-						—
-					{/if}
-				</p>
-			</div>
-
-			<div class="mt-4">
-				<button
-					type="button"
-					class="relative flex w-full items-center justify-center rounded-lg border border-red-800 bg-red-700 px-5 py-5 text-lg font-bold text-white transition-colors duration-150 hover:bg-red-800 disabled:cursor-wait disabled:opacity-70"
-					disabled={loadingTriggerIds.has(energyDevicesTrigger.id)}
-					on:click={openEnergyTriggerConfirmation}
-				>
-					{#if loadingTriggerIds.has(energyDevicesTrigger.id)}
-						Bezig…
-					{:else}
-						{energyDevicesTrigger.label}
-					{/if}
-				</button>
-				{#if energyTriggerError}
-					<p class="mt-2 text-sm font-semibold text-red-700">{energyTriggerError}</p>
-				{/if}
-			</div>
-
-			<div class="mt-4 flex items-center justify-between border-b border-slate-200 pb-4">
-				<span class="text-sm text-slate-600">Vermogensmetingen</span>
-				<span class="text-sm font-semibold text-slate-900">
-					{#if wattageSummary}
-						{availableWattageMeasurements} van {wattageSummary.meteredCount} beschikbaar
-					{:else}
-						—
-					{/if}
-				</span>
-			</div>
-
-			<div class="mt-4">
-				<div class="flex items-baseline justify-between gap-3">
-					<h3 class="text-sm font-semibold text-slate-900">Topverbruikers</h3>
-					<span class="text-xs text-slate-500">Nu</span>
-				</div>
-				{#if topWattageDevices.length > 0}
-					<ol class="mt-3 space-y-3">
-						{#each topWattageDevices as device, index}
-							<li>
-								<div class="flex items-center justify-between gap-4 text-sm">
-									<div class="flex min-w-0 items-center gap-2">
-										<span class="w-4 shrink-0 text-xs font-semibold text-slate-400"
-											>{index + 1}</span
-										>
-										<span class="truncate font-medium text-slate-700">{device.name}</span>
-									</div>
-									<span class="shrink-0 font-semibold text-slate-900"
-										>{formatWatts(device.watts)}</span
-									>
-								</div>
-								<div class="mt-1.5 ml-6 h-1.5 overflow-hidden rounded-sm bg-slate-100">
-									<div
-										class="h-full bg-emerald-600 transition-[width] duration-500"
-										style={`width: ${Math.max(4, (device.watts / topWattageMax) * 100)}%`}
-									></div>
-								</div>
-							</li>
-						{/each}
-					</ol>
-				{:else}
-					<p class="mt-3 text-sm text-slate-500">
-						{wattageLoading ? 'Verbruikers ophalen...' : 'Geen actief verbruik gemeten'}
-					</p>
-				{/if}
-			</div>
-
-			{#if wattageError}
-				<p
-					class="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800"
-				>
-					{wattageStale
-						? 'Vernieuwen mislukt. De vorige gegevens blijven zichtbaar.'
-						: wattageError}
-				</p>
-			{/if}
-
-			<div class="mt-auto pt-4">
-				<button
-					type="button"
-					class="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 active:bg-slate-200"
-					on:click={openAdvancedAccess}
-				>
-					<span>Geavanceerde bediening</span>
-				</button>
-			</div>
-		</section>
+			<TabSelector
+				tabs={dashboardTabs}
+				selected={selectedTab}
+				on:select={({ detail }) => (selectedTab = detail)}
+			/>
+		</EnergyPanel>
 
 		<section class="flex min-h-0 flex-1 flex-col rounded-lg border border-slate-300 bg-white p-4">
 			<header class="mb-4 flex items-center justify-between">
 				<div>
-					<h2 class="text-2xl font-semibold text-slate-900">Bediening</h2>
+					<h2 class="text-2xl font-semibold text-slate-900">
+						{dashboardTabs.find((tab) => tab.id === selectedTab)?.label ?? 'Bediening'}
+					</h2>
 				</div>
 				<span class="text-sm text-slate-500">{primaryDeviceCount} knoppen</span>
 			</header>
@@ -1639,31 +1539,38 @@
 					{errorMsg}
 				</p>
 			{/if}
-			<div class="grid h-full flex-1 grid-flow-row grid-cols-3 grid-rows-3 gap-6 pr-1 pb-2">
+			<div
+				class={`grid min-h-0 flex-1 gap-6 overflow-y-auto pr-1 pb-2 ${selectedTab === 'home' ? 'grid-cols-3 grid-rows-3' : 'auto-rows-[minmax(160px,1fr)] grid-cols-3'}`}
+			>
 				{#each mainControls as control (control.id)}
-					<ControlCard
-						{control}
-						{commandOrder}
-						{commandKey}
-						{commandLabel}
-						{resolveToggleCommand}
-						loadingCommandKeys={loadingCommandKeys}
-						loadingTriggerIds={loadingTriggerIds}
-						transientActive={
-							control.controlType === 'device' && isTransientDeviceActive(control.id)
-						}
-						initialStatus={
-							control.controlType === 'device'
+					<div
+						class="relative flex min-h-0 flex-col"
+						style={selectedTab === 'home' && control.pushNumber
+							? `grid-column: ${homeGridPosition(control.pushNumber).column}; grid-row: ${homeGridPosition(control.pushNumber).row}`
+							: ''}
+					>
+						<ControlCard
+							cardNumber={selectedTab === 'home' ? control.pushNumber : undefined}
+							{control}
+							{commandOrder}
+							{commandKey}
+							{commandLabel}
+							{resolveToggleCommand}
+							{loadingCommandKeys}
+							{loadingTriggerIds}
+							transientActive={control.controlType === 'device' &&
+								isTransientDeviceActive(control.id)}
+							initialStatus={control.controlType === 'device'
 								? resolveCardStatus(control, deviceStates, statusDeviceStates)
-								: null
-						}
-						activeUntil={triggerActiveUntilById.get(control.id) ?? null}
-						on:command={({ detail }) =>
-							handlePress(detail.deviceId, detail.command, {
-								stateless: deviceById.get(detail.deviceId)?.stateless
-							})}
-						on:trigger={({ detail }) => handleTriggerPress(detail.triggerId)}
-					/>
+								: null}
+							activeUntil={triggerActiveUntilById.get(control.id) ?? null}
+							on:command={({ detail }) =>
+								handlePress(detail.deviceId, detail.command, {
+									stateless: deviceById.get(detail.deviceId)?.stateless
+								})}
+							on:trigger={({ detail }) => handleTriggerPress(detail.triggerId)}
+						/>
+					</div>
 				{/each}
 			</div>
 		</section>
@@ -1677,24 +1584,28 @@
 			on:click={wakeDisplay}
 			on:keydown={wakeDisplay}
 		>
-			<svg
-				class="pointer-events-none h-20 w-28 text-emerald-800/70"
-				viewBox="0 0 120 80"
-				fill="none"
-				aria-hidden="true"
-			>
-				<path
-					d="M48 10c-17 5-27 21-23 37 4 17 21 27 38 22 9-3 16-9 20-17-7 3-15 3-22-1-15-8-20-26-13-41z"
-					fill="currentColor"
-				/>
-				<path
-					d="M78 18h14L78 33h15M91 43h10L91 56h11"
-					stroke="currentColor"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					stroke-width="4"
-				/>
-			</svg>
+			<div class="flex flex-col items-center justify-center gap-6">
+				<svg
+					class="pointer-events-none h-[200px] w-[300px] text-white"
+					viewBox="0 0 120 80"
+					fill="none"
+					aria-hidden="true"
+				>
+					<path
+						d="M48 10c-17 5-27 21-23 37 4 17 21 27 38 22 9-3 16-9 20-17-7 3-15 3-22-1-15-8-20-26-13-41z"
+						fill="currentColor"
+					/>
+					<path
+						d="M78 18h14L78 33h15M91 43h10L91 56h11"
+						stroke="currentColor"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="4"
+					/>
+				</svg>
+
+				<span class="text-xl font-medium text-white"> Tik om te wekken </span>
+			</div>
 		</button>
 	{/if}
 </main>
@@ -1716,9 +1627,7 @@
 			<h2 id="energy-confirmation-title" class="text-xl font-semibold text-slate-900">
 				Alles uitschakelen?
 			</h2>
-			<p class="mt-3 text-base text-slate-700">
-				LET OP: Dit zet enkel verlichting uit.
-			</p>
+			<p class="mt-3 text-base text-slate-700">LET OP: Dit schakelt alleen de verlichting uit.</p>
 			<div class="mt-6 grid grid-cols-2 gap-3">
 				<button
 					type="button"
@@ -1740,381 +1649,124 @@
 {/if}
 
 {#if showAdvancedPrompt}
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4"
-		role="presentation"
-		tabindex="-1"
-		on:click={closeAdvancedPrompt}
-		on:keydown={markAdvancedActivity}
-	>
-		<div
-			class="w-full max-w-md space-y-4 rounded-lg border border-slate-300 bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.12)]"
-			role="dialog"
-			aria-modal="true"
-			aria-labelledby="advanced-prompt-title"
-			tabindex="-1"
-			on:click|stopPropagation
-			on:keydown|stopPropagation
-		>
-			<div class="space-y-1">
-				<h2 id="advanced-prompt-title" class="text-lg font-semibold text-slate-900">PIN vereist</h2>
-				<p class="text-sm text-slate-600">
-					Vul de PIN in om geavanceerde bediening te ontgrendelen.
-				</p>
-			</div>
-			{#if !advancedPatternConfigured}
-				<p
-					class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
-				>
-					Stel PUBLIC_ADVANCED_PATTERN of PUBLIC_ADVANCED_PIN in je .env bestand in.
-				</p>
-			{/if}
-			{#if advancedAccessError}
-				<p
-					class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700"
-				>
-					{advancedAccessError}
-				</p>
-			{/if}
-			<div class="grid grid-cols-3 justify-items-center gap-4 select-none" aria-label="PIN toetsenbord">
-				{#each pinNodes as node (node)}
-					<button
-						type="button"
-						class={`flex h-16 w-16 items-center justify-center rounded-full border-2 text-lg font-semibold transition-colors ${
-							advancedPin.includes(String(node))
-								? 'border-slate-800 bg-slate-800 text-white'
-								: 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100'
-						} ${node === 0 ? 'col-span-3 justify-self-center' : ''}`}
-						aria-label={`PIN ${node}`}
-						on:click={() => appendAdvancedPinDigit(node)}
-					>
-						{node}
-					</button>
-				{/each}
-			</div>
-			<div class="flex justify-end gap-2">
-				<button type="button" class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100" on:click={closeAdvancedPrompt}>
-					Annuleren
-				</button>
-				<button type="button" class="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60" on:click={clearAdvancedPin} disabled={!advancedPin}>
-					Reset
-				</button>
-				<button type="button" class="rounded-md bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-900 disabled:opacity-60" on:click={submitAdvancedPin} disabled={!advancedPin.trim()}>
-					Ontgrendel
-				</button>
-			</div>
-		</div>
-	</div>
+	<AdvancedAccess
+		{closeAdvancedPrompt}
+		{markAdvancedActivity}
+		{advancedPatternConfigured}
+		{advancedAccessError}
+		{pinNodes}
+		{advancedPin}
+		{appendAdvancedPinDigit}
+		{clearAdvancedPin}
+		{submitAdvancedPin}
+	/>
 {/if}
 
 {#if advancedUnlocked && showAdvancedPanel}
-	<div
-		class="fixed inset-0 z-40 flex flex-col bg-slate-900/80 px-4 py-6 sm:px-8"
-		on:click={closeAdvancedPanel}
-		on:pointerdown={markAdvancedActivity}
-		on:keydown={markAdvancedActivity}
-		tabindex="-1"
+	<AdvancedPanel
+		pinned={advancedPanelPinned}
+		informationOpen={showAdvancedInformation}
+		close={closeAdvancedPanel}
+		activity={markAdvancedActivity}
+		togglePin={toggleAdvancedPanelPin}
+		toggleInformation={() => (showAdvancedInformation = !showAdvancedInformation)}
 	>
-		<div
-			class="relative mx-auto flex w-[90vw] max-w-[1800px] flex-1 flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white/95 shadow-xl"
-			on:click|stopPropagation
-		>
-			<header
-				class="flex flex-col gap-4 border-b border-slate-200 px-6 py-4 sm:flex-row sm:items-center sm:justify-between"
-			>
-				<div class="space-y-1">
-					<h2 class="text-2xl font-semibold tracking-tight text-slate-900">Advanced Controls</h2>
-					<p class="text-sm text-slate-600">
-						Geavanceerde bedieningselementen voor gemachtigde gebruikers.
+		<div class="flex min-h-0 flex-1 flex-col gap-6 px-6 py-6 lg:flex-row">
+			<section class="flex min-h-0 flex-1 flex-col">
+				<div class="mb-3 flex items-center justify-between">
+
+					<span class="text-sm text-slate-500">{advancedControlCount} knoppen</span>
+				</div>
+				{#if advancedErrorMsg}
+					<p
+						class="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700"
+					>
+						{advancedErrorMsg}
 					</p>
-				</div>
-				<div class="flex items-center gap-2">
-					<button
-						type="button"
-						class={`inline-flex h-10 w-10 items-center justify-center rounded-lg border transition-colors duration-150 ${
-							advancedPanelPinned
-								? 'border-slate-800 bg-slate-800 text-white'
-								: 'border-slate-300 text-slate-700 hover:bg-slate-100'
-						}`}
-						aria-pressed={advancedPanelPinned}
-						aria-label={advancedPanelPinned
-							? 'Automatisch sluiten weer inschakelen'
-							: 'Paneel vastzetten'}
-						title={advancedPanelPinned
-							? 'Vastgezet: automatisch sluiten staat uit'
-							: 'Vastzetten zodat het paneel open blijft'}
-						on:click={toggleAdvancedPanelPin}
-					>
-						<Pin class="h-5 w-5" />
-					</button>
-					<button
-						type="button"
-						class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors duration-150 hover:bg-slate-100"
-						on:click={closeAdvancedPanel}
-					>
-						Sluiten
-					</button>
-				</div>
-			</header>
-			<div class="flex min-h-0 flex-1 flex-col gap-6 px-6 py-6 lg:flex-row">
-				<section class="flex min-h-0 flex-1 flex-col">
-					<div class="mb-3 flex items-center justify-between">
-						<h3 class="text-base font-semibold text-slate-900">Bedenk goed wat je met deze knoppen doet...</h3>
-						<span class="text-sm text-slate-500">{advancedControlCount} knoppen</span>
-					</div>
-					{#if advancedErrorMsg}
-						<p
-							class="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700"
-						>
-							{advancedErrorMsg}
-						</p>
-					{/if}
-					<div
-						class="min-h-0 flex-1 overflow-y-auto pr-2"
-						on:scroll={markAdvancedActivity}
-						on:wheel|passive={markAdvancedActivity}
-						on:touchmove|passive={markAdvancedActivity}
-						on:pointerdown={markAdvancedActivity}
-						on:mousedown={markAdvancedActivity}
-					>
-						{#if advancedControlCount === 0}
-							<p class="text-sm text-slate-600">Geen tijdelijke knoppen ingesteld.</p>
-						{:else}
-							<div class="grid auto-rows-fr grid-cols-1 gap-4 pb-4 md:grid-cols-2">
-								{#each advancedControls as control (control.id)}
-									<ControlCard
-										{control}
-										{commandOrder}
-										{commandKey}
-										{commandLabel}
-										{resolveToggleCommand}
-										loadingCommandKeys={loadingCommandKeys}
-										loadingTriggerIds={loadingTriggerIds}
-										transientActive={
-											control.controlType === 'device' && isTransientDeviceActive(control.id)
-										}
-										initialStatus={
-											control.controlType === 'device'
-												? resolveCardStatus(control, deviceStates, statusDeviceStates)
-												: null
-										}
-										activeUntil={triggerActiveUntilById.get(control.id) ?? null}
-										on:command={({ detail }) =>
-											handlePress(detail.deviceId, detail.command, {
-												stateless: deviceById.get(detail.deviceId)?.stateless
-											})}
-										on:trigger={({ detail }) => handleTriggerPress(detail.triggerId)}
-									/>
-								{/each}
-							</div>
-						{/if}
-					</div>
-				</section>
-
-				<aside class="w-full space-y-4 overflow-y-auto pr-1 lg:w-[400px] lg:flex-shrink-0">
-					<div class="rounded-lg border border-slate-300 bg-white p-4">
-						<h3 class="text-base font-semibold text-slate-900">Systeem</h3>
-						<div class="mt-3 grid gap-4">
-							{#if false}
-							<div class="border-t border-slate-200 pt-3">
-								<div class="flex items-center justify-between gap-3">
-									<p class="text-sm font-semibold text-slate-800">Software-update</p>
-									<button
-										type="button"
-										class="inline-flex shrink-0 items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 transition-colors duration-150 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-										on:click={checkGitUpdate}
-										disabled={updateChecking || updateRunning}
-									>
-										<RefreshCw class={`h-4 w-4 ${updateChecking ? 'animate-spin' : ''}`} />
-										{updateChecking ? 'Controleren…' : 'Controleren'}
-									</button>
-								</div>
-								<p
-									class={`mt-2 text-sm ${
-										updatePhase === 'success'
-											? 'font-semibold text-emerald-700'
-											: updatePhase === 'error'
-												? 'font-semibold text-red-700'
-												: updatePhase === 'blocked'
-													? 'font-semibold text-amber-700'
-													: 'text-slate-600'
-									}`}
-								>
-									{updateStatusText()}
-								</p>
-								{#if updateStatus?.currentShort || updateStatus?.targetShort}
-									<p class="mt-2 font-mono text-xs text-slate-500">
-										{updateStatus?.currentShort ?? 'onbekend'} → {updateStatus?.targetShort ??
-											'onbekend'}
-									</p>
-								{/if}
-
-								{#if updatePhase === 'starting' || updatePhase === 'running'}
-									<button
-										type="button"
-										class="mt-3 flex w-full cursor-wait items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-700 px-4 py-3 text-sm font-semibold text-white"
-										disabled
-									>
-										<RefreshCw class="h-4 w-4 animate-spin" />
-										{updatePhase === 'starting' ? 'Update starten…' : 'Update installeren…'}
-									</button>
-								{:else if updatePhase === 'available' || (updatePhase === 'error' && updateStatus?.updateAvailable && updateStatus?.fastForward !== false)}
-									<button
-										type="button"
-										class="mt-3 w-full rounded-lg bg-slate-800 px-4 py-3 text-sm font-semibold text-white transition-colors duration-150 hover:bg-slate-900 disabled:opacity-60"
-										on:click={runGitUpdate}
-										disabled={updateChecking}
-									>
-										{updatePhase === 'error' ? 'Opnieuw proberen' : 'Update installeren'}
-									</button>
-								{/if}
-							</div>
-							{/if}
-							<button
-								type="button"
-								class="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 transition-colors duration-150 hover:bg-slate-100 disabled:opacity-60"
-								on:click={clearDeviceCache}
-								disabled={cacheClearing}
-							>
-								{#if cacheClearing}
-									Cache legen…
-								{:else}
-									Wis IP cache
-								{/if}
-							</button>
-							{#if cacheMessage}
-								<p
-									class="rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold tracking-wide text-slate-500 uppercase"
-								>
-									{cacheMessage}
-								</p>
-							{/if}
-						</div>
-					</div>
-
-					<div class="rounded-lg border border-slate-300 bg-white p-4">
-						<div class="flex items-center justify-between gap-3">
-							<h3 class="text-base font-semibold text-slate-900">Apparaatproblemen</h3>
-							<span
-								class={`text-sm font-semibold ${diagnosticProblemCount > 0 ? 'text-amber-700' : 'text-emerald-700'}`}
-							>
-								{diagnosticProblemCount} meldingen
-							</span>
-						</div>
-						<div class="mt-3 border-t border-slate-200">
-							{#each diagnosticGroups as group (group.id)}
-								<details class="border-b border-slate-200">
-									<summary
-										class="flex cursor-pointer items-center justify-between gap-3 py-3 text-sm font-semibold text-slate-700"
-									>
-										<span>{group.label}</span>
-										<span class={group.entries.length > 0 ? 'text-amber-700' : 'text-slate-400'}>
-											{group.entries.length}
-										</span>
-									</summary>
-									{#if group.entries.length === 0}
-										<p class="pb-3 text-sm text-slate-500">Geen apparaten.</p>
-									{:else}
-										<ul class="space-y-3 pb-3">
-											{#each group.entries as entry (`${group.id}:${entry.id}`)}
-												<li>
-													<p class="text-sm font-semibold text-slate-800">{entry.name}</p>
-													<p class="mt-0.5 text-xs break-words text-slate-500">{entry.detail}</p>
-												</li>
-											{/each}
-										</ul>
-									{/if}
-								</details>
+				{/if}
+				<div
+					class="min-h-0 flex-1 overflow-y-auto pr-2"
+					role="presentation"
+					on:scroll={markAdvancedActivity}
+					on:wheel|passive={markAdvancedActivity}
+					on:touchmove|passive={markAdvancedActivity}
+					on:pointerdown={markAdvancedActivity}
+					on:mousedown={markAdvancedActivity}
+				>
+					{#if advancedControlCount === 0}
+						<p class="text-sm text-slate-600">Geen tijdelijke knoppen ingesteld.</p>
+					{:else}
+						<div class="grid auto-rows-fr grid-cols-1 gap-4 pb-4 md:grid-cols-2">
+							{#each advancedControls as control (control.id)}
+								<ControlCard
+									{control}
+									{commandOrder}
+									{commandKey}
+									{commandLabel}
+									{resolveToggleCommand}
+									{loadingCommandKeys}
+									{loadingTriggerIds}
+									transientActive={control.controlType === 'device' &&
+										isTransientDeviceActive(control.id)}
+									initialStatus={control.controlType === 'device'
+										? resolveCardStatus(control, deviceStates, statusDeviceStates)
+										: null}
+									activeUntil={triggerActiveUntilById.get(control.id) ?? null}
+									on:command={({ detail }) =>
+										handlePress(detail.deviceId, detail.command, {
+											stateless: deviceById.get(detail.deviceId)?.stateless
+										})}
+									on:trigger={({ detail }) => handleTriggerPress(detail.triggerId)}
+								/>
 							{/each}
 						</div>
-					</div>
-
-					<div class="rounded-lg border border-slate-300 bg-white p-4">
-						<h3 class="text-base font-semibold text-slate-900">Wattage diagnostiek</h3>
-						{#if wattageDisabled}
-							<p class="mt-3 text-sm text-slate-600">Wattage is uitgeschakeld.</p>
-						{:else if wattageError}
-							<p class="mt-3 text-sm text-amber-700">{wattageError}</p>
-						{:else if wattageSummary}
-							<div class="mt-3 space-y-2 text-sm text-slate-700">
-								{#if wattageSummary.unavailableCount > 0}
-									<p class="font-semibold text-amber-700">
-										{wattageSummary.unavailableCount} apparaten onbekend
-									</p>
-								{:else}
-									<p class="text-slate-600">Geen ontbrekende metingen.</p>
-								{/if}
-								<div class="grid grid-cols-2 gap-2 text-xs text-slate-500">
-									<span>Gemeten: {wattageSummary.meteredCount}</span>
-									<span>Niet gemeten: {wattageSummary.notMeteredCount}</span>
-									<span>Onbekend: {wattageSummary.unknownCapabilityCount}</span>
-									<span>Fallback: {wattageSummary.cachedCount + wattageSummary.cloudCount}</span>
-								</div>
-							</div>
-						{:else}
-							<p class="mt-3 text-sm text-slate-600">Nog geen diagnoseresultaten.</p>
-						{/if}
-					</div>
-
-					{#if wattageDebug}
-						<details class="rounded-lg border border-slate-300 bg-white p-4">
-							<summary
-								class="cursor-pointer text-sm font-semibold text-slate-700"
-							>
-								Wattage debug lijst
-							</summary>
-							{#if wattageSummary}
-								<p class="mt-3 text-xs text-slate-400">
-									RPC {wattageSummary.lanRpcCount} · Status {wattageSummary.lanStatusCount} · Cache {wattageSummary.cachedCount}
-									· Cloud {wattageSummary.cloudCount}
-								</p>
-							{/if}
-							{#if wattageDevices.length === 0}
-								<p class="mt-3 text-sm text-slate-500">Geen wattage data.</p>
-							{:else}
-								<div class="mt-3 grid grid-cols-1 gap-2 text-sm text-slate-700">
-									{#each wattageDevices as device}
-										<div class="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
-											<span class="truncate">{device.name}</span>
-											<span class="ml-3 shrink-0 text-xs font-semibold text-slate-500">
-												{device.source ?? 'unknown'} · {device.capability ?? 'unknown'} · {formatWatts(
-													device.watts
-												)}
-											</span>
-										</div>
-									{/each}
-								</div>
-							{/if}
-						</details>
 					{/if}
-
-					<div class="border-t border-slate-300 pt-4">
-						<button
-							type="button"
-							class="flex w-full items-center justify-between rounded-md border border-slate-300 bg-white px-4 py-3 text-left text-sm font-semibold text-slate-800 hover:bg-slate-100"
-							aria-expanded={showSceneIdEditor}
-							on:click={() => {
-								showSceneIdEditor = !showSceneIdEditor;
-								markAdvancedActivity();
-							}}
-						>
-							<span>Scène-ID's beheren</span>
-							<span aria-hidden="true">{showSceneIdEditor ? '−' : '+'}</span>
-						</button>
-						{#if showSceneIdEditor}
-							<SceneIdEditor
-								on:controls={({ detail }) => handleSceneControlsUpdate(detail)}
-								on:close={() => (showSceneIdEditor = false)}
-							/>
-						{/if}
-					</div>
-				</aside>
-			</div>
-			<footer
-				class="shrink-0 border-t border-slate-200 px-6 py-2 text-right text-xs text-slate-500"
-			>
-				© 2026 Nick Esselman en Kennemer Lyceum Overveen. Alle rechten voorbehouden.
-			</footer>
+				</div>
+			</section>
+			{#if showAdvancedInformation}
+			<AdvancedInformation
+				{clearDeviceCache}
+				{cacheClearing}
+				{cacheMessage}
+				{diagnosticProblemCount}
+				{diagnosticGroups}
+				{wattageDisabled}
+				{wattageError}
+				{wattageSummary}
+				{wattageDebug}
+				{wattageDevices}
+				{formatWatts}
+			/>
+			{/if}
 		</div>
-	</div>
+		<div class="flex shrink-0 justify-end border-t border-slate-200 px-6 py-4">
+			<button
+				type="button"
+				class="inline-flex min-h-12 items-center justify-center gap-3 rounded-md border border-slate-300 bg-white px-4 py-3 text-left text-sm font-semibold text-slate-800 hover:bg-slate-100"
+				aria-expanded={showSceneIdEditor}
+				on:click={() => {
+					showSceneIdEditor = !showSceneIdEditor;
+					markAdvancedActivity();
+				}}
+			>
+				<span>Bediening beheren</span>
+				<span aria-hidden="true">{showSceneIdEditor ? '−' : '+'}</span>
+			</button>
+		</div>
+	</AdvancedPanel>
+
+
+	{#if showSceneIdEditor}
+		<SceneIdEditor
+			activity={markAdvancedActivity}
+			on:controls={({ detail }) => handleSceneControlsUpdate(detail)}
+			on:configuration={({
+				detail
+			}: CustomEvent<{ controls: DashboardControl[]; tabs: DashboardTab[] }>) => {
+				sceneControls = detail.controls;
+				dashboardTabs = detail.tabs;
+			}}
+			on:close={() => (showSceneIdEditor = false)}
+		/>
+	{/if}
 {/if}

@@ -9,6 +9,7 @@
 	import UpdateProgress from '$lib/components/update-progress.svelte';
 	import TabSelector from '$lib/components/tab-selector.svelte';
 	import AdvancedAccess from '$lib/components/advanced-access.svelte';
+	import BellProfileSelector from '$lib/components/bell-profile-selector.svelte';
 	import AdvancedPanel from '$lib/components/advanced-panel.svelte';
 	import ControlCard from '$lib/components/control-card.svelte';
 	import SceneIdEditor from '$lib/components/scene-id-editor.svelte';
@@ -263,6 +264,7 @@
 	let showAdvancedPanel = false;
 	let showSceneIdEditor = false;
 	let advancedUnlocked = false;
+	let selectedBellProfile = 'regular';
 	let advancedAccessError = '';
 	let advancedPin = '';
 	let advancedIdleTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -1692,6 +1694,10 @@
 					on:pointerdown={markAdvancedActivity}
 					on:mousedown={markAdvancedActivity}
 				>
+					<BellProfileSelector
+						bind:selected={selectedBellProfile}
+						on:change={markAdvancedActivity}
+					/>
 					{#if advancedControlCount === 0}
 						<p class="text-sm text-slate-600">Geen tijdelijke knoppen ingesteld.</p>
 					{:else}

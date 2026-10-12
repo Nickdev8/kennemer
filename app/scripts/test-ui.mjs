@@ -117,6 +117,14 @@ try {
 	await page.getByRole('button', { name: 'PIN 3', exact: true }).click();
 	await page.getByRole('button', { name: 'PIN 4', exact: true }).click();
 	await page.getByRole('button', { name: 'Ontgrendel', exact: true }).click();
+	const rosters = page.getByRole('radiogroup', { name: 'Belrooster' });
+	assert.equal(await rosters.getByRole('radio', { checked: true }).count(), 1);
+	for (const label of ['Verkort rooster', '10-minutenbel', 'Regulier rooster']) {
+		await rosters.getByText(label, { exact: true }).click();
+		assert.equal(await rosters.getByRole('radio', { checked: true }).count(), 1);
+		await expect(rosters.getByRole('radio', { name: label, exact: true })).toBeChecked();
+	}
+	assert.equal(actions.length, 1);
 	const information = page.getByRole('button', { name: 'Systeeminformatie' });
 	assert.equal(
 		(await information.boundingBox()).height,

@@ -5,7 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "node scripts/dev.mjs mock",
-		"build": "npm run validate:config && vite build",
+		"build": "svelte-kit sync && npm run validate:config && vite build",
 		"start": "node server.js",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",

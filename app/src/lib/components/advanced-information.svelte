@@ -67,7 +67,7 @@
 		</div>
 		<div class="mt-3 border-t border-slate-200">
 			{#each diagnosticGroups as group (group.id)}
-				<details class="border-b border-slate-200" open={group.entries.length > 0}>
+				<details class="border-b border-slate-200">
 					<summary
 						class="flex cursor-pointer items-center justify-between gap-3 py-3 text-sm font-semibold text-slate-700"
 					>

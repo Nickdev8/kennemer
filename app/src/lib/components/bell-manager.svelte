@@ -33,6 +33,7 @@
 	let preview = false;
 	let connectionError = false;
 	let retryAfter = 0;
+	let healthFailureStreak = 0;
 	const names = {
 		regular: 'Regulier',
 		short: 'Verkort',
@@ -45,11 +46,11 @@
 	$: modeDirty = selectedMode !== savedMode;
 	$: clockOk = (status?.clock as Record<string, unknown> | undefined)?.synchronized === true;
 	$: serviceOk = Boolean((status?.scheduler as Record<string, unknown> | undefined)?.last_scan);
-	$: lastOutcomeFailed = (status?.last_outcome as Record<string, unknown> | undefined)?.status === 'failed';
+	$: lastOutcomeFailed = (status?.last_outcome as Record<string, unknown> | undefined)?.status === 'failed' && !outcome?.skipped;
 	$: relaysOk = relayHealth.length === 2 && relayHealth.every((relay) =>
 		relay.reachable && relay.identity_ok && relay.initial_state_off && relay.output_off && relay.auto_off_seconds === 1
 	);
-	$: fault = !preview && status && (!clockOk || !serviceOk || !relaysOk || lastOutcomeFailed);
+	$: fault = !preview && status && (healthFailureStreak >= 2 || lastOutcomeFailed);
 
 	function nextBellLabel(event: BellEvent) {
 		return new Intl.DateTimeFormat('nl-NL', {
@@ -85,6 +86,12 @@
 			catch { outcome = { error: 'Uitkomst niet leesbaar' }; }
 			if (message === 'Bel gestart.' && last?.outcome) message = '';
 			relayHealth = (status?.relay_health as RelayHealth[]) ?? [];
+			const clockReady = (status?.clock as Record<string, unknown> | undefined)?.synchronized === true;
+			const serviceReady = Boolean((status?.scheduler as Record<string, unknown> | undefined)?.last_scan);
+			const relaysReady = relayHealth.length === 2 && relayHealth.every((relay) =>
+				relay.reachable && relay.identity_ok && relay.initial_state_off && relay.output_off && relay.auto_off_seconds === 1
+			);
+			healthFailureStreak = clockReady && serviceReady && relaysReady ? 0 : healthFailureStreak + 1;
 			if (load || !config) {
 				const result = await read('config');
 				config = result.config;
@@ -172,15 +179,18 @@
 </script>
 
 <section class="mb-4 border-b border-slate-200 pb-4" aria-labelledby="bell-manager-title">
-	<div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+	<div class="mb-2 flex min-h-11 items-start justify-between gap-2">
 		<h3 id="bell-manager-title" class="text-base font-semibold text-slate-900">Schoolbel</h3>
-		{#if preview}
-			<span class="text-sm text-slate-600">Lokaal voorbeeld · bediening op ODROID</span>
-		{:else if fault}
-			<span class="text-sm font-medium text-red-700">Belservice controleren</span>
-		{:else if config && !config.paused && nextBell}
-			<span class="text-sm text-slate-600">Volgende bel: {nextBellLabel(nextBell)}</span>
-		{/if}
+		<div class="ml-auto w-52 shrink-0 text-right text-sm leading-5 sm:w-64">
+			<div class="truncate text-slate-600">Volgende bel: {config?.paused ? 'Uit' : nextBell ? nextBellLabel(nextBell) : 'onbekend'}</div>
+			<div class="h-5 truncate">
+				{#if preview}
+					<span class="text-slate-600">Lokaal voorbeeld</span>
+				{:else if fault}
+					<span class="font-medium text-red-700">Belservice controleren</span>
+				{/if}
+			</div>
+		</div>
 	</div>
 
 	{#if config}
@@ -202,7 +212,7 @@
 			<button disabled={busy || preview} on:click={() => mutate('demo', { request_id: requestId(), count: 2 })}>Bel nu 2×</button>
 			<button on:click={() => editing = !editing}>{editing ? 'Sluiten' : 'Tijden bewerken'}</button>
 			{#if status && !preview}
-				<details class="ml-auto text-sm text-slate-700" open={Boolean(fault)}>
+				<details class="ml-auto text-sm text-slate-700">
 					<summary class="cursor-pointer">Belstatus</summary>
 					<div class="mt-2 space-y-1">
 						<p>Klok: {clockOk ? 'goed' : 'niet gesynchroniseerd'} · Service: {serviceOk ? 'actief' : 'niet actief'}</p>

@@ -153,3 +153,8 @@ number and textarea fields; Android/iOS keep their native keyboard. It sends
 normal input events so Svelte editor bindings update. Bell roster selection is
 a draft until PIN-protected Opslaan; manual bell IDs use `getRandomValues` on
 HTTP. Belstatus shows compact outcomes. These local UI changes await deployment.
+
+Bell status UI checkpoint: a missed schedule entry (`skipped: late`) is not a
+relay fault. Require two consecutive health failures before showing the red
+warning. Header reserves two lines so the next bell remains visible beside faults, and Belstatus opens only by touch;
+keep these behaviors when changing polling or layout.

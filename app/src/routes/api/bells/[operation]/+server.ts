@@ -47,7 +47,11 @@ const proxy: RequestHandler = async ({ request, params, url }) => {
 		if (response.ok && request.method === 'POST') await recordAuditEvent('bell.operation', { operation });
 		return reply(payload, response.status);
 	} catch {
-		return reply({ error: 'Belservice niet bereikbaar. Uitkomst onbekend; een belactie niet opnieuw versturen.' }, 502);
+		return reply({
+			error: request.method === 'GET'
+				? 'Belservice niet bereikbaar.'
+				: 'Belservice niet bereikbaar. Uitkomst onbekend; een belactie niet opnieuw versturen.'
+		}, 502);
 	}
 };
 

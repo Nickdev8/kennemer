@@ -11,18 +11,28 @@
 	};
 	type BellEvent = { at: string; profile: string; time: string };
 	type RelayHealth = Record<string, unknown>;
+	type BellOutcome = {
+		ok?: boolean;
+		error?: string;
+		skipped?: string;
+		pulses?: Array<{ relays?: Array<{ relay?: string; ok?: boolean }> }>;
+	};
 
 	let config: Config | null = null;
+	let selectedMode = 'off';
 	let revision = 0;
 	let draft = '';
 	let pin = '';
 	let busy = false;
 	let message = '';
 	let status: Record<string, unknown> | null = null;
-	let outcome = '';
+	let outcome: BellOutcome | null = null;
+	let lastEvent: { status?: string; created?: string } | null = null;
 	let relayHealth: RelayHealth[] = [];
 	let editing = false;
 	let preview = false;
+	let connectionError = false;
+	let retryAfter = 0;
 	const names = {
 		regular: 'Regulier',
 		short: 'Verkort',
@@ -31,6 +41,8 @@
 	};
 
 	$: nextBell = status?.next_event as BellEvent | null;
+	$: savedMode = config ? (config.paused ? 'off' : config.active_profile) : 'off';
+	$: modeDirty = selectedMode !== savedMode;
 	$: clockOk = (status?.clock as Record<string, unknown> | undefined)?.synchronized === true;
 	$: serviceOk = Boolean((status?.scheduler as Record<string, unknown> | undefined)?.last_scan);
 	$: lastOutcomeFailed = (status?.last_outcome as Record<string, unknown> | undefined)?.status === 'failed';
@@ -45,6 +57,17 @@
 		}).format(new Date(event.at));
 	}
 
+	function requestId() {
+		const bytes = crypto.getRandomValues(new Uint32Array(4));
+		return Array.from(bytes, (part) => part.toString(16).padStart(8, '0')).join('');
+	}
+
+	function outcomeCount(relayId: string) {
+		return (outcome?.pulses ?? []).filter((pulse) =>
+			pulse.relays?.some((relay) => relay.relay === relayId && relay.ok)
+		).length;
+	}
+
 	async function read(operation: string) {
 		const response = await fetch(`/api/bells/${operation}`);
 		const result = await response.json();
@@ -56,22 +79,31 @@
 		try {
 			status = await read('status');
 			preview = status?.preview === true;
-			const last = status?.last_outcome as { outcome?: string } | undefined;
-			outcome = last?.outcome ? JSON.stringify(JSON.parse(last.outcome), null, 2) : '';
+			const last = status?.last_outcome as { outcome?: string; status?: string; created?: string } | undefined;
+			lastEvent = last ?? null;
+			try { outcome = last?.outcome ? JSON.parse(last.outcome) : null; }
+			catch { outcome = { error: 'Uitkomst niet leesbaar' }; }
 			if (message === 'Bel gestart.' && last?.outcome) message = '';
 			relayHealth = (status?.relay_health as RelayHealth[]) ?? [];
-			if (load) {
+			if (load || !config) {
 				const result = await read('config');
 				config = result.config;
 				revision = result.revision;
 				draft = JSON.stringify(config, null, 2);
+				selectedMode = config?.paused ? 'off' : config?.active_profile ?? 'off';
 			}
+			if (connectionError) message = '';
+			connectionError = false;
+			retryAfter = 0;
 		} catch (error) {
 			message = error instanceof Error ? error.message : String(error);
+			connectionError = true;
+			retryAfter = Date.now() + 10000;
 		}
 	}
 
 	async function mutate(operation: string, data: unknown) {
+		if (!pin.trim()) { message = 'Vul de configuratie-PIN in.'; return false; }
 		busy = true;
 		message = '';
 		try {
@@ -84,8 +116,10 @@
 			if (!response.ok) throw new Error(result.error ?? result.message ?? 'Actie mislukt.');
 			message = operation === 'demo' ? 'Bel gestart.' : '';
 			await refresh(operation !== 'demo');
+			return true;
 		} catch (error) {
 			message = error instanceof Error ? error.message : String(error);
+			return false;
 		} finally {
 			busy = false;
 		}
@@ -93,21 +127,23 @@
 
 	async function save() {
 		try {
-			await mutate('config', { revision, config: JSON.parse(draft) });
+			const next = JSON.parse(draft) as Config;
+			next.paused = selectedMode === 'off';
+			next.active_profile = selectedMode === 'off' ? config?.active_profile ?? 'regular' : selectedMode;
+			await mutate('config', { revision, config: next });
 		} catch {
 			message = 'Ongeldige JSON. Concept bewaard.';
 		}
 	}
 
-	async function selectMode(mode: string) {
+	async function saveMode() {
 		if (!config) return;
 		const next = {
 			...config,
-			paused: mode === 'off',
-			active_profile: mode === 'off' ? config.active_profile : mode
+			paused: selectedMode === 'off',
+			active_profile: selectedMode === 'off' ? config.active_profile : selectedMode
 		};
 		await mutate('config', { revision, config: next });
-		config = { ...config };
 	}
 
 	function download() {
@@ -130,7 +166,7 @@
 
 	onMount(() => {
 		void refresh(true);
-		const timer = setInterval(() => { if (!document.hidden) void refresh(); }, 3000);
+		const timer = setInterval(() => { if (!document.hidden && Date.now() >= retryAfter) void refresh(); }, 3000);
 		return () => clearInterval(timer);
 	});
 </script>
@@ -151,7 +187,7 @@
 		<div class="grid grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Belrooster">
 			{#each Object.entries(names) as [id, label]}
 				<label class="flex min-h-14 items-center gap-2 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-900">
-					<input type="radio" name="bell-mode" value={id} checked={config.paused ? id === 'off' : config.active_profile === id} disabled={busy || preview} on:change={() => selectMode(id)} />
+					<input type="radio" name="bell-mode" value={id} checked={selectedMode === id} disabled={busy || preview} on:change={() => { selectedMode = id; message = ''; }} />
 					{label}
 				</label>
 			{/each}
@@ -161,8 +197,9 @@
 			{#if !preview}
 				<input class="min-h-12 w-28 rounded-md border border-slate-300 px-3" type="password" autocomplete="off" placeholder="PIN" aria-label="Configuratie-PIN" bind:value={pin} />
 			{/if}
-			<button disabled={busy || preview} on:click={() => mutate('demo', { request_id: crypto.randomUUID(), count: 1 })}>Bel nu 1×</button>
-			<button disabled={busy || preview} on:click={() => mutate('demo', { request_id: crypto.randomUUID(), count: 2 })}>Bel nu 2×</button>
+			<button disabled={busy || preview || !modeDirty} on:click={saveMode}>Opslaan</button>
+			<button disabled={busy || preview} on:click={() => mutate('demo', { request_id: requestId(), count: 1 })}>Bel nu 1×</button>
+			<button disabled={busy || preview} on:click={() => mutate('demo', { request_id: requestId(), count: 2 })}>Bel nu 2×</button>
 			<button on:click={() => editing = !editing}>{editing ? 'Sluiten' : 'Tijden bewerken'}</button>
 			{#if status && !preview}
 				<details class="ml-auto text-sm text-slate-700" open={Boolean(fault)}>
@@ -172,7 +209,12 @@
 						{#each relayHealth as relay}
 							<p>Bel school {relay.id === 'a8032abc4264' ? '1' : '2'}: {relay.reachable && relay.identity_ok && relay.initial_state_off && relay.output_off && relay.auto_off_seconds === 1 ? 'gereed' : 'storing'}</p>
 						{/each}
-						{#if outcome}<pre class="max-w-lg overflow-x-auto whitespace-pre-wrap">{outcome}</pre>{/if}
+						{#if lastEvent}
+							<p>Laatste bel: {lastEvent.status === 'claimed' ? 'bezig' : outcome?.skipped ? 'overgeslagen' : outcome?.ok ? 'gelukt' : 'mislukt'}{#if outcome?.pulses?.length} · {outcome.pulses.length}×{/if}</p>
+							{#if outcome?.pulses?.length}
+								<p>School 1: {outcomeCount('a8032abc4264')}/{outcome.pulses.length} · School 2: {outcomeCount('08b61fd8993c')}/{outcome.pulses.length}</p>
+							{:else if outcome?.error}<p>{outcome.error}</p>{/if}
+						{/if}
 					</div>
 				</details>
 			{/if}

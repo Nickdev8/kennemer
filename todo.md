@@ -17,7 +17,7 @@ Updated: 12 October 2026. No Git/GitHub/CI work without explicit request.
 - [x] Four bell modes in advanced controls; local development shows a disabled preview.
 - [x] Local checks/build, logic/browser tests and host diagnostics tests pass.
 
-## Bell — implementation complete, host commissioning pending
+## Bell — commissioned, automatic roster paused
 
 Confirmed Shelly Plus 1 relays; pulse duration **1 second**, both triggered together:
 
@@ -36,10 +36,9 @@ Confirmed Shelly Plus 1 relays; pulse duration **1 second**, both triggered toge
 - [x] Concurrent identity-checked relay pulses with device-side `toggle_after: 1`.
 - [x] Add Roosters beheren: times, exceptions, PIN save, pause/resume, import/export/restore.
 - [x] Show next bell, service/clock health and both relay outcomes.
-- [ ] Live ODROID commissioning. Offline fault/reboot tests and installation docs are complete; see odroid/BELL.md.
+- [x] Live ODROID commissioning: single and double manual bells completed on both relays; service enabled and roster paused. Offline checks and installation docs in odroid/BELL.md.
 
-Bell backend is implemented but not installed or commissioned on the ODROID. Local dev and dev:live show a disabled bell preview. It starts paused with the Off choice. Both relays previously had auto-off
-disabled; review startup behavior before activation. HTTP cannot guarantee
+Bell backend is installed and commissioned on the ODROID. Local dev and dev:live show a disabled bell preview. The automatic roster remains paused with the Off choice. Both relays now have startup off and 1-second auto-off. HTTP cannot guarantee
 exactly-once or electrically simultaneous ringing.
 
 ## Later
@@ -53,7 +52,7 @@ exactly-once or electrically simultaneous ringing.
 ## Checks / deployment
 
 From `app/`: `validate:config`, `check`, `build`, `test`, `test:ui` via `npm run`.
-Routine tests stay mocked. Bell scheduler remains paused until ODROID commissioning.
+Routine tests stay mocked. Bell scheduler is live on ODROID but its automatic roster remains paused.
 Host diagnostics needs the updated `kennemer-maintenance-api.service` after deployment.
 
 

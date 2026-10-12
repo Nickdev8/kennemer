@@ -88,3 +88,12 @@ not cause a retry.
 
 Run offline checks with `PYTHONDONTWRITEBYTECODE=1 python3 -W error
 odroid/test-bell-scheduler.py`; never use a live demo call for a software test.
+
+## Commissioning record (12 October 2026)
+
+On `dashboard` via `kennemer-cloudflare`, `kennemer-bell.service` is enabled and
+active. Both fixed Shelly Plus 1 IDs matched, with `initial_state: off`,
+`auto_off: true`, and `auto_off_delay: 1`; both outputs read off. One single
+and one double manual demo finished with success for both relays on every pulse.
+The automatic roster remains paused (`Uit`). The dashboard status and config
+proxy endpoints returned HTTP 200.

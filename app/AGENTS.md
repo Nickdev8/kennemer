@@ -146,3 +146,10 @@ roster/status and offers PIN-protected edits, pause/resume, import/export,
 restore, and single/double demos. Keep the bell controls compact: four
 modes in one row, PIN and actions together, and routine health behind Belstatus. `/api/bells/[operation]` proxies to the
 standalone ODROID scheduler; `npm run dev` and `npm run dev:live` show a disabled bell preview. See `odroid/BELL.md`. Never invoke live demos in tests.
+
+Touch keyboard checkpoint: `src/lib/components/touch-keyboard.svelte` is mounted
+in the root layout. On Linux touch input it opens for text, password, email,
+number and textarea fields; Android/iOS keep their native keyboard. It sends
+normal input events so Svelte editor bindings update. Bell roster selection is
+a draft until PIN-protected Opslaan; manual bell IDs use `getRandomValues` on
+HTTP. Belstatus shows compact outcomes. These local UI changes await deployment.

@@ -361,7 +361,7 @@ For ODROID changes:
   tests use temporary mock storage and Chrome (`CHROME_PATH` override).
 - Bulb 90706948e37c at seed 10.10.80.169 verified by read-only discovery as
   RGBCCTBulbG3, component rgbcct:0, auth disabled. Never switch it during tests.
-- Bell scheduler is implemented but ODROID commissioning remains; see odroid/BELL.md. Group execution remains future work.
+- Bell scheduler is running on the ODROID, with the roster paused; see odroid/BELL.md. Group execution remains future work.
 
 Verified completion: validate:config, check (0 errors/warnings), production build,
 logic/editor/runtime tests and mocked UI tests pass. UI tests include column
@@ -373,10 +373,16 @@ read-only diagnostics. Git read queries are authorized only for those requested
 hashes; no fetch, commits or pushes. Build metadata is stamped from the tested
 deployment target. Responsive editor keeps header/save controls visible.
 
-Bell checkpoint (12 October 2026): host Python service, persistent SQLite
-ledger, fixed Shelly Plus 1 identity checks and one-second auto-off pulses,
-PIN-protected dashboard manager, disabled local preview. Offline suite 15 pass;
-Svelte check 0 errors/warnings, build, app logic tests, and mocked UI tests pass. Unit syntax verified. Earlier local simulated double demo logged completion; local bells now
-show only a disabled preview. No live device call. Host service has not been deployed and starts paused. Four persistent modes:
-regular, short, ten-minute, and off. See
-`odroid/BELL.md` for installation and commissioning. No Git operations.
+Bell checkpoint (12 October 2026): host service enabled and active at port 8788;
+production dashboard `/api/bells/status` and `/config` return 200. Both fixed
+Shelly Plus 1 relays were identity-checked, configured startup off and 1-second
+auto-off, and passed deliberate single/double manual commissioning. Both outputs
+returned off; automatic roster remains paused. Local bell UI now retries roster
+loading after host recovery; that local fix still needs deployment. Offline suite
+15 pass; app check, build, logic and mocked UI tests pass. No Git operations.
+
+UI checkpoint: local bell manager now saves roster selection only after PIN +
+Opslaan, uses HTTP-compatible random IDs for manual bells, and shows concise
+relay outcomes. Global touch keyboard is mounted in the app layout for kiosk
+text fields. App check/build pass; these UI changes are not yet deployed. No
+Git operations.

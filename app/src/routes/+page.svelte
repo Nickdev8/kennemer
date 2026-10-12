@@ -9,7 +9,7 @@
 	import UpdateProgress from '$lib/components/update-progress.svelte';
 	import TabSelector from '$lib/components/tab-selector.svelte';
 	import AdvancedAccess from '$lib/components/advanced-access.svelte';
-	import BellProfileSelector from '$lib/components/bell-profile-selector.svelte';
+	import BellManager from '$lib/components/bell-manager.svelte';
 	import AdvancedPanel from '$lib/components/advanced-panel.svelte';
 	import ControlCard from '$lib/components/control-card.svelte';
 	import SceneIdEditor from '$lib/components/scene-id-editor.svelte';
@@ -274,7 +274,6 @@
 	let showAdvancedPanel = false;
 	let showSceneIdEditor = false;
 	let advancedUnlocked = false;
-	let selectedBellProfile = 'regular';
 	let advancedAccessError = '';
 	let advancedPin = '';
 	let advancedIdleTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -1751,9 +1750,6 @@
 	>
 		<div class="flex min-h-0 flex-1 flex-col gap-6 px-6 py-6 lg:flex-row">
 			<section class="flex min-h-0 flex-1 flex-col">
-				<div class="mb-3 flex items-center justify-between">
-					<span class="text-sm text-slate-500">{advancedControlCount} knoppen</span>
-				</div>
 				{#if advancedErrorMsg}
 					<p
 						class="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700"
@@ -1779,10 +1775,7 @@
 					on:pointerdown={markAdvancedActivity}
 					on:mousedown={markAdvancedActivity}
 				>
-					<BellProfileSelector
-						bind:selected={selectedBellProfile}
-						on:change={markAdvancedActivity}
-					/>
+					<BellManager />
 					{#if advancedControlCount === 0}
 						<p class="text-sm text-slate-600">Geen tijdelijke knoppen ingesteld.</p>
 					{:else}

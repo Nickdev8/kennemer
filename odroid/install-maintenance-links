@@ -18,6 +18,7 @@ ln -sfn "$REPO/odroid/update" /usr/local/bin/update
 ln -sfn "$REPO/odroid/update" /usr/local/sbin/kennemer-update
 ln -sfn "$REPO/odroid/kiosk-session" /usr/local/libexec/kennemer-kiosk-session
 ln -sfn "$REPO/odroid/kennemer-maintenance-api.service" /etc/systemd/system/kennemer-maintenance-api.service
+ln -sfn "$REPO/odroid/kennemer-bell.service" /etc/systemd/system/kennemer-bell.service
 
 systemctl daemon-reload
 systemctl enable kennemer-maintenance-api.service
@@ -31,4 +32,5 @@ readlink -f \
 	/usr/local/bin/update \
 	/usr/local/sbin/kennemer-update \
 	/usr/local/libexec/kennemer-kiosk-session \
-	/etc/systemd/system/kennemer-maintenance-api.service
+	/etc/systemd/system/kennemer-maintenance-api.service \
+	/etc/systemd/system/kennemer-bell.service

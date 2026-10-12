@@ -157,3 +157,12 @@ After deployment, restart `kennemer-maintenance-api.service` to load this route;
 the existing maintenance-link installer already restarts it. No new unit or
 daemon reload is needed for this Python-only service change. Update builds now
 pass the tested target hash as `KENNEMER_BUILD_COMMIT`; retain health/rollback.
+
+## Bell scheduler
+
+`kennemer-bell.service` runs independently of the app and kiosk. Its SQLite
+ledger and API are in `bell_scheduler.py`; roster defaults are in
+`bell-defaults.json`. Read `BELL.md` for installation and commissioning.
+The link installer installs the unit link but does not enable or start it.
+Never perform a live pulse as a test; use the isolated simulation and the
+offline suite. The service starts paused until both relay settings are verified.

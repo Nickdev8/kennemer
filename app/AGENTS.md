@@ -141,7 +141,8 @@ Info opens the focus-trapped debug popup; icon matches pin dimensions. Both
 explicit and fallback on/off colors use the shared green/white palette.
 Advanced access no longer implicitly requests an update check/Git fetch.
 
-Bell frontend: BellProfileSelector shows three mutually exclusive roster
-choices in advanced controls. Session-only selection, no equipment/API actions.
-Backend is waiting at the client's explicit request; see todo.md. Confirmed
-relays .162 Bel school 1 / .161 Bel school 2; fixed 1-second future pulse.
+Bell manager: `src/lib/components/bell-manager.svelte` shows persistent host
+roster/status and offers PIN-protected edits, pause/resume, import/export,
+restore, and single/double demos. Keep the bell controls compact: four
+modes in one row, PIN and actions together, and routine health behind Belstatus. `/api/bells/[operation]` proxies to the
+standalone ODROID scheduler; `npm run dev` and `npm run dev:live` show a disabled bell preview. See `odroid/BELL.md`. Never invoke live demos in tests.

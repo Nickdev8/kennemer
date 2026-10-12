@@ -10,6 +10,7 @@ These instructions cover Svelte pages and server endpoints below
 | `/`                          | GET      | Dashboard and initial page data           |
 | `/actions`                   | POST     | Execute a configured device command       |
 | `/triggers`                  | POST     | Execute a configured scene trigger        |
+| `/api/bells/[operation]`      | GET/POST | Proxy host bell status, config, demo and edits |
 | `/api/connectivity`          | GET      | Probe Shelly Cloud reachability           |
 | `/api/config/scenes`         | GET/POST | Read or save validated scene-ID overrides |
 | `/api/config/scenes/reset`   | POST     | Reset validated configuration overrides   |

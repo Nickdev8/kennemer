@@ -1,0 +1,90 @@
+# Bell scheduler
+
+`kennemer-bell.service` runs independently of Docker and the kiosk. It serves
+an authenticated API on port 8788. Runtime data is SQLite at
+`/var/lib/kennemer/bell/bell.sqlite3`. The service starts with a paused regular
+roster. Select one of four modes in the dashboard: Regulier, Verkort,
+10-minutenbel, or Uit. Uit pauses automatic bells.
+
+Regular and short rosters are copied from the school email in `todo.md`.
+A double entry such as `08:10x2` sends one 1-second pulse, waits until both
+relays are off, then waits a 1-second silent gap and sends the second pulse.
+The ten-minute roster rings every weekday from 16:00 through 21:30 inclusive
+while that profile is active. Weekends never ring.
+
+Each occurrence is claimed in SQLite before contacting relays. A restart,
+failed response, or lost response cannot repeat that occurrence. Missed events
+are skipped. The host waits for `timedatectl` synchronization; a wall-clock
+jump suppresses the current 31-second bell window. Time uses
+`Europe/Amsterdam`, with one ledger key per local date, profile, and time.
+A repeated DST clock hour cannot duplicate a bell. An HTTP response alone
+never proves that the physical output changed; each relay result records
+observed on/off state or a failure. No automatic retry is attempted.
+
+## API and demo
+
+All requests require `x-kennemer-maintenance-token` matching the token in
+`app/.env`. The app proxies through `/api/bells/{operation}`. Writes require
+`KENNEMER_CONFIG_EDIT_PIN` in the browser request, checked by the app server.
+
+- `GET /status` gives the next bell, clock state, relay readiness, latest outcome,
+  and scheduler state.
+- `GET /config` returns `{revision, config}`.
+- `POST /config` accepts `{revision, config}`. A stale revision returns 409.
+- `POST /pause`, `/resume`, `/restore` accept `{revision}`. Restore applies the
+  previous saved configuration and pauses it.
+- `POST /demo` accepts `{request_id, count: 1|2}` and returns 202 immediately.
+  Poll `/status` for the outcome. Reusing an ID does not ring again.
+
+`npm run dev` and `npm run dev:live` show the four roster choices and manual
+bell buttons as a disabled local preview. The bell service runs only on the
+ODROID after deployment; local development cannot ring the bells.
+
+## ODROID installation
+
+1. Deploy the reviewed checkout through the normal update path. The link
+   installer places `kennemer-bell.service` in `/etc/systemd/system`, but does
+   not enable or start it. The app container needs
+   `KENNEMER_BELL_URL=http://host.docker.internal:8788` in `app/.env`.
+2. Create a dedicated account and durable directory once:
+
+   ```sh
+   sudo useradd --system --home /var/lib/kennemer/bell --shell /usr/sbin/nologin kennemer
+   sudo install -d -o kennemer -g kennemer -m 0700 /var/lib/kennemer/bell
+   sudo install -d -o root -g root -m 0755 /etc/kennemer
+   ```
+
+   If the account or directory already exists, check ownership rather than
+   recreating it. The service reads the existing maintenance token from
+   `/opt/kennemer/app/.env` and the mode from `/etc/kennemer/bell.env`.
+3. For a simulated host run, put `KENNEMER_BELL_SIMULATION=1` in
+   `/etc/kennemer/bell.env` (root owned, mode 0600). Then run:
+
+   ```sh
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now kennemer-bell.service
+   systemctl status kennemer-bell.service
+   ```
+
+4. Select each of the four modes in **Roosters beheren** with the PIN and test
+   both demo counts. Confirm the service clock, next event, and two relay
+   outcomes. Test a restart and a duplicate demo ID against the ledger.
+5. For live commissioning, set only `KENNEMER_BELL_LIVE=1` in
+   `/etc/kennemer/bell.env`, restart the unit, and confirm the two fixed devices
+   by read-only `/status`. Keep the roster paused. Check the observed physical
+   outputs and manually configure both devices with `initial_state: off`,
+   `auto_off: true`, `auto_off_delay: 1`. The service rejects live pulses until
+   the identity and configuration match. Use **Bel nu 1×**, then **Bel nu 2×**
+   with the site operator present. Confirm that both relays turn off after each
+   pulse and that the ledger reports both outcomes. Resume the roster only
+   after both tests have been accepted.
+
+The fixed relays are `a8032abc4264` (`10.10.80.162`) and `08b61fd8993c`
+(`10.10.80.161`). The service verifies Shelly Plus 1 identity and safety
+configuration before each pulse. It sends `Switch.Set` with `on:true` and
+`toggle_after:1` concurrently to both. Any partial failure stops a second
+pulse; the ledger retains both relay outcomes. Network and relay errors do
+not cause a retry.
+
+Run offline checks with `PYTHONDONTWRITEBYTECODE=1 python3 -W error
+odroid/test-bell-scheduler.py`; never use a live demo call for a software test.

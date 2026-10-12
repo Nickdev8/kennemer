@@ -166,12 +166,12 @@ try {
 		await page.getByRole('button', { name: `PIN ${digit}`, exact: true }).click();
 	await page.getByRole('button', { name: 'Ontgrendel', exact: true }).click();
 	const rosters = page.getByRole('radiogroup', { name: 'Belrooster' });
-	assert.equal(await rosters.getByRole('radio', { checked: true }).count(), 1);
-	for (const label of ['Verkort rooster', '10-minutenbel', 'Regulier rooster']) {
-		await rosters.getByText(label, { exact: true }).click();
-		assert.equal(await rosters.getByRole('radio', { checked: true }).count(), 1);
-		await expect(rosters.getByRole('radio', { name: label, exact: true })).toBeChecked();
-	}
+	await rosters.getByRole('radio', { name: 'Uit', exact: true }).waitFor();
+	await expect(rosters.getByRole('radio', { name: 'Uit', exact: true })).toBeChecked();
+	for (const label of ['Regulier', 'Verkort', '10-minutenbel', 'Uit'])
+		await expect(rosters.getByRole('radio', { name: label, exact: true })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Bel nu 1×', exact: true })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Bel nu 2×', exact: true })).toBeDisabled();
 	assert.equal(actions.length, 4);
 	await page
 		.getByRole('dialog', { name: 'Geavanceerde bediening', exact: true })

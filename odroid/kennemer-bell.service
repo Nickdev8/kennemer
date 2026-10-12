@@ -1,0 +1,24 @@
+[Unit]
+Description=Kennemer bell scheduler
+After=network-online.target time-sync.target
+Wants=network-online.target time-sync.target
+
+[Service]
+Type=simple
+User=kennemer
+Group=kennemer
+EnvironmentFile=/opt/kennemer/app/.env
+EnvironmentFile=/etc/kennemer/bell.env
+Environment=KENNEMER_BELL_DB=/var/lib/kennemer/bell/bell.sqlite3
+Environment=KENNEMER_BELL_DEFAULTS=/opt/kennemer/odroid/bell-defaults.json
+ExecStart=/usr/bin/python3 /opt/kennemer/odroid/bell_scheduler.py
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/kennemer/bell
+
+[Install]
+WantedBy=multi-user.target

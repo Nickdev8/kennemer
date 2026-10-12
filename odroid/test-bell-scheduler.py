@@ -1,0 +1,111 @@
+#!/usr/bin/env python3
+import datetime as dt, json, os, socket, tempfile, threading, time, unittest
+from pathlib import Path
+from unittest.mock import patch
+import bell_scheduler as b
+
+class BellTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
+        self.defaults=Path(self.tmp.name)/'defaults.json'; self.defaults.write_text(json.dumps(json.loads((Path(__file__).parent/'bell-defaults.json').read_text())))
+        self.store=b.Store(Path(self.tmp.name)/'db.sqlite',self.defaults)
+        self.scheduler=b.Scheduler(self.store)
+        self.now=dt.datetime(2026,10,12,8,10,tzinfo=b.ZoneInfo(b.ZONE));self.scheduler.clock=lambda:self.now
+        self.scheduler.synchronized=lambda:True
+    def test_rosters_and_double(self):
+        _,c=self.store.get();self.assertEqual(c['profiles']['regular'][0],'08:10x2');self.assertEqual(len(c['profiles']['ten-minute']),34)
+        c['paused']=False;self.store.set(1,c)
+        self.assertEqual(self.scheduler.due()[0][1],2)
+    def test_off_mode_has_no_due_bell(self):
+        self.assertEqual(self.scheduler.due(),[])
+        _,config=self.store.get()
+        self.assertTrue(config['paused'])
+    def test_weekends_and_ten_minute_active_profile(self):
+        _,c=self.store.get();c['paused']=False;c['active_profile']='ten-minute';self.store.set(1,c)
+        self.now=dt.datetime(2026,10,12,16,0,tzinfo=b.ZoneInfo(b.ZONE));self.assertEqual(self.scheduler.due()[0][0], '2026-10-12/ten-minute/16:00')
+        self.now=dt.datetime(2026,10,18,16,0,tzinfo=b.ZoneInfo(b.ZONE));self.assertEqual(self.scheduler.due(),[])
+    def test_revision_conflict_backup_and_restore(self):
+        _,c=self.store.get();c['gap_seconds']=2;self.assertEqual(self.store.set(1,c),2)
+        with self.assertRaises(b.Conflict):self.store.set(1,c)
+        self.assertTrue(Path(str(self.store.path)+'.bak').exists())
+    def test_restart_deduplicates_claimed_event(self):
+        self.assertTrue(self.store.claim('2026-10-12/regular/08:10','scheduled'))
+        self.assertFalse(b.Store(self.store.path,self.defaults).claim('2026-10-12/regular/08:10','scheduled'))
+    def test_partial_relay_failure_preserved(self):
+        seq=iter([{'ok':True,'relay':'a'}, {'ok':False,'error':'timeout'}])
+        with patch.object(b,'relay_ready',return_value={}),patch.object(b,'read_switch',return_value=True),patch.object(b,'rpc',return_value={}):
+            # Verify sibling relay threads both attempt pulse and aggregate partial failure.
+            with patch.object(b,'pulse',side_effect=lambda r: next(seq)):
+                result=b.fire(1,1)
+        self.assertFalse(result['ok']);self.assertEqual(len(result['pulses'][0]['relays']),2)
+    def test_clock_resynchronization_does_not_disable_future_bells(self):
+        _,config=self.store.get();config['paused']=False;self.store.set(1,config)
+        self.scheduler.started_at=dt.datetime(2030,1,1,tzinfo=b.ZoneInfo(b.ZONE)).timestamp()
+        self.scheduler.prev_wall=self.now.timestamp()+1000
+        self.scheduler.prev_mono=time.monotonic()-1
+        self.scheduler.tick()
+        self.assertIsNone(self.scheduler.started_at)
+        self.scheduler.suppress_until=0
+        self.scheduler.prev_wall=None
+        self.now=dt.datetime(2026,10,12,8,10,5,tzinfo=b.ZoneInfo(b.ZONE))
+        with patch.object(b,'fire') as fired:
+            self.scheduler.tick()
+            fired.assert_not_called()
+        self.assertEqual(self.scheduler.store.recent()['status'],'failed')
+        self.scheduler.prev_wall=None
+        self.now=dt.datetime(2026,10,12,8,15,tzinfo=b.ZoneInfo(b.ZONE))
+        with patch.object(b,'fire',return_value={'ok':True}) as fired:
+            self.scheduler.tick()
+            fired.assert_called_once()
+    def test_next_event_uses_time_order_after_edit(self):
+        _,config=self.store.get();config['paused']=False;config['profiles']['regular']=['09:05','08:15']
+        self.store.set(1,config)
+        self.now=dt.datetime(2026,10,12,8,0,tzinfo=b.ZoneInfo(b.ZONE))
+        self.assertEqual(self.scheduler.next_event()['time'],'08:15')
+    def test_clock_jump_skips_scan(self):
+        self.scheduler.prev_wall=self.now.timestamp()-10;self.scheduler.prev_mono=time.monotonic()-1
+        self.scheduler.tick();self.assertEqual(self.scheduler.skipped,1)
+    def test_dst_fold_uses_local_schedule_once(self):
+        # Both UTC instants map to same local 02:30 during autumn fold; durable key allows one claim.
+        c=self.store.defaults();c['paused']=False;c['profiles']['regular']=['02:30'];self.store.set(1,c)
+        first=dt.datetime(2026,10,25,0,30,tzinfo=dt.timezone.utc).astimezone(b.ZoneInfo(b.ZONE))
+        second=dt.datetime(2026,10,25,1,30,tzinfo=dt.timezone.utc).astimezone(b.ZoneInfo(b.ZONE))
+        self.assertEqual(first.hour,2);self.assertEqual(second.hour,2)
+        self.assertTrue(self.store.claim('2026-10-25/regular/02:30','scheduled'));self.assertFalse(self.store.claim('2026-10-25/regular/02:30','scheduled'))
+    def test_timeout_is_reported_without_retry(self):
+        calls=[]
+        def timeout(*a,**kw):calls.append(1);raise socket.timeout()
+        with patch.object(b,'urlopen',timeout):
+            with self.assertRaises(b.BellError):b.rpc(b.RELAYS[0],'Shelly.GetDeviceInfo')
+        self.assertEqual(len(calls),1)
+    def test_simulated_double_reports_both_relays(self):
+        result=b.fire(2,0,simulation=True)
+        self.assertEqual(len(result['pulses']),2)
+        self.assertTrue(all(len(pulse['relays'])==2 for pulse in result['pulses']))
+    def test_rpc_envelope_and_identity(self):
+        from io import BytesIO
+        class Reply:
+            status=200
+            def __enter__(self):return self
+            def __exit__(self,*args):pass
+            def read(self,*args):return json.dumps({'id':1,'result':{'id':'shellyplus1-a8032abc4264','model':'SNSW-001X16EU','gen':2}}).encode()
+        with patch.object(b,'urlopen',return_value=Reply()) as mocked:
+            result=b.rpc(b.RELAYS[0],'Shelly.GetDeviceInfo')
+            request=mocked.call_args.args[0]
+            self.assertEqual(request.full_url,'http://10.10.80.162/rpc')
+            self.assertEqual(json.loads(request.data)['method'],'Shelly.GetDeviceInfo')
+            self.assertEqual(result['gen'],2)
+        with patch.object(b,'rpc',side_effect=[result,{'initial_state':'off','auto_off':True,'auto_off_delay':1}]):
+            self.assertTrue(b.relay_ready(b.RELAYS[0])['identity_ok'])
+    def test_startup_does_not_replay_recent_bell(self):
+        _,c=self.store.get();c['paused']=False;self.store.set(1,c)
+        self.scheduler.started_at=self.now.timestamp()+5
+        with patch.object(b,'fire') as fired:
+            self.scheduler.tick();fired.assert_not_called()
+        self.assertEqual(self.store.recent()['status'],'failed')
+    def test_claim_and_demo_id_deduplicate(self):
+        self.assertTrue(self.store.claim('demo/id','demo'));self.assertFalse(self.store.claim('demo/id','demo'))
+        self.store.finish('demo/id',{'ok':False,'error':'partial relay timeout'})
+        self.assertEqual(self.store.event('demo/id')['status'],'failed')
+
+if __name__=='__main__':unittest.main()

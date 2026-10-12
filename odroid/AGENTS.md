@@ -144,3 +144,16 @@ the target host; distinguish those from syntax errors.
 
 Never invoke `odroid/update` as a test: it fetches, builds, replaces the live
 checkout, and restarts the kiosk.
+
+## Read-only support diagnostics
+
+Authenticated GET `/diagnostics` returns local HEAD, the configured branch's
+latest `origin` hash (60-second cache), host clock/uptime and update service
+state. Only read-only `rev-parse`/`ls-remote` are authorized for this feature.
+Never route diagnostics through `update_status`, which performs a fetch. Keep
+errors sanitized; unavailable remote checks retain the previous verified hash
+and timestamp. Tests: `PYTHONDONTWRITEBYTECODE=1 python3 odroid/test-diagnostics.py`.
+After deployment, restart `kennemer-maintenance-api.service` to load this route;
+the existing maintenance-link installer already restarts it. No new unit or
+daemon reload is needed for this Python-only service change. Update builds now
+pass the tested target hash as `KENNEMER_BUILD_COMMIT`; retain health/rollback.

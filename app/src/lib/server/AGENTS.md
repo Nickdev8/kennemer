@@ -52,3 +52,14 @@ every device.
 - Do not test with production scene IDs by issuing HTTP calls.
 - Exercise missing credentials, timeout, rate-limit, malformed JSON, offline,
   multi-channel, and fallback behavior when relevant.
+
+## Runtime configuration and direct devices
+
+`scene-config-store` reads v1/v2 overrides and merges registered defaults with
+validated editor metadata/tabs. Keep atomic writes, fresh revision conflicts,
+`.bak`/`.previous.json` recovery and one serialized mutation queue. Home numbers
+run down columns; old unmarked v2 position metadata is normalized once.
+Public configuration removes transports/headers; direct identity is fixed.
+`direct-device` uses registered inventory and bounded RGBCCT RPC requests.
+Mocks are selected server-side before any external route I/O. Never bypass that
+boundary with new direct fetches. IP cache routes honor `IP_CACHE_PATH`.

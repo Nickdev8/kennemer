@@ -39,7 +39,7 @@ plain, contrast strong, and interactions understandable without instructions.
 Avoid large layout changes unless the user explicitly approves them.
 
 State polling is intentionally quick enough to reflect third-party Shelly
-changes. The normal status loop is approximately five seconds, with additional
+changes. The normal status loop is approximately three seconds, with additional
 checks after dashboard actions. Do not lengthen it casually. Consider Shelly
 rate limits before shortening it.
 
@@ -119,3 +119,23 @@ Do not commit or depend on development copies of:
 
 `.env.example` is the documented, non-secret template and should be updated when a
 new environment variable becomes operationally relevant.
+
+## Current development entry points
+
+`npm run dev` starts a fully mocked dashboard; `dev:live` explicitly enables
+Shelly integration and requires credentials. Development runtime files live
+outside the repo. Docker remains live. Use local test/test:ui/validate:config.
+The page composes energy, tabs, advanced access/information, and update views;
+shared polling lifecycle is in `src/lib/dashboard`. Editor previews never dispatch
+commands. Maintain Home positions 1–9 and physical-state priority across tabs.
+
+Editor checkpoint: editable concept table with responsive labeled rows below
+1200px and a fixed header/action bar. Ja/Nee checkboxes edit drafts only.
+Info opens the focus-trapped debug popup; icon matches pin dimensions. Both
+explicit and fallback on/off colors use the shared green/white palette.
+Advanced access no longer implicitly requests an update check/Git fetch.
+
+Bell frontend: BellProfileSelector shows three mutually exclusive roster
+choices in advanced controls. Session-only selection, no equipment/API actions.
+Backend is waiting at the client's explicit request; see todo.md. Confirmed
+relays .162 Bel school 1 / .161 Bel school 2; fixed 1-second future pulse.

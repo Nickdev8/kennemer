@@ -87,14 +87,19 @@ The normal 3-by-3 grid currently contains:
 | Position | Label          | Behavior                           |
 | -------- | -------------- | ---------------------------------- |
 | 1        | 1ste etage     | On/off scene toggle                |
-| 2        | Aula plafond   | On/off scene toggle                |
-| 3        | Gang + entree  | On/off scene toggle                |
-| 4        | 1ste           | On/off scene toggle                |
-| 5        | Screen lokalen | Stateless `Screens omhoog` trigger |
-| 6        | Kantine        | On/off scene toggle                |
-| 7        | Parterre       | On/off scene toggle                |
-| 8        | Aula vide      | On/off scene toggle                |
+| 2        | 1ste           | On/off scene toggle                |
+| 3        | Parterre       | On/off scene toggle                |
+| 4        | Aula plafond   | On/off scene toggle                |
+| 5        | Screen lokalen | Stateless screens-up trigger       |
+| 6        | Aula vide      | On/off scene toggle                |
+| 7        | Gang + entree  | On/off scene toggle                |
+| 8        | Kantine        | On/off scene toggle                |
 | 9        | Kopje          | On/off scene toggle                |
+
+Home numbering runs down columns (`1 4 7 / 2 5 8 / 3 6 9`). Numbers appear
+inside the header beside the label. Existing equipment stays in its original
+visual location. Old row-numbered v2 overrides/imports normalize once; exports
+carry `homeNumbering: 'column'`.
 
 `pushNumber`, not source-array position, defines the main grid position. Keep
 values unique and within 1 through 9. Devices, scene triggers, and timed
@@ -140,7 +145,7 @@ the push-button panel was not found and the displayed state is less reliable.
 The UI remains operable and the server remembers the last successful dashboard
 action.
 
-The browser requests device output roughly every five seconds and schedules
+The browser requests device output roughly every three seconds and schedules
 extra checks after an action. `app/src/routes/api/device-output/+server.ts`
 tries the cached LAN IP first and Shelly Cloud second. IDs can include a
 channel suffix, for example `2043a80ac3e4_1`.
@@ -168,8 +173,9 @@ that exist in config; clients cannot submit arbitrary URLs.
 
 Scene IDs may be overridden from the authenticated advanced editor. Overrides
 are stored on the ODROID at `/opt/kennemer/runtime/scene-overrides.json`,
-validated against the checked-in control list, and
-never change endpoints, credentials, or control metadata. Saving an override
+validated against the checked-in control list. The editor also permits validated
+labels, colors, durations, enabled state and tab/position changes. Endpoints,
+credentials and direct-device identities remain server-controlled. Saving an override
 does not execute a scene.
 
 The advanced editor also permits valid `statusdeviceid` overrides for device
@@ -324,3 +330,29 @@ For ODROID changes:
 2. Validate shell or Python syntax without starting an update.
 3. Preserve systemd dependencies, health checks, rollback, and kiosk recovery.
 4. Document any required reinstall or daemon reload.
+
+## Development checkpoint (12 October 2026)
+
+- No Git commands/configuration, commits, pushes, GitHub Actions, or CI changes
+  unless Nick explicitly requests them. Local checks only.
+- `npm run dev` is isolated persistent mock mode; `dev:live` requires a real
+  Shelly key and blocks host maintenance. Runtime data is outside the repository.
+- Control factories/registry/validation live in `app/src/lib/config`; editable
+  scene defaults remain in `app/config`. Tabs select shared controls.
+- Runtime editor uses validated v2 overrides and preserves v1 migration, atomic
+  storage, revisions, `.bak`, and `.previous.json`. Public DTOs hide transport.
+- Local checks: validate:config, check, build, test, test:ui from app. Browser
+  tests use temporary mock storage and Chrome (`CHROME_PATH` override).
+- Bulb 90706948e37c at seed 10.10.80.169 verified by read-only discovery as
+  RGBCCTBulbG3, component rgbcct:0, auth disabled. Never switch it during tests.
+- Bell scheduler and group execution remain future work; see todo.md.
+
+Verified completion: validate:config, check (0 errors/warnings), production build,
+logic/editor/runtime tests and mocked UI tests pass. UI tests include column
+numbering, header numbers, blue navigation sizing/placement and popup editor
+placement. See todo.md for the remaining bell/group backlog.
+
+Support checkpoint: debug popup reads version/build/local/remote hashes through
+read-only diagnostics. Git read queries are authorized only for those requested
+hashes; no fetch, commits or pushes. Build metadata is stamped from the tested
+deployment target. Responsive editor keeps header/save controls visible.

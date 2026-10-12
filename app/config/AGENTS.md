@@ -38,9 +38,9 @@ known cooldown or run time.
 For the main grid, `pushNumber` is the authoritative layout position:
 
 ```text
-1 2 3
-4 5 6
-7 8 9
+1 4 7
+2 5 8
+3 6 9
 ```
 
 Do not rely on the array order. Use every primary number exactly once.
@@ -113,8 +113,9 @@ deliberately configured.
 
 Runtime scene-ID overrides are stored separately from these source files. The
 advanced editor can change only scene IDs and valid status-device IDs for an
-existing configured control; it cannot change endpoints, credentials, labels,
-placement, or button type.
+registered control. It also permits labels, colors, duration, enabled state,
+and main-tab positions. Endpoints, credentials, direct identities and button
+types remain source-controlled.
 
 ## Validation checklist
 
@@ -126,3 +127,15 @@ Before finishing a config edit:
 4. Ensure stateless controls do not display persistent state.
 5. Run `npm run check` from `app/`.
 6. Do not make a live request to prove that the scene works.
+
+## Updated configuration contract
+
+Use sceneToggle/sceneButton factories to avoid repeated HTTP configuration.
+Registry defaults also include Home/Apparaten tabs and verified direct inventory.
+All control types accept tabId/pushNumber/enabled; Home remains positions 1–9.
+Explicitly disabled winter/summer controls have empty scenes. Never use 0000.
+Runtime editor permits presentation/tab overrides for registered controls only;
+transport and direct-device identity remain server-owned. Run validate:config.
+
+Keep the main source array sorted by pushNumber (1–9) for editing. Runtime
+layout still uses pushNumber; reordering source must not change mappings.

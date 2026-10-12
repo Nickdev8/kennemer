@@ -12,7 +12,8 @@ These instructions cover Svelte pages and server endpoints below
 | `/triggers`                  | POST     | Execute a configured scene trigger       |
 | `/api/connectivity`          | GET      | Probe Shelly Cloud reachability          |
 | `/api/config/scenes`         | GET/POST | Read or save validated scene-ID overrides |
-| `/api/config/scenes/reset`   | POST     | Reset validated scene-ID overrides       |
+| `/api/config/scenes/reset`   | POST     | Reset validated configuration overrides  |
+| `/api/config/scenes/restore` | POST | Restore previous validated configuration |
 | `/api/device-output`         | GET      | Read physical output status              |
 | `/api/device-state`          | GET      | Read remembered action states            |
 | `/api/device-state/callback` | GET/POST | Accept configured external state updates |
@@ -36,9 +37,10 @@ Action and trigger routes must resolve submitted identifiers against the
 checked-in config. Do not accept client-provided endpoints, auth keys, or
 arbitrary payloads.
 
-Scene-ID override routes may accept only known control IDs and known scene
-slots, require `KENNEMER_CONFIG_EDIT_PIN` for writes, and must not execute a
-scene while saving configuration.
+Configuration routes accept only registered controls/known slots and validated
+metadata/tabs. PIN-protected writes, reset/import/restore never execute scenes.
+GET returns public controls, tabs, defaults, editor entries and revision;
+configuration-change SSE refreshes dashboards after successful mutations.
 
 Use JSON responses with meaningful HTTP status codes. Operational errors should
 be understandable in the Dutch UI, but server logs may retain concise
@@ -82,3 +84,9 @@ extracting logic, confirm that Svelte lifecycle cleanup remains correct:
 - do not close advanced controls while an update is running.
 
 Do not perform broad visual redesigns without explicit user approval.
+
+`GET /api/diagnostics` provides screenshot-safe version/build/local/remote commit
+metadata and host availability. Mock mode uses explicit synthetic diagnostics;
+live development reads local HEAD only and never contacts host maintenance.
+Production proxies authenticated host `/diagnostics`, not update `/status`.
+No browser tokens or raw Git/HTTP errors. Unknown and stale data remain explicit.

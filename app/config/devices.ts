@@ -7,7 +7,7 @@ export const devices = [
 		placement: 'main',
 		tabId: 'home',
 		pushNumber: 1,
-		statusdeviceid: '8813bfd6d300_1',
+		statusdeviceid: '8813bfd6d300',
 		on: '1789560412180',
 		off: '1789560433138'
 	}),
@@ -27,7 +27,7 @@ export const devices = [
 		placement: 'main',
 		tabId: 'home',
 		pushNumber: 3,
-		statusdeviceid: '30c92276c1d4_1',
+		statusdeviceid: '30c92276c1d4',
 		on: '1789560289492',
 		off: '1789560313748'
 	}),
@@ -79,7 +79,7 @@ export const devices = [
 		placement: 'main',
 		tabId: 'home',
 		pushNumber: 8,
-		statusdeviceid: '2043a80ac3e4_1',
+		statusdeviceid: '2043a80ac3e4',
 		on: '1789559514915',
 		off: '1789559559159'
 	}),
@@ -89,7 +89,7 @@ export const devices = [
 		placement: 'main',
 		tabId: 'home',
 		pushNumber: 9,
-		statusdeviceid: '2cbcbb3d9af0_1',
+		statusdeviceid: '2cbcbb3d9af0',
 		on: '1789557426197',
 		off: '1789557375466'
 	})

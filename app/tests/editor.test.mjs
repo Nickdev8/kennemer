@@ -119,3 +119,98 @@ test('editor migration, concurrent edits, restore, validation and restart recove
 		await rm(directory, { recursive: true, force: true });
 	}
 });
+
+test('editor reassigns overwork timers and cleanly moves them back behind PIN access', async () => {
+	const directory = await mkdtemp(join(tmpdir(), 'kennemer-editor-placement-'));
+	const previousPath = process.env.SCENE_OVERRIDE_PATH;
+	process.env.SCENE_OVERRIDE_PATH = join(directory, 'scene-overrides.json');
+	let server;
+	try {
+		server = await loader();
+		const store = await server.ssrLoadModule('/src/lib/server/scene-config-store.ts');
+		const timerId = 'Overwerktimer-1';
+		const initial = await store.readSceneEditorEntries();
+		assert.equal(initial.entries.find((entry) => entry.controlId === timerId).placement, 'main');
+
+		const regular = await store.saveSceneOverrides({
+			revision: initial.revision,
+			metadata: [
+				{ controlId: timerId, values: { placement: 'main', tabId: 'devices', pushNumber: 2 } }
+			]
+		});
+		let timer = (await store.readEffectiveControls()).find((control) => control.id === timerId);
+		assert.equal(timer.placement, 'main');
+		assert.equal(timer.tabId, 'devices');
+		assert.equal(timer.pushNumber, 2);
+
+		const protectedAgain = await store.saveSceneOverrides({
+			revision: regular.revision,
+			metadata: [{ controlId: timerId, values: { placement: 'advanced' } }]
+		});
+		timer = (await store.readEffectiveControls()).find((control) => control.id === timerId);
+		assert.equal(timer.placement, 'advanced');
+		assert.equal(timer.tabId, undefined);
+		assert.equal(timer.pushNumber, undefined);
+		assert.equal(
+			(await store.readSceneEditorEntries()).entries.find((entry) => entry.controlId === timerId)
+				.metadata.placement,
+			'advanced'
+		);
+		assert.ok(protectedAgain.revision);
+	} finally {
+		await server?.close();
+		if (previousPath === undefined) delete process.env.SCENE_OVERRIDE_PATH;
+		else process.env.SCENE_OVERRIDE_PATH = previousPath;
+		await rm(directory, { recursive: true, force: true });
+	}
+});
+
+test('one-time placement migration moves saved overwork timers and preserves later PIN placement', async () => {
+	const directory = await mkdtemp(join(tmpdir(), 'kennemer-editor-timer-migration-'));
+	const path = join(directory, 'scene-overrides.json');
+	const previousPath = process.env.SCENE_OVERRIDE_PATH;
+	process.env.SCENE_OVERRIDE_PATH = path;
+	let server;
+	try {
+		server = await loader();
+		const { tabs } = await server.ssrLoadModule('/src/lib/config/registry.ts');
+		const timerId = 'Overwerktimer-1';
+		await writeFile(
+			path,
+			JSON.stringify({
+				version: 2,
+				homeNumbering: 'column',
+				revision: '0123456789abcdef',
+				updatedAt: Date.now(),
+				overrides: {},
+				metadata: { [timerId]: { placement: 'advanced' } },
+				tabs
+			})
+		);
+		const store = await server.ssrLoadModule('/src/lib/server/scene-config-store.ts');
+		let timer = (await store.readEffectiveControls()).find((control) => control.id === timerId);
+		assert.equal(timer.placement, 'main');
+		assert.equal(timer.tabId, 'overwerktimer');
+		assert.equal(timer.pushNumber, 1);
+
+		const initial = await store.readSceneEditorEntries();
+		await store.saveSceneOverrides({
+			revision: initial.revision,
+			metadata: [{ controlId: timerId, values: { placement: 'advanced' } }]
+		});
+		assert.equal(JSON.parse(await readFile(path, 'utf8')).placementDefaultsVersion, 1);
+		await server.close();
+		server = await loader();
+		timer = (
+			await (
+				await server.ssrLoadModule('/src/lib/server/scene-config-store.ts')
+			).readEffectiveControls()
+		).find((control) => control.id === timerId);
+		assert.equal(timer.placement, 'advanced');
+	} finally {
+		await server?.close();
+		if (previousPath === undefined) delete process.env.SCENE_OVERRIDE_PATH;
+		else process.env.SCENE_OVERRIDE_PATH = previousPath;
+		await rm(directory, { recursive: true, force: true });
+	}
+});

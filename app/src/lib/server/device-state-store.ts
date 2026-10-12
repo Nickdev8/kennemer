@@ -3,10 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { env } from '$env/dynamic/private';
 import type { DeviceCommandKey } from '$lib/config/schema';
 
-const DEVICE_STATE_PATH = resolve(
-	process.cwd(),
-	env.DEVICE_STATE_PATH ?? 'device-states.json'
-);
+const DEVICE_STATE_PATH = resolve(process.cwd(), env.DEVICE_STATE_PATH ?? 'device-states.json');
 
 export type StoredDeviceState = {
 	lastCommand: DeviceCommandKey;
@@ -31,13 +28,9 @@ function normalizeStates(raw: unknown): DeviceStateMap {
 		};
 		const lastCommand = record.lastCommand;
 		if (lastCommand !== 'on' && lastCommand !== 'off') continue;
-		const updatedAt = Number.isFinite(record.updatedAt)
-			? Number(record.updatedAt)
-			: Date.now();
+		const updatedAt = Number.isFinite(record.updatedAt) ? Number(record.updatedAt) : Date.now();
 		const source =
-			typeof record.source === 'string' && record.source.trim()
-				? record.source
-				: 'unknown';
+			typeof record.source === 'string' && record.source.trim() ? record.source : 'unknown';
 		entries[deviceId] = { lastCommand, updatedAt, source };
 	}
 	return entries;

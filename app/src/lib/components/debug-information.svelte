@@ -136,7 +136,7 @@
 			</div>
 		</header>
 		<p class="mb-4 text-sm text-slate-600">
-			Maak bij een probleem een foto van dit scherm. Gegevens opgehaald: {date(checkedAt)}.
+			Gegevens opgehaald: {date(checkedAt)}.
 		</p>
 		{#if error}<p class="mb-4 text-sm text-red-700" role="alert">{error}</p>{/if}
 		<section class="mb-4 rounded-lg border border-slate-300 p-4" aria-label="Versie en verbinding">

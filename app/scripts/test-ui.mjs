@@ -47,6 +47,27 @@ try {
 	const external = [],
 		actions = [],
 		errors = [];
+	const offlineStatusDeviceId = '8813bfd6d300';
+	let statusRequestCount = 0;
+	await page.route(`${origin}/api/device-output*`, async (route) => {
+		statusRequestCount += 1;
+		const ids = new URL(route.request().url()).searchParams.get('ids')?.split(',') ?? [];
+		const states = Object.fromEntries(
+			ids
+				.filter((id) => id !== offlineStatusDeviceId || statusRequestCount === 1)
+				.map((id) => [id, { lastCommand: 'off' }])
+		);
+		const failedIds = ids.filter((id) => id === offlineStatusDeviceId && statusRequestCount > 1);
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				ok: true,
+				states,
+				errors: Object.fromEntries(failedIds.map((id) => [id, 'Internal status error']))
+			})
+		});
+	});
 	page.on('request', (r) => {
 		if (!r.url().startsWith(origin) && !r.url().startsWith('data:')) external.push(r.url());
 		if (['/actions', '/triggers'].some((p) => r.url().endsWith(p))) actions.push(r.url());
@@ -104,18 +125,45 @@ try {
 		'rgb(22, 163, 74)'
 	);
 	await page.getByRole('button', { name: 'Home', exact: true }).click();
+	const offlineCard = page
+		.getByRole('heading', { name: '1ste etage', exact: true })
+		.locator('xpath=../../..');
+	await offlineCard.getByRole('button', { name: 'Uit', exact: true }).click();
+	await offlineCard.getByText('Apparaat offline', { exact: true }).waitFor();
+	await expect(offlineCard.getByRole('button', { name: 'Aan', exact: true })).toBeEnabled();
+	await offlineCard.getByRole('button', { name: 'Aan', exact: true }).click();
+	await offlineCard.getByRole('button', { name: 'Uit', exact: true }).waitFor();
+	await offlineCard.getByText('Apparaat offline', { exact: true }).waitFor();
 	await page.getByRole('button', { name: 'ALLES UIT', exact: true }).click();
 	await page.getByRole('button', { name: 'Nee', exact: true }).last().click();
-	assert.equal(actions.length, 1);
+	assert.equal(actions.length, 3);
 	// A wake touch is consumed and cannot execute a card beneath the overlay.
 	await page.getByRole('button', { name: 'Scherm actief maken' }).waitFor({ timeout: 6000 });
 	await page.getByRole('button', { name: 'Scherm actief maken' }).click();
-	assert.equal(actions.length, 1);
+	assert.equal(actions.length, 3);
 	await page.getByRole('button', { name: 'Geavanceerde bediening', exact: true }).click();
 	await page.getByRole('button', { name: 'PIN 1', exact: true }).click();
 	await page.getByRole('button', { name: 'PIN 2', exact: true }).click();
 	await page.getByRole('button', { name: 'PIN 3', exact: true }).click();
 	await page.getByRole('button', { name: 'PIN 4', exact: true }).click();
+	await page.getByRole('button', { name: 'Ontgrendel', exact: true }).click();
+	await page
+		.getByRole('dialog', { name: 'Geavanceerde bediening', exact: true })
+		.getByRole('button', { name: 'Sluiten', exact: true })
+		.click();
+	await page.getByRole('button', { name: 'Overwerk timers', exact: true }).click();
+	for (const label of [
+		'Overwerktimer Hoofdgebouw',
+		'Overwerktimer Nieuwbouw',
+		'Overwerktimer Kopje'
+	])
+		await page.getByRole('heading', { name: label, exact: true }).waitFor();
+	await page.getByRole('button', { name: 'Overwerktimer Hoofdgebouw: Start timer' }).click();
+	await page.getByRole('button', { name: /Overwerktimer Hoofdgebouw: timer gestart/ }).waitFor();
+	assert.equal(actions.length, 4);
+	await page.getByRole('button', { name: 'Geavanceerde bediening', exact: true }).click();
+	for (const digit of [1, 2, 3, 4])
+		await page.getByRole('button', { name: `PIN ${digit}`, exact: true }).click();
 	await page.getByRole('button', { name: 'Ontgrendel', exact: true }).click();
 	const rosters = page.getByRole('radiogroup', { name: 'Belrooster' });
 	assert.equal(await rosters.getByRole('radio', { checked: true }).count(), 1);
@@ -124,7 +172,17 @@ try {
 		assert.equal(await rosters.getByRole('radio', { checked: true }).count(), 1);
 		await expect(rosters.getByRole('radio', { name: label, exact: true })).toBeChecked();
 	}
-	assert.equal(actions.length, 1);
+	assert.equal(actions.length, 4);
+	await page
+		.getByRole('dialog', { name: 'Geavanceerde bediening', exact: true })
+		.getByRole('button', { name: 'Sluiten', exact: true })
+		.click();
+	await page.getByRole('button', { name: 'Overwerk timers', exact: true }).click();
+	await page.getByRole('button', { name: /Overwerktimer Hoofdgebouw: timer gestart/ }).waitFor();
+	await page.getByRole('button', { name: 'Geavanceerde bediening', exact: true }).click();
+	for (const digit of [1, 2, 3, 4])
+		await page.getByRole('button', { name: `PIN ${digit}`, exact: true }).click();
+	await page.getByRole('button', { name: 'Ontgrendel', exact: true }).click();
 	const information = page.getByRole('button', { name: 'Systeeminformatie' });
 	assert.equal(
 		(await information.boundingBox()).height,
@@ -160,17 +218,49 @@ try {
 	await record.getByText('Nee', { exact: true }).waitFor();
 	await enabled.check();
 	await record.getByText('Ja', { exact: true }).waitFor();
-	assert.equal(actions.length, 1);
+	assert.equal(actions.length, 4);
+	const timerRow = editor.locator('tr[data-control-id="Overwerktimer-1"]');
+	await timerRow
+		.getByRole('combobox', { name: 'Plaatsing Overwerktimer Hoofdgebouw' })
+		.selectOption('main');
+	await expect(
+		timerRow.getByRole('combobox', { name: 'Tab Overwerktimer Hoofdgebouw' })
+	).toHaveValue('overwerktimer');
+	await expect(
+		timerRow.getByRole('spinbutton', { name: 'Positie Overwerktimer Hoofdgebouw' })
+	).toHaveValue('1');
+	await timerRow
+		.getByRole('combobox', { name: 'Tab Overwerktimer Hoofdgebouw' })
+		.selectOption('devices');
+	await timerRow.getByRole('spinbutton', { name: 'Positie Overwerktimer Hoofdgebouw' }).fill('2');
+	await expect(
+		timerRow.getByRole('combobox', { name: 'Tab Overwerktimer Hoofdgebouw' })
+	).toHaveValue('devices');
+	await expect(
+		timerRow.getByRole('spinbutton', { name: 'Positie Overwerktimer Hoofdgebouw' })
+	).toHaveValue('2');
 	await editor.getByRole('button', { name: 'Wijzigingen opslaan', exact: true }).click();
 	await editor.getByLabel('Configuratie-PIN', { exact: true }).fill('1234');
 	await editor.getByRole('button', { name: 'Bevestigen', exact: true }).click();
 	await editor.getByText('Configuratie opgeslagen.', { exact: true }).waitFor();
-	assert.equal(actions.length, 1);
+	await editor.getByRole('button', { name: 'Sluiten', exact: true }).click();
+	await page
+		.getByRole('dialog', { name: 'Geavanceerde bediening', exact: true })
+		.getByRole('button', { name: 'Sluiten', exact: true })
+		.click();
+	await page.getByRole('button', { name: 'Apparaten', exact: true }).click();
+	await page.getByRole('heading', { name: 'Overwerktimer Hoofdgebouw', exact: true }).waitFor();
+	await page.getByRole('button', { name: 'Geavanceerde bediening', exact: true }).click();
+	for (const digit of [1, 2, 3, 4])
+		await page.getByRole('button', { name: `PIN ${digit}`, exact: true }).click();
+	await page.getByRole('button', { name: 'Ontgrendel', exact: true }).click();
+	await page.getByRole('button', { name: 'Bediening beheren', exact: true }).click();
+	await editor.getByText('Configuratie lezen…').waitFor({ state: 'hidden' });
 	await editor.getByRole('button', { name: 'Vorige opslag herstellen', exact: true }).click();
 	await editor.getByLabel('Configuratie-PIN', { exact: true }).fill('1234');
 	await editor.getByRole('button', { name: 'Bevestigen', exact: true }).click();
 	await editor.getByText('Vorige configuratie hersteld.', { exact: true }).waitFor();
-	assert.equal(actions.length, 1);
+	assert.equal(actions.length, 4);
 	for (const size of [
 		{ width: 980, height: 800 },
 		{ width: 390, height: 844 }
@@ -186,11 +276,11 @@ try {
 			.fill('Responsive concept');
 		await row.getByRole('textbox', { name: 'Label 1ste etage', exact: true }).fill('1ste etage');
 	}
-	assert.equal(actions.length, 1);
+	assert.equal(actions.length, 4);
 	assert.deepEqual(errors, []);
 	assert.deepEqual(external, []);
 	console.log(
-		'UI passed: tabs, numbering, mock on/off, confirmation, first-touch wake, advanced information, responsive inline editor/save/restore, debug version/commit popup, column numbers, blue navigation, popup placement, zero external browser calls.'
+		'UI passed: tabs, numbering, mock on/off, confirmation, first-touch wake, timer confirmation and persistence after closing/reopening, advanced information, responsive inline editor/save/restore, debug version/commit popup, column numbers, blue navigation, popup placement, zero external browser calls.'
 	);
 } catch (error) {
 	console.error(log.slice(-4000));

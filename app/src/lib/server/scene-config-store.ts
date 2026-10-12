@@ -37,7 +37,12 @@ let legacySource: string | null = null;
 const serialize = createMutationQueue();
 
 function freshFile(snapshot: ConfigurationSnapshot): SceneOverridesFile {
-	return { ...snapshot, revision: randomBytes(8).toString('hex'), updatedAt: Date.now() };
+	return {
+		...snapshot,
+		revision: randomBytes(8).toString('hex'),
+		updatedAt: Date.now(),
+		placementDefaultsVersion: 1
+	};
 }
 function emptySnapshot(): ConfigurationSnapshot {
 	return { version: 2, homeNumbering: 'column', overrides: {}, metadata: {} };
@@ -51,6 +56,22 @@ function snapshotOf(file: SceneOverridesFile): ConfigurationSnapshot {
 		...(file.tabs ? { tabs: file.tabs } : {})
 	});
 }
+function migrateOverworkTimerPlacements(snapshot: ConfigurationSnapshot): ConfigurationSnapshot {
+	const metadata = { ...snapshot.metadata };
+	for (const id of ['Overwerktimer-1', 'Overwerktimer-2', 'Overwerktimer-3']) {
+		const control = baseControls.find((entry) => entry.id === id);
+		const saved = metadata[id];
+		if (control?.controlType !== 'timed-trigger' || control.placement !== 'main') continue;
+		if (saved?.placement !== 'advanced') continue;
+		metadata[id] = {
+			...saved,
+			placement: 'main',
+			tabId: control.tabId,
+			pushNumber: control.pushNumber
+		};
+	}
+	return { ...snapshot, metadata };
+}
 async function parseFile(
 	candidate: string,
 	allowLegacy = false
@@ -60,9 +81,11 @@ async function parseFile(
 		const json: unknown = JSON.parse(raw);
 		const parsed = sceneOverridesFileSchema.safeParse(json);
 		if (parsed.success) {
-			const normalized = normalizeHomeNumbering(baseControls, parsed.data);
+			let normalized = normalizeHomeNumbering(baseControls, parsed.data);
+			if (parsed.data.placementDefaultsVersion !== 1)
+				normalized = migrateOverworkTimerPlacements(normalized);
 			applyConfiguration(baseControls, baseTabs, normalized);
-			if (!parsed.data.homeNumbering) {
+			if (!parsed.data.homeNumbering || parsed.data.placementDefaultsVersion !== 1) {
 				legacySource = raw;
 				return freshFile(normalized);
 			}
@@ -197,8 +220,14 @@ export async function saveSceneOverrides(input: unknown) {
 			next.overrides[change.controlId] ??= {};
 			next.overrides[change.controlId][change.slot] = change.sceneId;
 		}
-		for (const change of request.metadata ?? [])
-			next.metadata[change.controlId] = { ...next.metadata[change.controlId], ...change.values };
+		for (const change of request.metadata ?? []) {
+			const values = { ...next.metadata[change.controlId], ...change.values };
+			if (values.placement === 'advanced') {
+				delete values.tabId;
+				delete values.pushNumber;
+			}
+			next.metadata[change.controlId] = values;
+		}
 		if (request.tabs) next.tabs = request.tabs;
 		return next;
 	});

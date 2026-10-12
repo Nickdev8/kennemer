@@ -5,7 +5,7 @@ Kennemer. Het draait op een ODROID en bedient Shelly-scenes.
 
 ## Dagelijks beheer
 
-Maak verbinding met de ODROID. 
+Maak verbinding met de ODROID.
 Er is een kant dat geen wachtwoord nodig zal zijn, dat komt omdat je ssh key dan op de odroid al stond:
 
 ```bash
@@ -68,6 +68,14 @@ wijzigingen worden op de ODROID bewaard in
 `/opt/kennemer/runtime/scene-overrides.json` en blijven dus staan na een
 update. Alleen bestaande scène-ID's kunnen worden aangepast; de endpoint en
 Shelly-sleutel blijven serverconfiguratie.
+
+Gestarte overwerktimers blijven zichtbaar wanneer het paneel wordt gesloten en
+opnieuw geopend. De app bewaart de eindtijd van actieve timers in runtime-
+opslag. Bedieningsacties, PIN-uitkomsten en wijzigingen in de bediening worden
+ook gelogd in dagelijkse JSONL-bestanden onder `/data/logs`. Een logdag loopt
+van 04:00 tot 03:59 (`Europe/Amsterdam`); PIN-cijfers en geheimen worden nooit
+opgeslagen. Bij `npm run dev` staat de map `logs/` onder het runtimepad dat bij
+het starten wordt getoond.
 
 Test een gewijzigde scene niet zomaar op locatie: een API-call kan echte
 verlichting of schermen bedienen.
@@ -148,8 +156,10 @@ Chrome. Een lokale Chrome-installatie wordt automatisch gevonden. Stel
 met `npx playwright install chromium`.
 
 `Bediening en tabs beheren` staat in geavanceerde bediening. Wijzig labels,
-kleuren, tijdsduren, scene/status-ID's en tabs, bekijk het concept en sla op met
-de configuratie-PIN. Opslaan schakelt geen apparatuur. Import/export bevat
+kleuren, tijdsduren, scene/status-ID's, tabs en de plaatsing van knoppen, bekijk
+het concept en sla op met de configuratie-PIN. Een knop op een dashboardtab is
+zonder PIN beschikbaar; knoppen in Geavanceerd blijven achter de PIN. Opslaan
+schakelt geen apparatuur. Import/export bevat
 alleen instellingen; vorige opslag herstellen herstelt één opgeslagen versie.
 De bestaande scene-overrides worden automatisch gelezen als versie 2; de
 oorspronkelijke versie blijft bij de eerste opslag als `.bak` bewaard.

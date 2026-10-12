@@ -13,7 +13,9 @@ export const advancedControls: DashboardControl[] = [
 	}),
 	{
 		controlType: 'timed-trigger',
-		placement: 'advanced',
+		placement: 'main',
+		tabId: 'overwerktimer',
+		pushNumber: 1,
 		id: 'Overwerktimer-1',
 		label: 'Overwerktimer Hoofdgebouw',
 		color: 'orange',
@@ -23,7 +25,9 @@ export const advancedControls: DashboardControl[] = [
 	},
 	{
 		controlType: 'timed-trigger',
-		placement: 'advanced',
+		placement: 'main',
+		tabId: 'overwerktimer',
+		pushNumber: 2,
 		id: 'Overwerktimer-2',
 		label: 'Overwerktimer Nieuwbouw',
 		color: 'orange',
@@ -33,7 +37,9 @@ export const advancedControls: DashboardControl[] = [
 	},
 	{
 		controlType: 'timed-trigger',
-		placement: 'advanced',
+		placement: 'main',
+		tabId: 'overwerktimer',
+		pushNumber: 3,
 		id: 'Overwerktimer-3',
 		label: 'Overwerktimer Kopje',
 		color: 'orange',

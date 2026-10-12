@@ -8,6 +8,7 @@ This directory is the maintainer-facing source for dashboard controls. Follow
 - `devices.ts`: the editable main-placement control array.
 - `advanced.ts`: the editable advanced-placement control array.
 - `triggers.ts`: standalone scene triggers, currently including **ALLES UIT**.
+- `tabs.ts`: the default dashboard tabs and their order.
 
 Types come from `src/lib/config/schema.ts`. Use those types instead of creating
 parallel config shapes. Each control has a `controlType` (`device`, `trigger`,
@@ -110,11 +111,15 @@ wattage section and requires a Dutch authorization confirmation in the UI.
 Advanced controls may include toggles, timed triggers, and plain scene
 triggers. Empty actions remain disabled and harmless until real IDs are
 deliberately configured.
+The three overwork timers are main controls on the `overwerktimer` dashboard
+tab, at positions 1–3; the tab label is configured in `tabs.ts`.
 
 Runtime scene-ID overrides are stored separately from these source files. The
 advanced editor can change only scene IDs and valid status-device IDs for an
 registered control. It also permits labels, colors, duration, enabled state,
-and main-tab positions. Endpoints, credentials, direct identities and button
+main/advanced placement and main-tab positions. Moving a control to a dashboard
+tab makes it available there without a PIN; controls left in advanced placement
+remain PIN-protected. Endpoints, credentials, direct identities and button
 types remain source-controlled.
 
 ## Validation checklist

@@ -21,8 +21,8 @@ Updated: 12 October 2026. No Git/GitHub/CI work without explicit request.
 
 Confirmed Shelly Plus 1 relays; pulse duration **1 second**, both triggered together:
 
-| Name | Device ID | IP |
-| --- | --- | --- |
+| Name         | Device ID      | IP             |
+| ------------ | -------------- | -------------- |
 | Bel school 1 | `a8032abc4264` | `10.10.80.162` |
 | Bel school 2 | `08b61fd8993c` | `10.10.80.161` |
 
@@ -41,9 +41,11 @@ exactly-once or electrically simultaneous ringing.
 
 ## Later
 
+- [x] Show “Apparaat offline” on individual device cards after two consecutive status failures, retaining the last known state and keeping the control usable.
 - [ ] Shelly group control: confirm API/IDs.
-- [ ] Investigate old update CLI issue if still reproducible; preserve rollback.
-- [ ] Footer/arrow navigation, RGB controls, hardware enrollment, longer restore history.
+- [Manualy checked and confirmed] Investigate old update CLI issue if still reproducible; preserve rollback.
+- [Client no longer wants this] Footer/arrow navigation, RGB controls, hardware enrollment, longer restore history.
+- [ ] Since we know all de devices and wattages. lets try to find a way to get all devices in a scene from ust the scene id. so we can report watages per card and of 0w the text is hidden.
 
 ## Checks / deployment
 

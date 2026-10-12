@@ -6,6 +6,7 @@ import { runtimeMode } from './runtime-mode';
 import { readConfigEditorState } from './scene-config-store';
 import { authorizeSceneConfig } from './scene-config-auth';
 import { publishConfiguration } from './device-state-events';
+import { recordAuditEvent } from './audit-log';
 
 export function configJson(body: unknown, status = 200) {
 	return new Response(JSON.stringify(body), {
@@ -29,12 +30,30 @@ export async function configPayload() {
 export async function configMutation(
 	request: Request,
 	origin: string,
-	mutate: (input: unknown) => Promise<unknown>
+	mutate: (input: unknown) => Promise<unknown>,
+	operation: 'save' | 'reset' | 'restore'
 ) {
+	const eventTimestamp = new Date();
 	const auth = authorizeSceneConfig(request, origin);
+	if (request.headers.get('x-kennemer-config-pin')) {
+		await recordAuditEvent(
+			'pin.entered',
+			{
+				source: 'configuration-editor',
+				accepted: !auth
+			},
+			eventTimestamp
+		);
+	}
 	if (auth) return configJson(auth, auth.status);
 	try {
-		await mutate(await request.json());
+		const input: unknown = await request.json();
+		await mutate(input);
+		await recordAuditEvent(
+			'configuration.changed',
+			configurationAuditDetails(operation, input),
+			eventTimestamp
+		);
 		publishConfiguration();
 		return configJson(await configPayload());
 	} catch (error) {
@@ -58,4 +77,37 @@ export async function configMutation(
 			400
 		);
 	}
+}
+
+function configurationAuditDetails(
+	operation: 'save' | 'reset' | 'restore',
+	input: unknown
+): Record<string, string | number | boolean | string[]> {
+	const request = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
+	const controlIds = new Set<string>();
+	const fields = new Set<string>();
+	for (const item of Array.isArray(request.changes) ? request.changes : []) {
+		if (!item || typeof item !== 'object') continue;
+		const change = item as Record<string, unknown>;
+		if (typeof change.controlId === 'string') controlIds.add(change.controlId);
+		if (typeof change.slot === 'string') fields.add(change.slot);
+	}
+	for (const item of Array.isArray(request.metadata) ? request.metadata : []) {
+		if (!item || typeof item !== 'object') continue;
+		const change = item as Record<string, unknown>;
+		if (typeof change.controlId === 'string') controlIds.add(change.controlId);
+		if (change.values && typeof change.values === 'object') {
+			for (const field of Object.keys(change.values)) fields.add(field);
+		}
+	}
+	if (request.importSnapshot) fields.add('import');
+	if (request.tabs) fields.add('tabs');
+	if (typeof request.controlId === 'string') controlIds.add(request.controlId);
+	if (typeof request.slot === 'string') fields.add(request.slot);
+
+	return {
+		operation,
+		controlIds: [...controlIds].slice(0, 100),
+		fields: [...fields].slice(0, 100)
+	};
 }

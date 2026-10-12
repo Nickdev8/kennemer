@@ -34,6 +34,7 @@
 	export let commandLabel: (device: ShellyDevice, command: DeviceCommandKey) => string;
 	export let loadingCommandKeys: ReadonlySet<string> = new Set();
 	export let initialStatus: DeviceCommandKey | null = null;
+	export let statusOffline = false;
 	export let transientActive = false;
 	export let showType = false;
 	export let cardNumber: number | undefined = undefined;
@@ -305,6 +306,9 @@
 			<h3 class="truncate text-[length:var(--control-label-size)] font-semibold text-slate-800">
 				{device.label}
 			</h3>
+			{#if statusOffline}
+				<p class="text-sm font-semibold text-amber-800" role="status">Apparaat offline</p>
+			{/if}
 			{#if showType}
 				<p class="text-xs tracking-wide text-slate-400 uppercase">{device.type}</p>
 			{/if}
@@ -312,7 +316,7 @@
 		{#if cardNumber !== undefined}
 			<div class="min-w-0">
 				<h3
-					class="truncate text-[length:var(--control-label-size)] font-semibold text-slate-800"
+					class="truncate text-[length:var(--control-label-size)] font-normal text-slate-400"
 					aria-label={`Knop ${cardNumber}`}
 				>
 					{cardNumber}

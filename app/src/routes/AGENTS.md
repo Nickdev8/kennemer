@@ -5,24 +5,26 @@ These instructions cover Svelte pages and server endpoints below
 
 ## Route map
 
-| Route                        | Method   | Purpose                                  |
-| ---------------------------- | -------- | ---------------------------------------- |
-| `/`                          | GET      | Dashboard and initial page data          |
-| `/actions`                   | POST     | Execute a configured device command      |
-| `/triggers`                  | POST     | Execute a configured scene trigger       |
-| `/api/connectivity`          | GET      | Probe Shelly Cloud reachability          |
+| Route                        | Method   | Purpose                                   |
+| ---------------------------- | -------- | ----------------------------------------- |
+| `/`                          | GET      | Dashboard and initial page data           |
+| `/actions`                   | POST     | Execute a configured device command       |
+| `/triggers`                  | POST     | Execute a configured scene trigger        |
+| `/api/connectivity`          | GET      | Probe Shelly Cloud reachability           |
 | `/api/config/scenes`         | GET/POST | Read or save validated scene-ID overrides |
-| `/api/config/scenes/reset`   | POST     | Reset validated configuration overrides  |
-| `/api/config/scenes/restore` | POST | Restore previous validated configuration |
-| `/api/device-output`         | GET      | Read physical output status              |
-| `/api/device-state`          | GET      | Read remembered action states            |
-| `/api/device-state/callback` | GET/POST | Accept configured external state updates |
-| `/api/device-state/stream`   | GET      | SSE stream of state changes              |
-| `/api/hardware`              | GET      | Proxy touchscreen status from the host   |
-| `/api/update`                | GET      | Read host update status                  |
-| `/api/update`                | POST     | Request a host update                    |
-| `/api/wattage/[room]`        | GET      | Read and aggregate room wattage          |
-| `/api/wattage/cache`         | POST     | Refresh the Shelly device/IP cache       |
+| `/api/config/scenes/reset`   | POST     | Reset validated configuration overrides   |
+| `/api/config/scenes/restore` | POST     | Restore previous validated configuration  |
+| `/api/audit/pin`             | POST     | Record an advanced-access PIN outcome     |
+| `/api/device-output`         | GET      | Read physical output status               |
+| `/api/device-state`          | GET      | Read remembered action states             |
+| `/api/device-state/callback` | GET/POST | Accept configured external state updates  |
+| `/api/device-state/stream`   | GET      | SSE stream of state changes               |
+| `/api/hardware`              | GET      | Proxy touchscreen status from the host    |
+| `/api/timed-triggers`        | GET      | Read active persisted timed-trigger state |
+| `/api/update`                | GET      | Read host update status                   |
+| `/api/update`                | POST     | Request a host update                     |
+| `/api/wattage/[room]`        | GET      | Read and aggregate room wattage           |
+| `/api/wattage/cache`         | POST     | Refresh the Shelly device/IP cache        |
 
 Read a route's implementation before changing its contract. The page has
 polling and error handling coupled to these response shapes.
@@ -41,6 +43,8 @@ Configuration routes accept only registered controls/known slots and validated
 metadata/tabs. PIN-protected writes, reset/import/restore never execute scenes.
 GET returns public controls, tabs, defaults, editor entries and revision;
 configuration-change SSE refreshes dashboards after successful mutations.
+Audit events must never contain PIN digits, credentials, or full scene requests.
+The PIN audit endpoint accepts only same-origin advanced-access outcomes.
 
 Use JSON responses with meaningful HTTP status codes. Operational errors should
 be understandable in the Dutch UI, but server logs may retain concise

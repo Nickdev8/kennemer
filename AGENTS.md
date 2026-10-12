@@ -77,24 +77,25 @@ Additional instructions:
 
 The dashboard is configuration-driven. Main controls live in the array in
 `app/config/devices.ts`; advanced controls live in `app/config/advanced.ts`;
-standalone global scene triggers live in `app/config/triggers.ts`. Each entry
-selects its renderer with `controlType` and records its surface with `placement`.
+standalone global scene triggers live in `app/config/triggers.ts`, and default
+dashboard tabs live in `app/config/tabs.ts`. Each control entry selects its
+renderer with `controlType` and records its surface with `placement`.
 The files below `app/src/lib/config/` re-export the root config and define its
 TypeScript schema.
 
 The normal 3-by-3 grid currently contains:
 
-| Position | Label          | Behavior                           |
-| -------- | -------------- | ---------------------------------- |
-| 1        | 1ste etage     | On/off scene toggle                |
-| 2        | 1ste           | On/off scene toggle                |
-| 3        | Parterre       | On/off scene toggle                |
-| 4        | Aula plafond   | On/off scene toggle                |
-| 5        | Screen lokalen | Stateless screens-up trigger       |
-| 6        | Aula vide      | On/off scene toggle                |
-| 7        | Gang + entree  | On/off scene toggle                |
-| 8        | Kantine        | On/off scene toggle                |
-| 9        | Kopje          | On/off scene toggle                |
+| Position | Label          | Behavior                     |
+| -------- | -------------- | ---------------------------- |
+| 1        | 1ste etage     | On/off scene toggle          |
+| 2        | 1ste           | On/off scene toggle          |
+| 3        | Parterre       | On/off scene toggle          |
+| 4        | Aula plafond   | On/off scene toggle          |
+| 5        | Screen lokalen | Stateless screens-up trigger |
+| 6        | Aula vide      | On/off scene toggle          |
+| 7        | Gang + entree  | On/off scene toggle          |
+| 8        | Kantine        | On/off scene toggle          |
+| 9        | Kopje          | On/off scene toggle          |
 
 Home numbering runs down columns (`1 4 7 / 2 5 8 / 3 6 9`). Numbers appear
 inside the header beside the label. Existing equipment stays in its original
@@ -105,6 +106,8 @@ carry `homeNumbering: 'column'`.
 values unique and within 1 through 9. Devices, scene triggers, and timed
 triggers can appear in either the main or advanced control array and share the
 `ControlCard` renderer.
+The three overwork timers are on the `overwerktimer` tab at positions 1–3;
+the tab label and order are configured in `app/config/tabs.ts`.
 
 Every toggle has two independent Shelly scene IDs:
 
@@ -140,10 +143,10 @@ this priority:
 
 Device cards do not show polling text or permanent `Status: Aan/Uit` copy; the
 card color communicates the result. An unreachable status device does not
-disable a properly configured scene button. Instead, the UI briefly warns that
-the push-button panel was not found and the displayed state is less reliable.
-The UI remains operable and the server remembers the last successful dashboard
-action.
+disable a properly configured scene button. After two consecutive device-
+specific failures, each associated card shows `Apparaat offline`, retains the
+last known state and stays operable. A successful status poll clears the
+offline notice; a failed dashboard request alone does not mark devices offline.
 
 The browser requests device output roughly every three seconds and schedules
 extra checks after an action. `app/src/routes/api/device-output/+server.ts`
@@ -154,6 +157,14 @@ channel suffix, for example `2043a80ac3e4_1`.
 in `device-states.json`. `app/src/lib/server/device-state-events.ts` publishes
 changes over server-sent events. Do not replace the real status priority with
 optimistic browser-only state.
+
+Timed-trigger expiry timestamps are atomically persisted in
+`timed-triggers.json`; `/api/timed-triggers` restores active countdowns when the
+dashboard is reopened. Append-only audit events are written under
+`KENNEMER_AUDIT_LOG_DIR/YYYY/MM/YYYY-MM-DD.jsonl`, using an Amsterdam-local
+business day that rolls over at 04:00. Logs cover control actions, PIN outcomes,
+and successful configuration mutations. Never log PIN digits, auth data, or
+scene request payloads.
 
 ## Action path
 
@@ -174,9 +185,11 @@ that exist in config; clients cannot submit arbitrary URLs.
 Scene IDs may be overridden from the authenticated advanced editor. Overrides
 are stored on the ODROID at `/opt/kennemer/runtime/scene-overrides.json`,
 validated against the checked-in control list. The editor also permits validated
-labels, colors, durations, enabled state and tab/position changes. Endpoints,
-credentials and direct-device identities remain server-controlled. Saving an override
-does not execute a scene.
+labels, colors, durations, enabled state, main/advanced placement and
+tab/position changes. Moving an advanced control to a dashboard tab makes it
+available there without a PIN; controls left in advanced placement remain
+PIN-protected. Endpoints, credentials and direct-device identities remain
+server-controlled. Saving an override does not execute a scene.
 
 The advanced editor also permits valid `statusdeviceid` overrides for device
 controls; these change physical-state lookup only and do not execute a scene.
@@ -195,7 +208,7 @@ provides a LAN target.
 - `/api/hardware` proxies the host maintenance service and reports whether the
   expected touchscreen USB ID is present.
 - The physical display is deliberately kept awake. After the configured idle
- timeout, the web UI draws a black overlay with a small muted sleep marker. The
+  timeout, the web UI draws a black overlay with a small muted sleep marker. The
   first touch only wakes the UI and must never activate the control underneath.
   While the overlay is active, device-status, cloud-connectivity, wattage, and
   touchscreen polling plus the local SSE stream pause. Waking performs one
@@ -234,27 +247,30 @@ edits. Make changes in a development checkout, commit and push them, then run
 
 Main variables:
 
-| Variable                         | Meaning                                      |
-| -------------------------------- | -------------------------------------------- |
-| `SHELLY_AUTH_KEY`                | Shelly Cloud authentication key              |
-| `SHELLY_SIMULATE_DEVICES`        | Skip real calls and return simulated success |
-| `USE_LAN_DEVICES`                | Prefer configured LAN action targets         |
-| `USE_LAN_WATTAGE`                | Prefer LAN for power reads                   |
-| `SHELLY_MAX_API_CALLS`           | Cloud rate-limit retry count                 |
-| `DEVICE_STATE_PATH`              | Optional remembered-state file path          |
-| `KENNEMER_MAINTENANCE_TOKEN`     | Shared container-to-host API secret          |
-| `KENNEMER_MAINTENANCE_URL`       | Host maintenance API URL                     |
-| `KENNEMER_CONFIG_EDIT_PIN`       | Private PIN for saving scene-ID overrides    |
-| `SCENE_OVERRIDE_PATH`            | Optional persistent scene override file      |
-| `PUBLIC_ADVANCED_PATTERN`        | Comma-separated unlock patterns              |
-| `PUBLIC_ADVANCED_PIN`            | Backward-compatible additional unlock value  |
-| `PUBLIC_DISABLE_WATTAGE`         | Hide and stop wattage requests               |
-| `PUBLIC_DEBUG_WATTAGE`           | Show detailed wattage diagnostics            |
-| `PUBLIC_DISPLAY_DIM_TIMEOUT_MS`  | Idle time before the black wake overlay      |
-| `PUBLIC_ADVANCED_PROMPT_IDLE_MS` | Unlock prompt timeout; default 30 seconds    |
-| `PUBLIC_ADVANCED_PANEL_IDLE_MS`  | Advanced panel timeout; default 5 minutes    |
-| `PUBLIC_SHELLY_SCENE_ENDPOINT`   | Optional Shelly scene endpoint override      |
-| `CONNECTIVITY_CHECK_URL`         | Optional connectivity probe override         |
+| Variable                         | Meaning                                          |
+| -------------------------------- | ------------------------------------------------ |
+| `SHELLY_AUTH_KEY`                | Shelly Cloud authentication key                  |
+| `SHELLY_SIMULATE_DEVICES`        | Skip real calls and return simulated success     |
+| `USE_LAN_DEVICES`                | Prefer configured LAN action targets             |
+| `USE_LAN_WATTAGE`                | Prefer LAN for power reads                       |
+| `SHELLY_MAX_API_CALLS`           | Cloud rate-limit retry count                     |
+| `DEVICE_STATE_PATH`              | Optional remembered-state file path              |
+| `KENNEMER_TIMED_TRIGGER_PATH`    | Persisted active timer file                      |
+| `KENNEMER_AUDIT_LOG_DIR`         | Directory for daily append-only audit logs       |
+| `KENNEMER_AUDIT_TIME_ZONE`       | Audit-day timezone; defaults to Europe/Amsterdam |
+| `KENNEMER_MAINTENANCE_TOKEN`     | Shared container-to-host API secret              |
+| `KENNEMER_MAINTENANCE_URL`       | Host maintenance API URL                         |
+| `KENNEMER_CONFIG_EDIT_PIN`       | Private PIN for saving scene-ID overrides        |
+| `SCENE_OVERRIDE_PATH`            | Optional persistent scene override file          |
+| `PUBLIC_ADVANCED_PATTERN`        | Comma-separated unlock patterns                  |
+| `PUBLIC_ADVANCED_PIN`            | Backward-compatible additional unlock value      |
+| `PUBLIC_DISABLE_WATTAGE`         | Hide and stop wattage requests                   |
+| `PUBLIC_DEBUG_WATTAGE`           | Show detailed wattage diagnostics                |
+| `PUBLIC_DISPLAY_DIM_TIMEOUT_MS`  | Idle time before the black wake overlay          |
+| `PUBLIC_ADVANCED_PROMPT_IDLE_MS` | Unlock prompt timeout; default 30 seconds        |
+| `PUBLIC_ADVANCED_PANEL_IDLE_MS`  | Advanced panel timeout; default 5 minutes        |
+| `PUBLIC_SHELLY_SCENE_ENDPOINT`   | Optional Shelly scene endpoint override          |
+| `CONNECTIVITY_CHECK_URL`         | Optional connectivity probe override             |
 
 The host service also supports `KENNEMER_REPO`, `KENNEMER_BRANCH`,
 `KENNEMER_MAINTENANCE_HOST`, `KENNEMER_MAINTENANCE_PORT`,

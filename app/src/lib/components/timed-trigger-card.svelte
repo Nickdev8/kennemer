@@ -69,13 +69,17 @@
 		type="button"
 		class={baseButtonClass}
 		style={triggerStyle}
+		aria-label={isActive
+			? `${trigger.label}: timer gestart, ${buttonText} verstreken`
+			: `${trigger.label}: ${trigger.buttonLabel}`}
 		disabled={isLoading || isActive || trigger.enabled === false || !trigger.sceneId?.trim()}
 		on:click={handleTrigger}
 	>
 		<span class="pointer-events-none text-center" aria-live={isActive ? 'polite' : undefined}>
 			{buttonText}
 		</span>
-		{#if isActive}
+		<!-- {#if isActive} -->
+		{#if false}
 			<span
 				class="pointer-events-none absolute bottom-0 left-0 h-1 rounded-b-lg bg-white/70 transition-[width] duration-1000 ease-linear"
 				style={`width:${progressPercent}%`}

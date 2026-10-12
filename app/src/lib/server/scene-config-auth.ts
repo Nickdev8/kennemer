@@ -14,7 +14,8 @@ function pinMatches(provided: string, expected: string) {
 	const providedBuffer = Buffer.from(provided);
 	const expectedBuffer = Buffer.from(expected);
 	return (
-		providedBuffer.length === expectedBuffer.length && timingSafeEqual(providedBuffer, expectedBuffer)
+		providedBuffer.length === expectedBuffer.length &&
+		timingSafeEqual(providedBuffer, expectedBuffer)
 	);
 }
 
@@ -50,7 +51,8 @@ export function authorizeSceneConfig(
 	}
 
 	if (!pinMatches(request.headers.get('x-kennemer-config-pin') ?? '', expected)) {
-		const next = current && current.resetAt > now ? current : { count: 0, resetAt: now + FAILURE_WINDOW_MS };
+		const next =
+			current && current.resetAt > now ? current : { count: 0, resetAt: now + FAILURE_WINDOW_MS };
 		next.count += 1;
 		failedAttempts.set(key, next);
 		return { status: 403, error: 'Onjuiste configuratie-PIN.' };

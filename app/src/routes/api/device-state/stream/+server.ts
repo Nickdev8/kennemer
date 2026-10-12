@@ -13,9 +13,7 @@ export const GET: RequestHandler = async () => {
 		start(controller) {
 			controllerRef = controller;
 			subscribeDeviceState(controller);
-			controller.enqueue(
-				encoder.encode(`event: init\ndata: ${JSON.stringify(states)}\n\n`)
-			);
+			controller.enqueue(encoder.encode(`event: init\ndata: ${JSON.stringify(states)}\n\n`));
 			heartbeat = setInterval(() => {
 				try {
 					controller.enqueue(encoder.encode(': ping\n\n'));

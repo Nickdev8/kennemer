@@ -5,6 +5,7 @@ import { sendDeviceCommand, ShellyHttpError } from '$lib/server/shelly-http';
 import { updateDeviceState } from '$lib/server/device-state-store';
 import { publishDeviceState } from '$lib/server/device-state-events';
 import { isDeviceCommandConfigured } from '$lib/config/device-validation';
+import { recordAuditEvent } from '$lib/server/audit-log';
 
 type ActionRequest = {
 	deviceId?: string;
@@ -41,6 +42,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		return jsonResponse({ error: 'Actie niet ingesteld: scène-ID ontbreekt' }, 409);
 	}
 
+	const actionTimestamp = new Date();
+	let commandSucceeded = false;
 	try {
 		const activeDurationMs =
 			device.stateless &&
@@ -65,6 +68,7 @@ export const POST: RequestHandler = async ({ request }) => {
 					skipped = true;
 				} else {
 					const commandPromise = sendDeviceCommand(device, command).then(() => {
+						commandSucceeded = true;
 						const nextActiveUntil = Date.now() + activeDurationMs;
 						statelessActiveUntil.set(actionKey, nextActiveUntil);
 						setTimeout(() => {
@@ -86,8 +90,19 @@ export const POST: RequestHandler = async ({ request }) => {
 			}
 		} else {
 			await sendDeviceCommand(device, command);
+			commandSucceeded = true;
 		}
 
+		await recordAuditEvent(
+			'control.action',
+			{
+				controlId: device.id,
+				label: device.label,
+				command,
+				outcome: skipped ? 'already_active' : 'succeeded'
+			},
+			actionTimestamp
+		);
 		if (!device.stateless) {
 			const state = await updateDeviceState(device.id, command);
 			publishDeviceState({ deviceId: device.id, state });
@@ -99,6 +114,16 @@ export const POST: RequestHandler = async ({ request }) => {
 			state: { deviceId: device.id, lastCommand: command }
 		});
 	} catch (err) {
+		await recordAuditEvent(
+			'control.action',
+			{
+				controlId: device.id,
+				label: device.label,
+				command,
+				outcome: commandSucceeded ? 'succeeded_state_error' : 'failed'
+			},
+			actionTimestamp
+		);
 		if (err instanceof ShellyHttpError) {
 			return jsonResponse({ error: err.message, errorCode: err.code }, err.status || 502);
 		}

@@ -9,6 +9,8 @@ import { isDeviceCommandConfigured } from '$lib/config/device-validation';
 import type { DashboardControl } from '$lib/config/schema';
 import { updateDeviceState, updateDeviceStateIfNewer } from '$lib/server/device-state-store';
 import { publishDeviceState } from '$lib/server/device-state-events';
+import { recordAuditEvent } from '$lib/server/audit-log';
+import { readActiveTimedTriggers, saveTimedTrigger } from '$lib/server/timed-trigger-store';
 
 const mock = createMockBackend(
 	env.KENNEMER_MOCK_STATE_PATH ?? join(tmpdir(), 'kennemer-mock-physical.json'),
@@ -22,7 +24,10 @@ const mock = createMockBackend(
 			source
 				? (await updateDeviceStateIfNewer(id, command, Date.now(), source)).state
 				: updateDeviceState(id, command),
-		publish: (deviceId, state) => publishDeviceState({ deviceId, state })
+		publish: (deviceId, state) => publishDeviceState({ deviceId, state }),
+		audit: recordAuditEvent,
+		readTimers: readActiveTimedTriggers,
+		saveTimer: saveTimedTrigger
 	}
 );
 export const handle: Handle = async ({ event, resolve }) => {

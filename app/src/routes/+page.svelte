@@ -145,10 +145,14 @@
 	let loadingCommandKeys = new Set<string>();
 	let errorMsg = '';
 	let advancedErrorMsg = '';
+	let advancedStatusMsg = '';
 	let deviceStates = new Map<string, DeviceCommandKey>(
 		Object.entries(data?.deviceStates ?? {}) as [string, DeviceCommandKey][]
 	);
 	let statusDeviceStates = new Map<string, DeviceCommandKey>();
+	let offlineStatusDeviceIds = new Set<string>();
+	let statusFailureCounts = new Map<string, number>();
+	let offlineStatusByDeviceId = new Map<string, boolean>();
 
 	const baseControls: DashboardControl[] = [...devices, ...configuredAdvancedControls, ...triggers];
 	let sceneControls: DashboardControl[] = data?.controls ?? baseControls;
@@ -192,6 +196,12 @@
 	$: allDevices = [...sceneControls].filter(
 		(control): control is Extract<DashboardControl, { controlType: 'device' }> =>
 			control.controlType === 'device'
+	);
+	$: offlineStatusByDeviceId = new Map(
+		allDevices.map((device) => [
+			device.id,
+			offlineStatusDeviceIds.has(device.statusdeviceid?.trim() ?? '')
+		])
 	);
 	$: primaryDeviceCount = mainControls.length;
 	$: deviceById = new Map(allDevices.map((device) => [device.id, device]));
@@ -296,6 +306,7 @@
 	const fastWattageRefreshMs = 2 * 60 * 1000;
 	const fastWattageWindowMs = 10 * 60 * 1000;
 	const liveStatusRefreshMs = 3_000;
+	const statusFailureThreshold = 2;
 	const statusFollowupDelaysMs = [1200, 2500, 5000, 10000, 20000, 45000, 90000];
 	const connectivityRefreshMs = 15000;
 	const connectivityFailureThreshold = 2;
@@ -644,16 +655,29 @@
 	) {
 		const nextStatusStates = new Map(statusDeviceStates);
 		const nextDeviceStates = new Map(deviceStates);
+		const nextFailureCounts = new Map(statusFailureCounts);
+		const nextOfflineIds = new Set(offlineStatusDeviceIds);
 
 		Object.entries(states).forEach(([id, entry]) => {
 			if (entry?.lastCommand === 'on' || entry?.lastCommand === 'off') {
 				nextStatusStates.set(id, entry.lastCommand);
 				nextDeviceStates.set(id, entry.lastCommand);
+				nextFailureCounts.delete(id);
+				nextOfflineIds.delete(id);
 			}
 		});
 
+		for (const id of unavailableIds) {
+			if (states[id]?.lastCommand === 'on' || states[id]?.lastCommand === 'off') continue;
+			const failures = (nextFailureCounts.get(id) ?? 0) + 1;
+			nextFailureCounts.set(id, failures);
+			if (failures >= statusFailureThreshold) nextOfflineIds.add(id);
+		}
+
 		statusDeviceStates = nextStatusStates;
 		deviceStates = nextDeviceStates;
+		statusFailureCounts = nextFailureCounts;
+		offlineStatusDeviceIds = nextOfflineIds;
 	}
 
 	async function refreshStatusDevices(ids = statusDeviceIds) {
@@ -665,25 +689,26 @@
 			const params = new URLSearchParams({ ids: uniqueIds.join(',') });
 			const res = await fetch(`/api/device-output?${params.toString()}`, { cache: 'no-store' });
 			if (displayDimmed) return;
-			if (!res.ok) {
-				applyStatusDeviceStates({}, uniqueIds);
-				return;
-			}
+			if (!res.ok) return;
 
 			const payload = (await res.json()) as {
 				ok: boolean;
 				states: Record<string, { lastCommand: DeviceCommandKey }>;
 				errors?: Record<string, string>;
 			};
-			if (!payload?.ok || !payload.states) {
-				applyStatusDeviceStates({}, uniqueIds);
-				return;
-			}
-			applyStatusDeviceStates(payload.states, Object.keys(payload.errors ?? {}));
+			if (!payload?.ok || !payload.states) return;
+			const unavailableIds = Array.from(
+				new Set([
+					...Object.keys(payload.errors ?? {}),
+					...uniqueIds.filter(
+						(id) =>
+							payload.states[id]?.lastCommand !== 'on' && payload.states[id]?.lastCommand !== 'off'
+					)
+				])
+			);
+			applyStatusDeviceStates(payload.states, unavailableIds);
 		} catch {
-			if (!displayDimmed) {
-				applyStatusDeviceStates({}, uniqueIds);
-			}
+			// A failed dashboard request is not evidence that each individual Shelly is offline.
 		} finally {
 			statusRefreshLoading = false;
 			scheduleAutomaticStatusRefresh();
@@ -965,7 +990,10 @@
 		event?.preventDefault();
 		if (!advancedPin.trim()) return;
 
-		if (advancedPatternConfigured && acceptedAdvancedPatterns.includes(advancedPin.trim())) {
+		const accepted =
+			advancedPatternConfigured && acceptedAdvancedPatterns.includes(advancedPin.trim());
+		logAdvancedPinAttempt(accepted);
+		if (accepted) {
 			advancedUnlocked = true;
 			advancedPanelPinned = false;
 			showAdvancedPrompt = false;
@@ -978,6 +1006,18 @@
 			advancedAccessError = 'Onjuiste PIN. Probeer het opnieuw.';
 			advancedPin = '';
 		}
+	}
+
+	function logAdvancedPinAttempt(accepted: boolean) {
+		void fetch('/api/audit/pin', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ source: 'advanced-access', accepted })
+		})
+			.then((response) => {
+				if (!response.ok) console.error('[audit] PIN event was not accepted by the server.');
+			})
+			.catch((error: unknown) => console.error('[audit] Could not submit PIN event:', error));
 	}
 
 	function appendAdvancedPinDigit(digit: number) {
@@ -1249,10 +1289,25 @@
 	async function handleTriggerPress(triggerId: string, retryAttempt = 0) {
 		loadingTriggerIds = new Set([...loadingTriggerIds, triggerId]);
 		advancedErrorMsg = '';
+		advancedStatusMsg = '';
 		let succeeded = false;
 		try {
-			await triggerAction(triggerId);
-			startTriggerTimer(triggerId);
+			const response = await triggerAction(triggerId);
+			const trigger = sceneControls.find((control) => control.id === triggerId);
+			if (
+				trigger?.controlType === 'timed-trigger' &&
+				Number.isFinite(response.activeUntil) &&
+				Number(response.activeUntil) > Date.now()
+			) {
+				startTriggerTimer(triggerId, Number(response.activeUntil));
+				advancedStatusMsg = `${trigger.label}: timer gestart.`;
+				if (response.timerStatePersisted === false) {
+					advancedErrorMsg =
+						'De timer is gestart, maar de status kon niet worden opgeslagen voor later.';
+				}
+			} else if (trigger) {
+				advancedStatusMsg = `${trigger.label}: actie uitgevoerd.`;
+			}
 			succeeded = true;
 			if (advancedUnlocked && showAdvancedPanel) {
 				markAdvancedActivity();
@@ -1294,15 +1349,15 @@
 		void refreshDashboardConfiguration();
 	}
 
-	function startTriggerTimer(triggerId: string) {
-		const trigger = advancedControls.find(
+	function startTriggerTimer(triggerId: string, activeUntil: number) {
+		if (activeUntil <= Date.now()) return;
+		const trigger = sceneControls.find(
 			(control): control is Extract<DashboardControl, { controlType: 'timed-trigger' }> =>
 				control.controlType === 'timed-trigger' && control.id === triggerId
 		);
-		const durationMs = Math.max(0, Number(trigger?.activeDurationMs) || 0);
-		if (durationMs === 0) return;
+		if (!trigger) return;
 
-		const activeUntil = Date.now() + durationMs;
+		const durationMs = activeUntil - Date.now();
 		const nextActiveUntilById = new Map(triggerActiveUntilById);
 		nextActiveUntilById.set(triggerId, activeUntil);
 		triggerActiveUntilById = nextActiveUntilById;
@@ -1318,6 +1373,26 @@
 				triggerActiveTimeouts.delete(triggerId);
 			}, durationMs)
 		);
+	}
+
+	async function restoreActiveTriggerTimers() {
+		try {
+			const response = await fetch('/api/timed-triggers', { cache: 'no-store' });
+			if (!response.ok) throw new Error('Actieve timers konden niet worden geladen.');
+			const payload = (await response.json()) as {
+				ok?: boolean;
+				activeUntilById?: Record<string, number>;
+			};
+			if (!payload.ok || !payload.activeUntilById) {
+				throw new Error('Ongeldig antwoord voor actieve timers.');
+			}
+			for (const [triggerId, activeUntil] of Object.entries(payload.activeUntilById)) {
+				if (Number.isFinite(activeUntil)) startTriggerTimer(triggerId, activeUntil);
+			}
+		} catch (error) {
+			console.error('[timer] Could not restore active timers:', error);
+			advancedErrorMsg = 'De actieve timers konden niet worden opgehaald.';
+		}
 	}
 
 	async function handleEnergyTriggerPress(retryAttempt = 0) {
@@ -1426,6 +1501,7 @@
 			scheduleDisplayDim();
 			startIdleSensitivePolling(true);
 			void loadDeviceStates();
+			void restoreActiveTriggerTimers();
 		}
 	});
 
@@ -1553,6 +1629,7 @@
 						<ControlCard
 							cardNumber={selectedTab === 'home' ? control.pushNumber : undefined}
 							{control}
+							statusOffline={offlineStatusByDeviceId.get(control.id) ?? false}
 							{commandOrder}
 							{commandKey}
 							{commandLabel}
@@ -1675,7 +1752,6 @@
 		<div class="flex min-h-0 flex-1 flex-col gap-6 px-6 py-6 lg:flex-row">
 			<section class="flex min-h-0 flex-1 flex-col">
 				<div class="mb-3 flex items-center justify-between">
-
 					<span class="text-sm text-slate-500">{advancedControlCount} knoppen</span>
 				</div>
 				{#if advancedErrorMsg}
@@ -1683,6 +1759,15 @@
 						class="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700"
 					>
 						{advancedErrorMsg}
+					</p>
+				{/if}
+				{#if advancedStatusMsg}
+					<p
+						class="mb-3 rounded-lg border border-green-300 bg-green-50 px-4 py-3 text-base font-semibold text-green-900"
+						role="status"
+						aria-live="polite"
+					>
+						{advancedStatusMsg}
 					</p>
 				{/if}
 				<div
@@ -1705,6 +1790,7 @@
 							{#each advancedControls as control (control.id)}
 								<ControlCard
 									{control}
+									statusOffline={offlineStatusByDeviceId.get(control.id) ?? false}
 									{commandOrder}
 									{commandKey}
 									{commandLabel}

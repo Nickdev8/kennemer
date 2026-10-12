@@ -1,12 +1,10 @@
 import { devices } from '../../../config/devices';
 import { advancedControls } from '../../../config/advanced';
 import { triggers } from '../../../config/triggers';
-import type { DashboardControl, DashboardTab, DeviceInventoryEntry } from './schema';
+import { tabs } from '../../../config/tabs';
+import type { DashboardControl, DeviceInventoryEntry } from './schema';
 
-export const tabs: DashboardTab[] = [
-	{ id: 'home', label: 'Home', order: 0 },
-	{ id: 'devices', label: 'Apparaten', order: 1 }
-];
+export { tabs };
 export const inventory: DeviceInventoryEntry[] = [
 	{
 		id: '90706948e37c',

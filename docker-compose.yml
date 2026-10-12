@@ -14,7 +14,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "fetch('http://127.0.0.1:80/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+          "fetch('http://127.0.0.1:80/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
         ]
       interval: 10s
       timeout: 5s
@@ -27,6 +27,9 @@ services:
       KENNEMER_MAINTENANCE_URL: http://host.docker.internal:8787
       DEVICE_STATE_PATH: /data/device-states.json
       SCENE_OVERRIDE_PATH: /runtime/scene-overrides.json
+      KENNEMER_TIMED_TRIGGER_PATH: /data/timed-triggers.json
+      KENNEMER_AUDIT_LOG_DIR: /data/logs
+      KENNEMER_AUDIT_TIME_ZONE: Europe/Amsterdam
       HTTPS_PORT: "443" # optional: remove or change if you don't need TLS
       HTTPS_KEY_PATH: /certs/server.key
       HTTPS_CERT_PATH: /certs/server.crt

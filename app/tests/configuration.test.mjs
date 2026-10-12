@@ -14,7 +14,7 @@ const { resolveCardStatus } = await server.ssrLoadModule('/src/lib/dashboard/dev
 const { homeGridPosition, rowNumberToColumn } = await server.ssrLoadModule(
 	'/src/lib/config/home-grid.ts'
 );
-const { normalizeHomeNumbering } = await server.ssrLoadModule(
+const { applyConfiguration, controlMetadata, normalizeHomeNumbering } = await server.ssrLoadModule(
 	'/src/lib/server/config-editor-core.ts'
 );
 const { createPollingGroup } = await server.ssrLoadModule('/src/lib/dashboard/polling.ts');
@@ -31,13 +31,13 @@ test('registered defaults preserve nine scene mappings and validate', () => {
 		home.map((c) => [c.commands.on.cloud.payload.id, c.commands.off?.cloud.payload.id]),
 		[
 			['1789560412180', '1789560433138'],
-			['1789560234895', '1789560262228'],
-			['1789559627914', '1789559664484'],
 			['1789560339941', '1789560362113'],
-			['1781189778293', undefined],
-			['1789559514915', '1789559559159'],
 			['1789560289492', '1789560313748'],
+			['1789560234895', '1789560262228'],
+			['1781189778293', undefined],
 			['1789560154701', '1789560202028'],
+			['1789559627914', '1789559664484'],
+			['1789559514915', '1789559559159'],
 			['1789557426197', '1789557375466']
 		]
 	);
@@ -132,4 +132,55 @@ test('column numbering preserves physical layout and migrates old overrides once
 	assert.equal(migrated.metadata['scene-aula-plafond'].pushNumber, 4);
 	assert.equal(migrated.metadata['color-spare-051026'].pushNumber, 2);
 	assert.deepEqual(normalizeHomeNumbering(controls, migrated), migrated);
+});
+test('overwork timers default to their dashboard tab and can be moved back behind PIN access', () => {
+	const timers = ['Overwerktimer-1', 'Overwerktimer-2', 'Overwerktimer-3'].map((id) =>
+		controls.find((control) => control.id === id)
+	);
+	assert.ok(timers.every((timer) => timer));
+	assert.deepEqual(
+		timers.map((timer) => [timer?.placement, timer?.tabId, timer?.pushNumber]),
+		[
+			['main', 'overwerktimer', 1],
+			['main', 'overwerktimer', 2],
+			['main', 'overwerktimer', 3]
+		]
+	);
+	assert.equal(tabs.find((tab) => tab.id === 'overwerktimer')?.label, 'Overwerk timers');
+	const timer = timers[0];
+	assert.ok(timer);
+	assert.equal(controlMetadata(timer).placement, 'main');
+
+	const placedOnDevices = applyConfiguration(controls, tabs, {
+		version: 2,
+		overrides: {},
+		metadata: {
+			[timer.id]: {
+				placement: 'main',
+				tabId: 'devices',
+				pushNumber: 2
+			}
+		}
+	}).controls.find((control) => control.id === timer.id);
+	assert.equal(placedOnDevices?.placement, 'main');
+	assert.equal(placedOnDevices?.tabId, 'devices');
+	assert.equal(placedOnDevices?.pushNumber, 2);
+
+	const backBehindPin = applyConfiguration(controls, tabs, {
+		version: 2,
+		overrides: {},
+		metadata: {
+			[timer.id]: { placement: 'advanced' }
+		}
+	}).controls.find((control) => control.id === timer.id);
+	assert.equal(backBehindPin?.placement, 'advanced');
+	assert.throws(
+		() =>
+			applyConfiguration(controls, tabs, {
+				version: 2,
+				overrides: {},
+				metadata: { [timer.id]: { placement: 'main', tabId: 'devices' } }
+			}),
+		/positie/
+	);
 });

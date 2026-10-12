@@ -9,4 +9,4 @@ export const GET: RequestHandler = async () => {
 	}
 };
 export const POST: RequestHandler = ({ request, url }) =>
-	configMutation(request, url.origin, saveSceneOverrides);
+	configMutation(request, url.origin, saveSceneOverrides, 'save');

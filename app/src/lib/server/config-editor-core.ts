@@ -37,8 +37,13 @@ export function controlMetadata(control: DashboardControl): ControlOverride {
 	return {
 		label: control.label,
 		enabled: control.enabled !== false,
-		...(control.placement === 'main'
-			? { tabId: control.tabId ?? 'home', pushNumber: control.pushNumber }
+		...(control.placement === 'main' || control.placement === 'advanced'
+			? {
+					placement: control.placement,
+					...(control.placement === 'main'
+						? { tabId: control.tabId ?? 'home', pushNumber: control.pushNumber }
+						: {})
+				}
 			: {}),
 		...(control.controlType === 'device'
 			? {
@@ -83,6 +88,15 @@ export function applyConfiguration(
 		if (!control) throw new ConfigValidationError(`Onbekend bedieningselement: ${id}`);
 		if (values.label !== undefined) control.label = values.label;
 		if (values.enabled !== undefined) control.enabled = values.enabled;
+		if (values.placement !== undefined) {
+			if (control.placement !== 'main' && control.placement !== 'advanced')
+				throw new ConfigValidationError('Deze losse actie kan niet worden verplaatst.');
+			control.placement = values.placement;
+			if (values.placement === 'advanced') {
+				delete control.tabId;
+				delete control.pushNumber;
+			}
+		}
 		if (values.tabId !== undefined || values.pushNumber !== undefined) {
 			if (control.placement !== 'main')
 				throw new ConfigValidationError(

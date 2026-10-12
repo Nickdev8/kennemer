@@ -157,11 +157,55 @@
 		metadata = { ...metadata, [id]: { ...metadata[id], [name]: value } };
 		successMessage = '';
 	}
+	function changePlacement(entry: SceneEditorEntry, placement: 'main' | 'advanced') {
+		const current = metadata[entry.controlId];
+		if (placement === 'advanced') {
+			metadata = {
+				...metadata,
+				[entry.controlId]: {
+					...current,
+					placement,
+					tabId: undefined,
+					pushNumber: undefined
+				}
+			};
+			successMessage = '';
+			return;
+		}
+
+		const preferredTabId =
+			current.tabId ??
+			tabs.find((tab) => tab.id === 'devices')?.id ??
+			tabs.find((tab) => tab.id !== 'home')?.id ??
+			'home';
+		const occupied = new Set(
+			entries
+				.filter((candidate) => candidate.controlId !== entry.controlId)
+				.filter((candidate) => metadata[candidate.controlId]?.placement === 'main')
+				.filter((candidate) => (metadata[candidate.controlId]?.tabId ?? 'home') === preferredTabId)
+				.map((candidate) => metadata[candidate.controlId]?.pushNumber)
+		);
+		let pushNumber = current.pushNumber ?? 1;
+		while (occupied.has(pushNumber) && pushNumber < 99) pushNumber++;
+		metadata = {
+			...metadata,
+			[entry.controlId]: {
+				...current,
+				placement,
+				tabId: preferredTabId,
+				pushNumber
+			}
+		};
+		successMessage = '';
+	}
 	function inputValue(event: Event) {
 		return (event.currentTarget as HTMLInputElement).value;
 	}
 	function resetControl(entry: SceneEditorEntry) {
-		metadata = { ...metadata, [entry.controlId]: structuredClone(entry.defaultMetadata) };
+		metadata = {
+			...metadata,
+			[entry.controlId]: structuredClone(entry.defaultMetadata)
+		};
 		values = {
 			...values,
 			...Object.fromEntries(
@@ -408,7 +452,21 @@
 											/></td
 										>
 										<td class="position-cell" data-label="Tab / positie">
-											{#if entry.placement === 'main'}
+											{#if entry.placement === 'main' || entry.placement === 'advanced'}
+												<label
+													>Plaatsing<select
+														aria-label={`Plaatsing ${entry.label}`}
+														value={metadata[entry.controlId].placement ?? entry.placement}
+														disabled={saving}
+														on:change={(event) =>
+															changePlacement(entry, inputValue(event) as 'main' | 'advanced')}
+													>
+														<option value="main">Dashboardtab · zonder PIN</option>
+														<option value="advanced">Geavanceerd · PIN vereist</option>
+													</select></label
+												>
+											{/if}
+											{#if (metadata[entry.controlId].placement ?? entry.placement) === 'main'}
 												<label
 													>Tab<select
 														aria-label={`Tab ${entry.label}`}
@@ -432,9 +490,7 @@
 															field(entry.controlId, 'pushNumber', Number(inputValue(event)))}
 													/></label
 												>
-											{:else}<span
-													>{entry.placement === 'advanced' ? 'Geavanceerd' : 'Losse actie'}</span
-												>{/if}
+											{:else if entry.placement === 'energy'}<span>Losse actie</span>{/if}
 										</td>
 										<td class="enabled-cell" data-label="Ingeschakeld"
 											><label class="checkbox"

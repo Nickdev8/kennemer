@@ -17,6 +17,13 @@ type Dependencies = {
 	configured: (control: Control, command: 'on' | 'off') => boolean;
 	remember: (id: string, command: 'on' | 'off', source?: string) => Promise<State>;
 	publish: (id: string, state: State) => void;
+	audit?: (
+		type: string,
+		details: Record<string, string | number | boolean | string[]>,
+		timestamp?: Date
+	) => Promise<unknown>;
+	readTimers?: (validIds: ReadonlySet<string>) => Promise<Record<string, number>>;
+	saveTimer?: (id: string, activeUntil: number) => Promise<void>;
 };
 const json = (body: unknown, status = 200) =>
 	new Response(JSON.stringify(body), {
@@ -143,6 +150,15 @@ export function createMockBackend(path: string, deps: Dependencies) {
 			}
 			return json({ ok: true, states, errors });
 		}
+		if (route === '/api/timed-triggers' && request.method === 'GET') {
+			const timedTriggers = (await deps.controls()).filter(
+				(control) => control.controlType === 'timed-trigger'
+			);
+			const activeUntilById = deps.readTimers
+				? await deps.readTimers(new Set(timedTriggers.map((trigger) => trigger.id)))
+				: {};
+			return json({ ok: true, activeUntilById });
+		}
 		if (route === '/actions' || route === '/triggers') {
 			if (request.method !== 'POST') return json({ error: 'Methode niet toegestaan' }, 405);
 			let body: Record<string, unknown>;
@@ -158,9 +174,33 @@ export function createMockBackend(path: string, deps: Dependencies) {
 			);
 			if (!control) return json({ error: 'Onbekende bediening' }, 404);
 			if (control.enabled === false) return json({ error: 'Bediening uitgeschakeld' }, 409);
+			const actionTimestamp = new Date();
 			if (route === '/triggers') {
 				if (!control.sceneId?.trim() || /^0+$/.test(control.sceneId))
 					return json({ error: 'Scène-ID ontbreekt' }, 409);
+				const durationMs =
+					control.controlType === 'timed-trigger'
+						? Math.max(0, Number(control.activeDurationMs) || 0)
+						: 0;
+				const activeUntil = durationMs > 0 ? Date.now() + durationMs : undefined;
+				let timerStatePersisted = true;
+				if (activeUntil !== undefined && deps.saveTimer) {
+					try {
+						await deps.saveTimer(control.id, activeUntil);
+					} catch {
+						timerStatePersisted = false;
+					}
+				}
+				await deps.audit?.(
+					activeUntil === undefined ? 'control.triggered' : 'timer.started',
+					{
+						controlId: control.id,
+						label: control.label,
+						outcome: 'succeeded',
+						...(activeUntil === undefined ? {} : { durationMs, activeUntil })
+					},
+					actionTimestamp
+				);
 				deps.publish(control.id, {
 					lastCommand: 'on',
 					updatedAt: Date.now(),
@@ -173,9 +213,9 @@ export function createMockBackend(path: string, deps: Dependencies) {
 							updatedAt: Date.now(),
 							source: 'demo-trigger'
 						}),
-					control.activeDurationMs ?? 5000
+					durationMs || 5000
 				).unref?.();
-				return json({ ok: true });
+				return json({ ok: true, activeUntil, timerStatePersisted });
 			}
 			const command = body.command;
 			if (command !== 'on' && command !== 'off') return json({ error: 'Ongeldige opdracht' }, 400);
@@ -197,6 +237,16 @@ export function createMockBackend(path: string, deps: Dependencies) {
 				await save(control.statusdeviceid ?? control.id, command);
 				deps.publish(control.id, await deps.remember(control.id, command));
 			}
+			await deps.audit?.(
+				'control.action',
+				{
+					controlId: control.id,
+					label: control.label,
+					command,
+					outcome: skipped ? 'already_active' : 'succeeded'
+				},
+				actionTimestamp
+			);
 			return json({
 				ok: true,
 				skipped,

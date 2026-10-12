@@ -30,6 +30,8 @@ Object.assign(env, {
 	KENNEMER_RUNTIME_MODE: mode,
 	DEVICE_STATE_PATH: join(storage, 'device-states.json'),
 	SCENE_OVERRIDE_PATH: join(storage, 'scene-overrides.json'),
+	KENNEMER_TIMED_TRIGGER_PATH: join(storage, 'timed-triggers.json'),
+	KENNEMER_AUDIT_LOG_DIR: join(storage, 'logs'),
 	IP_CACHE_PATH: join(storage, 'ips.json'),
 	KENNEMER_MOCK_STATE_PATH: join(storage, 'physical-states.json'),
 	SHELLY_SIMULATE_DEVICES: mode === 'mock' ? '1' : '0'

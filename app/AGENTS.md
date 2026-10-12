@@ -49,10 +49,11 @@ rate limits before shortening it.
 - Toggle labels are Dutch: `Aan` turns on and `Uit` turns off.
 - Device cards show no polling or permanent `Status: Aan/Uit` text because card
   color carries the state.
-- A newly unreachable status device produces one temporary warning at the top
-  right only after two consecutive failed polls. A successful poll immediately
-  resets its failure count. Do not renew the warning on every polling cycle
-  while the same device remains unavailable.
+- A status device that is unreachable for two consecutive device-specific
+  polls shows “Apparaat offline” on each associated device card. Keep the last
+  known state and leave configured controls usable. A successful poll clears
+  the offline notice immediately. Do not mark devices offline when the
+  dashboard request itself fails.
 - Offline status does not disable a configured scene action.
 - Missing command payloads do disable the corresponding action.
 - Advanced controls auto-close after inactivity unless pinned.
@@ -112,6 +113,8 @@ Do not commit or depend on development copies of:
 
 - `.env`
 - `device-states.json`
+- `timed-triggers.json`
+- `logs/`
 - `ips.json`
 - `.svelte-kit/`
 - `build/`
@@ -125,6 +128,9 @@ new environment variable becomes operationally relevant.
 `npm run dev` starts a fully mocked dashboard; `dev:live` explicitly enables
 Shelly integration and requires credentials. Development runtime files live
 outside the repo. Docker remains live. Use local test/test:ui/validate:config.
+Successful control actions and PIN outcomes are logged to append-only daily
+JSONL files in the runtime logs directory. Timed-trigger expiry timestamps are
+persisted separately so active timers return after reopening the panel or app.
 The page composes energy, tabs, advanced access/information, and update views;
 shared polling lifecycle is in `src/lib/dashboard`. Editor previews never dispatch
 commands. Maintain Home positions 1–9 and physical-state priority across tabs.

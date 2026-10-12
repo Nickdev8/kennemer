@@ -27,6 +27,7 @@ export const controlOverrideSchema = z
 		color: z.string().trim().max(32).nullable().optional(),
 		onColor: z.string().trim().max(32).nullable().optional(),
 		offColor: z.string().trim().max(32).nullable().optional(),
+		placement: z.enum(['main', 'advanced']).optional(),
 		tabId: z
 			.string()
 			.regex(/^[a-z0-9][a-z0-9-]{0,63}$/)
@@ -55,7 +56,8 @@ export const configurationSnapshotSchema = z
 	.strict();
 export const sceneOverridesFileSchema = configurationSnapshotSchema.extend({
 	revision: revisionSchema,
-	updatedAt: z.number().int().positive()
+	updatedAt: z.number().int().positive(),
+	placementDefaultsVersion: z.literal(1).optional()
 });
 export const sceneOverrideRequestSchema = z
 	.object({

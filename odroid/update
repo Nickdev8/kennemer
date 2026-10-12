@@ -99,7 +99,7 @@ if [[ -f "$REPO/app/.env" ]]; then
 fi
 
 log "Building candidate $target_commit"
-if ! docker compose -f "$CANDIDATE_DIR/docker-compose.yml" build --pull; then
+if ! KENNEMER_BUILD_COMMIT="$target_commit" docker compose -f "$CANDIDATE_DIR/docker-compose.yml" build --pull; then
 	log "Build failed; current container remains active"
 	docker image tag "$ROLLBACK_IMAGE" "$IMAGE"
 	exit 1

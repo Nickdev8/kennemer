@@ -117,8 +117,19 @@ try {
 	await page.getByRole('button', { name: 'PIN 3', exact: true }).click();
 	await page.getByRole('button', { name: 'PIN 4', exact: true }).click();
 	await page.getByRole('button', { name: 'Ontgrendel', exact: true }).click();
-	await page.getByRole('button', { name: 'Systeeminformatie' }).click();
-	await page.getByText('Systeem', { exact: true }).waitFor();
+	const information = page.getByRole('button', { name: 'Systeeminformatie' });
+	assert.equal(
+		(await information.boundingBox()).height,
+		(await page.getByRole('button', { name: 'Paneel vastzetten' }).boundingBox()).height
+	);
+	await information.click();
+	const debug = page.getByRole('dialog', { name: 'Debug- en systeeminformatie', exact: true });
+	await debug.getByText('a'.repeat(40), { exact: true }).waitFor();
+	await debug.getByText('b'.repeat(40), { exact: true }).waitFor();
+	await debug.getByText('Appversie', { exact: true }).waitFor();
+	await debug.getByText('Systeem', { exact: true }).waitFor();
+	await debug.getByRole('button', { name: 'Sluiten', exact: true }).click();
+	await debug.waitFor({ state: 'hidden' });
 	const panelBox = await page
 		.getByRole('dialog', { name: 'Geavanceerde bediening', exact: true })
 		.boundingBox();
@@ -171,7 +182,7 @@ try {
 	assert.deepEqual(errors, []);
 	assert.deepEqual(external, []);
 	console.log(
-		'UI passed: tabs, numbering, mock on/off, confirmation, first-touch wake, advanced information, responsive inline editor/save/restore, column numbers, blue navigation, popup placement, zero external browser calls.'
+		'UI passed: tabs, numbering, mock on/off, confirmation, first-touch wake, advanced information, responsive inline editor/save/restore, debug version/commit popup, column numbers, blue navigation, popup placement, zero external browser calls.'
 	);
 } catch (error) {
 	console.error(log.slice(-4000));

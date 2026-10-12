@@ -30,7 +30,7 @@
 	export let formatWatts: (value: number) => string;
 </script>
 
-<aside class="w-full space-y-4 overflow-y-auto pr-1 lg:w-[400px] lg:flex-shrink-0">
+<div class="grid items-start gap-4 md:grid-cols-2">
 	<div class="rounded-lg border border-slate-300 bg-white p-4">
 		<h3 class="text-base font-semibold text-slate-900">Systeem</h3>
 		<div class="mt-3 grid gap-4">
@@ -149,4 +149,4 @@
 			{/if}
 		</details>
 	{/if}
-</aside>
+</div>

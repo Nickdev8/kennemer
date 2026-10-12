@@ -4,6 +4,7 @@
 	import { homeGridPosition } from '$lib/config/home-grid';
 	import { onDestroy, onMount } from 'svelte';
 	import EnergyPanel from '$lib/components/energy-panel.svelte';
+	import DebugInformation from '$lib/components/debug-information.svelte';
 	import AdvancedInformation from '$lib/components/advanced-information.svelte';
 	import UpdateProgress from '$lib/components/update-progress.svelte';
 	import TabSelector from '$lib/components/tab-selector.svelte';
@@ -931,7 +932,6 @@
 			advancedPanelPinned = false;
 			showAdvancedPanel = true;
 			markAdvancedActivity();
-			void checkGitUpdate();
 			return;
 		}
 		advancedAccessError = '';
@@ -971,7 +971,6 @@
 			advancedPin = '';
 			showAdvancedPanel = true;
 			markAdvancedActivity();
-			void checkGitUpdate();
 		} else {
 			advancedErrorMsg = '';
 			advancedAccessError = 'Onjuiste PIN. Probeer het opnieuw.';
@@ -1723,21 +1722,6 @@
 					{/if}
 				</div>
 			</section>
-			{#if showAdvancedInformation}
-			<AdvancedInformation
-				{clearDeviceCache}
-				{cacheClearing}
-				{cacheMessage}
-				{diagnosticProblemCount}
-				{diagnosticGroups}
-				{wattageDisabled}
-				{wattageError}
-				{wattageSummary}
-				{wattageDebug}
-				{wattageDevices}
-				{formatWatts}
-			/>
-			{/if}
 		</div>
 		<div class="flex shrink-0 justify-end border-t border-slate-200 px-6 py-4">
 			<button
@@ -1754,7 +1738,32 @@
 			</button>
 		</div>
 	</AdvancedPanel>
-
+	{#if showAdvancedInformation}
+		<DebugInformation
+			activity={markAdvancedActivity}
+			{browserOnline}
+			cloudAvailable={connectivityChecked ? cloudReachable : null}
+			{touchscreenConnected}
+			{wattageUpdatedAt}
+			{wattageStale}
+			statusDeviceCount={statusDeviceIds.length}
+			on:close={() => (showAdvancedInformation = false)}
+		>
+			<AdvancedInformation
+				{clearDeviceCache}
+				{cacheClearing}
+				{cacheMessage}
+				{diagnosticProblemCount}
+				{diagnosticGroups}
+				{wattageDisabled}
+				{wattageError}
+				{wattageSummary}
+				{wattageDebug}
+				{wattageDevices}
+				{formatWatts}
+			/>
+		</DebugInformation>
+	{/if}
 
 	{#if showSceneIdEditor}
 		<SceneIdEditor

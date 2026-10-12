@@ -1,6 +1,6 @@
 declare global {
-	namespace App {
-	}
+	const __KENNEMER_BUILD_COMMIT__: string | null;
+	namespace App {}
 }
 
 export {};

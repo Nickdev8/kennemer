@@ -4,6 +4,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        KENNEMER_BUILD_COMMIT: ${KENNEMER_BUILD_COMMIT:-}
     image: kennemer:prod
     restart: unless-stopped
     healthcheck:

@@ -5,7 +5,8 @@ WORKDIR /work
 COPY app/package*.json ./
 RUN npm ci
 COPY app/ ./
-RUN npm run build
+ARG KENNEMER_BUILD_COMMIT
+RUN KENNEMER_BUILD_COMMIT="$KENNEMER_BUILD_COMMIT" npm run build
 RUN npm prune --omit=dev
 
 FROM node:24-bookworm AS runtime

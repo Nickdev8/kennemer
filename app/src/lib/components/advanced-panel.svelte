@@ -35,9 +35,10 @@
 			<div class="flex items-center gap-2">
 				<button
 					type="button"
-					class="inline-flex h-12 w-12 items-center justify-center rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100"
+					class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 text-slate-700 transition-colors duration-150 hover:bg-slate-100"
 					aria-label="Systeeminformatie"
 					aria-expanded={informationOpen}
+					aria-haspopup="dialog"
 					on:click={() => {
 						toggleInformation();
 						activity();

@@ -2,6 +2,10 @@
 import json
 import os
 import subprocess
+import re
+import time
+import threading
+from datetime import datetime, timezone
 from glob import glob
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -93,6 +97,69 @@ def hardware_status():
             "productId": TOUCHSCREEN_PRODUCT_ID,
         },
     }
+
+
+_DIAGNOSTICS_LOCK = threading.Lock()
+_REMOTE_DIAGNOSTICS = {"remoteCommit": None, "remoteCheckedAt": None,
+                       "remoteError": None, "attemptedAt": None}
+
+
+def validated_commit(value):
+    value = value.strip()
+    return value if re.fullmatch(r"[0-9a-fA-F]{40}|[0-9a-fA-F]{64}", value) else None
+
+
+def diagnostics_status():
+    # Deliberately independent from update_status: no fetch or checkout mutation.
+    local_commit = None
+    try:
+        result = run(["git", "rev-parse", "HEAD"], timeout=3)
+        if result.returncode == 0:
+            local_commit = validated_commit(result.stdout)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    with _DIAGNOSTICS_LOCK:
+        now = time.time()
+        attempted = _REMOTE_DIAGNOSTICS["attemptedAt"]
+        if attempted is None or now - attempted >= 60:
+            _REMOTE_DIAGNOSTICS["attemptedAt"] = now
+            try:
+                # Fixed ref prefix prevents user/environment values becoming git options.
+                if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]*", BRANCH):
+                    raise ValueError("invalid branch")
+                result = run(["git", "ls-remote", "origin", f"refs/heads/{BRANCH}"], timeout=5)
+                lines = result.stdout.splitlines()
+                commit = validated_commit(lines[0].split()[0]) if lines else None
+                if result.returncode != 0 or not commit:
+                    raise ValueError("remote unavailable")
+                _REMOTE_DIAGNOSTICS.update(remoteCommit=commit,
+                                          remoteCheckedAt=int(now * 1000), remoteError=None)
+            except (OSError, subprocess.SubprocessError, ValueError, IndexError):
+                # Never include subprocess stderr: it can contain authenticated URLs.
+                _REMOTE_DIAGNOSTICS["remoteError"] = "Remoteversie niet bereikbaar."
+        remote = {key: _REMOTE_DIAGNOSTICS[key] for key in
+                  ("remoteCommit", "remoteCheckedAt", "remoteError")}
+    uptime = None
+    try:
+        with open("/proc/uptime", encoding="ascii") as uptime_file:
+            uptime = float(uptime_file.read().split()[0])
+    except (OSError, ValueError, IndexError):
+        pass
+    state = None
+    try:
+        result = subprocess.run(
+            ["systemctl", "show", UPDATE_SERVICE, "--property=ActiveState,SubState,Result"],
+            text=True, capture_output=True, check=False, timeout=2)
+        if result.returncode == 0:
+            props = dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
+            state = {"activeState": props.get("ActiveState", "unknown"),
+                     "subState": props.get("SubState", "unknown"),
+                     "result": props.get("Result", "unknown")}
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return {"ok": True, "localCommit": local_commit, **remote,
+            "host": {"available": True, "clock": datetime.now(timezone.utc).isoformat(),
+                     "uptimeSeconds": uptime, "service": state, "error": None}}
 
 
 def update_status():
@@ -191,14 +258,15 @@ class Handler(BaseHTTPRequestHandler):
         return True
 
     def do_GET(self):
-        if self.path not in ("/status", "/hardware"):
+        if self.path not in ("/status", "/hardware", "/diagnostics"):
             self.write_json(404, {"ok": False, "message": "not found"})
             return
         if not self.authorized():
             return
 
         try:
-            payload = hardware_status() if self.path == "/hardware" else update_status()
+            payload = (diagnostics_status() if self.path == "/diagnostics" else
+                       hardware_status() if self.path == "/hardware" else update_status())
             self.write_json(200, payload)
         except Exception as exc:
             self.write_json(500, {"ok": False, "message": str(exc)})

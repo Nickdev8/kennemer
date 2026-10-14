@@ -11,42 +11,6 @@ export const advancedControls: DashboardControl[] = [
 		off: '1789565464427',
 		onColor: 'red'
 	}),
-	{
-		controlType: 'timed-trigger',
-		placement: 'main',
-		tabId: 'overwerktimer',
-		pushNumber: 1,
-		id: 'Overwerktimer-1',
-		label: 'Overwerktimer Hoofdgebouw',
-		color: 'orange',
-		buttonLabel: 'Start timer',
-		activeDurationMs: 14_400_000,
-		sceneId: '1789568539275'
-	},
-	{
-		controlType: 'timed-trigger',
-		placement: 'main',
-		tabId: 'overwerktimer',
-		pushNumber: 2,
-		id: 'Overwerktimer-2',
-		label: 'Overwerktimer Nieuwbouw',
-		color: 'orange',
-		buttonLabel: 'Start timer',
-		activeDurationMs: 14_400_000,
-		sceneId: '1789568549892'
-	},
-	{
-		controlType: 'timed-trigger',
-		placement: 'main',
-		tabId: 'overwerktimer',
-		pushNumber: 3,
-		id: 'Overwerktimer-3',
-		label: 'Overwerktimer Kopje',
-		color: 'orange',
-		buttonLabel: 'Start timer',
-		activeDurationMs: 14_400_000,
-		sceneId: '1789568570313'
-	},
 	sceneToggle({
 		id: 'winder-mode',
 		label: 'Wintermodus',

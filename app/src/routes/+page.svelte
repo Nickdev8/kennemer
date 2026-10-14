@@ -1655,7 +1655,7 @@
 		</div>
 	{/if}
 
-	<div class="flex min-h-0 flex-1 gap-4 overflow-hidden px-4 pt-4 pb-4">
+	<div class="dashboard-content flex min-h-0 flex-1 gap-4 overflow-hidden px-4 pt-4 pb-4">
 		<EnergyPanel
 			{wattageLabel}
 			{wattageStale}
@@ -1684,7 +1684,7 @@
 			/>
 		</EnergyPanel>
 
-		<section class="flex min-h-0 flex-1 flex-col rounded-lg border border-slate-300 bg-white p-4">
+		<section class="flex min-h-0 min-w-0 flex-1 flex-col rounded-lg border border-slate-300 bg-white p-4">
 			<header class="mb-4 flex items-center justify-between">
 				<div>
 					<h2 class="text-2xl font-semibold text-slate-900">
@@ -1951,3 +1951,9 @@
 		/>
 	{/if}
 {/if}
+
+<style>
+	@media (max-width: 700px) {
+		.dashboard-content { flex-direction: column; }
+	}
+</style>

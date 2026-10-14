@@ -13,8 +13,8 @@ class BellTests(unittest.TestCase):
         self.now=dt.datetime(2026,10,12,8,10,tzinfo=b.ZoneInfo(b.ZONE));self.scheduler.clock=lambda:self.now
         self.scheduler.synchronized=lambda:True
     def test_rosters_and_double(self):
-        _,c=self.store.get();self.assertEqual(c['profiles']['regular'][0],'08:10x2');self.assertEqual(len(c['profiles']['ten-minute']),31)
-        self.assertEqual(c['profiles']['ten-minute'][0],'12:30');self.assertEqual(c['profiles']['ten-minute'][-1],'13:30')
+        _,c=self.store.get();self.assertEqual(c['profiles']['regular'][0],'08:10x2');self.assertEqual(len(c['profiles']['ten-minute']),61)
+        self.assertEqual(c['profiles']['ten-minute'][0],'14:00');self.assertEqual(c['profiles']['ten-minute'][-1],'16:00')
         c['paused']=False;self.store.set(1,c)
         self.assertEqual(self.scheduler.due()[0][1],2)
     def test_off_mode_has_no_due_bell(self):
@@ -23,9 +23,11 @@ class BellTests(unittest.TestCase):
         self.assertTrue(config['paused'])
     def test_weekends_and_ten_minute_active_profile(self):
         _,c=self.store.get();c['paused']=False;c['active_profile']='ten-minute';self.store.set(1,c)
-        self.now=dt.datetime(2026,10,12,12,30,tzinfo=b.ZoneInfo(b.ZONE));self.assertEqual(self.scheduler.due()[0][0], '2026-10-12/ten-minute/12:30')
-        self.now=dt.datetime(2026,10,12,12,32,tzinfo=b.ZoneInfo(b.ZONE));self.assertEqual(self.scheduler.due()[0][0], '2026-10-12/ten-minute/12:32')
-        self.now=dt.datetime(2026,10,18,12,30,tzinfo=b.ZoneInfo(b.ZONE));self.assertEqual(self.scheduler.due(),[])
+        self.now=dt.datetime(2026,10,12,14,0,tzinfo=b.ZoneInfo(b.ZONE));self.assertEqual(self.scheduler.due()[0][0], '2026-10-12/ten-minute/14:00')
+        self.now=dt.datetime(2026,10,12,14,2,tzinfo=b.ZoneInfo(b.ZONE));self.assertEqual(self.scheduler.due()[0][0], '2026-10-12/ten-minute/14:02')
+        self.now=dt.datetime(2026,10,18,14,0,tzinfo=b.ZoneInfo(b.ZONE));self.assertEqual(self.scheduler.due(),[])
+        c['weekdays'].append(6);self.store.set(2,c)
+        self.assertEqual(self.scheduler.due()[0][0], '2026-10-18/ten-minute/14:00')
     def test_revision_conflict_backup_and_restore(self):
         _,c=self.store.get();c['gap_seconds']=2;self.assertEqual(self.store.set(1,c),2)
         with self.assertRaises(b.Conflict):self.store.set(1,c)
@@ -37,9 +39,23 @@ class BellTests(unittest.TestCase):
         seq=iter([{'ok':True,'relay':'a'}, {'ok':False,'error':'timeout'}])
         with patch.object(b,'relay_ready',return_value={}),patch.object(b,'read_switch',return_value=True),patch.object(b,'rpc',return_value={}):
             # Verify sibling relay threads both attempt pulse and aggregate partial failure.
-            with patch.object(b,'pulse',side_effect=lambda r: next(seq)):
+            with patch.object(b,'pulse',side_effect=lambda r,duration: next(seq)):
                 result=b.fire(1,1)
         self.assertFalse(result['ok']);self.assertEqual(len(result['pulses'][0]['relays']),2)
+
+    def test_configurable_pulse_matches_relay_auto_off(self):
+        relay=b.RELAYS[0]
+        with patch.object(b,'relay_ready') as ready,patch.object(b,'read_switch',side_effect=[True,False,True]),patch.object(b,'rpc') as rpc:
+            self.assertTrue(b.pulse(relay,3)['ok'])
+        ready.assert_called_once_with(relay,3)
+        rpc.assert_called_once_with(relay,'Switch.Set',{'id':0,'on':True,'toggle_after':3})
+
+    def test_duration_bounds_and_legacy_default(self):
+        _,config=self.store.get();self.assertEqual(config['bell_duration_seconds'],1)
+        config['bell_duration_seconds']=0
+        with self.assertRaises(ValueError):self.store.set(1,config)
+        config['bell_duration_seconds']=31
+        with self.assertRaises(ValueError):self.store.set(1,config)
     def test_clock_resynchronization_does_not_disable_future_bells(self):
         _,config=self.store.get();config['paused']=False;self.store.set(1,config)
         self.scheduler.started_at=dt.datetime(2030,1,1,tzinfo=b.ZoneInfo(b.ZONE)).timestamp()

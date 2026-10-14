@@ -7,10 +7,13 @@ roster. Select one of four modes in the dashboard: Regulier, Verkort,
 10-minutenbel, or Uit. Uit pauses automatic bells.
 
 Regular and short rosters are copied from the school email in `todo.md`.
-A double entry such as `08:10x2` sends one 1-second pulse, waits until both
-relays are off, then waits a 1-second silent gap and sends the second pulse.
-The current temporary ten-minute roster rings every weekday at even-minute
-intervals from 12:30 through 13:30 inclusive. Weekends never ring.
+A double entry such as `08:10x2` sends a pulse for the configured bell duration,
+waits until both relays are off, then waits the configured silent gap and sends
+the second pulse. Both relays must have hardware auto-off set to the same
+duration; the scheduler refuses a pulse when either relay does not match. The
+temporary ten-minute roster rings at even-minute intervals from 14:00 through
+16:00 inclusive on the selected days. Weekends are available in the editor and
+remain off unless selected.
 
 The committed `bell-defaults.json` supplies the initial roster. The live roster
 is saved separately in SQLite, so `update` compares its schedule fields with
@@ -34,8 +37,8 @@ All requests require `x-kennemer-maintenance-token` matching the token in
 `app/.env`. The app proxies through `/api/bells/{operation}`. Writes require
 `KENNEMER_CONFIG_EDIT_PIN` in the browser request, checked by the app server.
 
-- `GET /status` gives the next bell, clock state, relay readiness, latest outcome,
-  and scheduler state.
+- `GET /status` gives the next bell, configured bell duration, clock state, relay
+  readiness, latest outcome, and scheduler state.
 - `GET /config` returns `{revision, config}`.
 - `POST /config` accepts `{revision, config}`. A stale revision returns 409.
 - `POST /pause`, `/resume`, `/restore` accept `{revision}`. Restore applies the
@@ -81,16 +84,16 @@ ODROID after deployment; local development cannot ring the bells.
    `/etc/kennemer/bell.env`, restart the unit, and confirm the two fixed devices
    by read-only `/status`. Keep the roster paused. Check the observed physical
    outputs and manually configure both devices with `initial_state: off`,
-   `auto_off: true`, `auto_off_delay: 1`. The service rejects live pulses until
-   the identity and configuration match. Use **Bel nu 1×**, then **Bel nu 2×**
-   with the site operator present. Confirm that both relays turn off after each
-   pulse and that the ledger reports both outcomes. Resume the roster only
-   after both tests have been accepted.
+   `auto_off: true`, and `auto_off_delay` equal to the configured bell duration.
+   The service rejects live pulses until identity and configuration match. Use
+   **Bel nu 1×**, then **Bel nu 2×** with the site operator present. Confirm that
+   both relays turn off after each pulse and that the ledger reports both
+   outcomes. Resume the roster only after both tests have been accepted.
 
 The fixed relays are `a8032abc4264` (`10.10.80.162`) and `08b61fd8993c`
 (`10.10.80.161`). The service verifies Shelly Plus 1 identity and safety
 configuration before each pulse. It sends `Switch.Set` with `on:true` and
-`toggle_after:1` concurrently to both. Any partial failure stops a second
+`toggle_after` set to the configured duration concurrently to both. Any partial failure stops a second
 pulse; the ledger retains both relay outcomes. Network and relay errors do
 not cause a retry.
 

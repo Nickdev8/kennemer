@@ -26,7 +26,9 @@
 	export let openAdvancedAccess: () => void;
 </script>
 
-<section class="flex w-[26rem] shrink-0 flex-col rounded-lg border border-slate-300 bg-white p-5">
+
+<section class="energy-panel flex min-h-0 shrink-0 flex-col overflow-hidden rounded-lg border border-slate-300 bg-white p-5">
+	<div class="min-h-0 flex-1 overflow-y-auto pr-1">
 	<div class="flex items-start justify-between gap-4">
 		<div>
 			<p class="text-sm font-semibold text-slate-700">Energie en apparaten</p>
@@ -142,14 +144,26 @@
 		</p>
 	{/if}
 
-	<div class="mt-auto grid gap-2 pt-4">
+	</div>
+	<div class="sidebar-navigation mt-auto flex min-h-0 shrink-0 flex-col gap-2 pt-4">
 		<slot />
 		<button
 			type="button"
-			class="relative flex w-full items-center justify-center rounded-lg border border-slate-300 px-5 py-5 text-lg font-bold text-slate-700 transition-colors hover:bg-slate-100 active:bg-slate-200"
+			class="relative flex w-full min-w-0 shrink-0 items-center justify-center rounded-lg border border-slate-300 px-5 py-5 text-center text-lg font-bold text-slate-700 transition-colors hover:bg-slate-100 active:bg-slate-200"
 			on:click={openAdvancedAccess}
 		>
 			<span>Geavanceerde bediening</span>
 		</button>
 	</div>
 </section>
+
+<style>
+	.energy-panel { width: 26rem; max-width: 35vw; }
+	.sidebar-navigation { max-height: 70%; }
+	@media (max-height: 700px), (max-width: 700px) {
+		.sidebar-navigation { order: -1; margin-top: 0; padding-top: 0; padding-bottom: 1rem; }
+	}
+	@media (max-width: 700px) {
+		.energy-panel { width: 100%; max-width: none; max-height: 45%; }
+	}
+</style>

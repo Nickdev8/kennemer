@@ -13,7 +13,7 @@ REPO = Path(__file__).resolve().parents[1]
 DEFAULTS_FILE = REPO / "odroid" / "bell-defaults.json"
 ENV_FILE = REPO / "app" / ".env"
 CONFIG_URL = "http://127.0.0.1:8788/config"
-SCHEDULE_FIELDS = ("timezone", "weekdays", "gap_seconds", "profiles")
+SCHEDULE_FIELDS = ("timezone", "weekdays", "gap_seconds", "bell_duration_seconds", "profiles")
 
 
 def warning(text):

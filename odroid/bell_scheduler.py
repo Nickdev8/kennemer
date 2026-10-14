@@ -39,20 +39,22 @@ def relay_check(relay):
             'initial_state_off':cfg.get('initial_state')=='off',
             'auto_off_seconds':cfg.get('auto_off_delay') if cfg.get('auto_off') is True else None}
 
-def relay_ready(relay):
+def relay_ready(relay, bell_duration_seconds=1):
     h=relay_check(relay)
-    if not h['identity_ok'] or not h['initial_state_off'] or h['auto_off_seconds'] not in (1,1.0):
+    if not h['identity_ok'] or not h['initial_state_off']:
         raise BellError('relay not commissioned: '+relay['id'])
+    if h['auto_off_seconds'] != bell_duration_seconds:
+        raise BellError('Stel auto-off van relais %s in op %s seconde(n).' % (relay['id'],bell_duration_seconds))
     return h
 
 def read_switch(relay):
     d=rpc(relay,'Switch.GetStatus',{'id':0}); return d.get('output') is False
 
-def pulse(relay):
-    relay_ready(relay)
+def pulse(relay, bell_duration_seconds=1):
+    relay_ready(relay,bell_duration_seconds)
     if not read_switch(relay): raise BellError('relay is not off before pulse')
-    rpc(relay,'Switch.Set',{'id':0,'on':True,'toggle_after':1})
-    deadline=time.monotonic()+2.0; saw_on=False
+    rpc(relay,'Switch.Set',{'id':0,'on':True,'toggle_after':bell_duration_seconds})
+    deadline=time.monotonic()+max(2.0,bell_duration_seconds+1.0); saw_on=False
     while time.monotonic()<deadline:
         off=read_switch(relay)
         if not off:saw_on=True
@@ -61,7 +63,7 @@ def pulse(relay):
     raise BellError('relay pulse did not complete on then off')
 
 _sequence_lock=threading.Lock()
-def fire(count,gap,simulation=False):
+def fire(count,gap,simulation=False,bell_duration_seconds=1):
     if count not in (1,2): raise BellError('count must be one or two')
     if not _sequence_lock.acquire(blocking=False): return {'ok':False,'error':'bell sequence already active'}
     outcomes=[]
@@ -72,7 +74,7 @@ def fire(count,gap,simulation=False):
             # Both relays receive each pulse concurrently; preserve partial results.
             out=[None,None]
             def run(i,relay):
-                try: out[i]=pulse(relay)
+                try: out[i]=pulse(relay,bell_duration_seconds)
                 except Exception as exc: out[i]={'ok':False,'error':str(exc)}
             ts=[threading.Thread(target=run,args=(j,r),daemon=True) for j,r in enumerate(RELAYS)]
             [t.start() for t in ts]; [t.join() for t in ts]
@@ -101,6 +103,7 @@ class Store:
     def get(self):
         with self.db() as c:r=c.execute('SELECT revision,body FROM config WHERE id=1').fetchone()
         body=json.loads(r['body']);body.pop('holiday_dates',None);body.pop('date_profiles',None)
+        body.setdefault('bell_duration_seconds',1)
         return r['revision'],body
     def set(self,rev,body):
         body=copy.deepcopy(body);body.pop('holiday_dates',None);body.pop('date_profiles',None)
@@ -138,9 +141,11 @@ class Conflict(Exception): pass
 def utcnow(): return dt.datetime.now(dt.timezone.utc).isoformat()
 def validate(c):
     if not isinstance(c,dict) or c.get('timezone')!=ZONE or c.get('active_profile') not in PROFILES: raise ValueError('invalid config')
-    if not isinstance(c.get('paused'),bool) or not isinstance(c.get('weekdays'),list) or not c['weekdays'] or len(set(c['weekdays']))!=len(c['weekdays']) or any(type(x)!=int or x not in range(5) for x in c['weekdays']):raise ValueError('invalid schedule')
+    if not isinstance(c.get('paused'),bool) or not isinstance(c.get('weekdays'),list) or not c['weekdays'] or len(set(c['weekdays']))!=len(c['weekdays']) or any(type(x)!=int or x not in range(7) for x in c['weekdays']):raise ValueError('invalid schedule')
     gap=c.get('gap_seconds');
     if type(gap) not in (int,float) or not 0<=gap<=30:raise ValueError('gap_seconds out of range')
+    duration=c.setdefault('bell_duration_seconds',1)
+    if type(duration) is not int or not 1<=duration<=30:raise ValueError('bell_duration_seconds out of range')
     profiles=c.get('profiles')
     if not isinstance(profiles,dict) or set(profiles)!=set(PROFILES):raise ValueError('invalid profiles')
     for name,entries in profiles.items():
@@ -169,7 +174,7 @@ class Scheduler:
         now=now or self.now(); rev,c=self.store.get()
         if c['paused'] or not self.synchronized():return []
         date=now.date(); ds=date.isoformat()
-        if date.weekday()>=5 or date.weekday() not in c['weekdays']:return []
+        if date.weekday() not in c['weekdays']:return []
         prof=c['active_profile']
         result=[]
         for ent in c['profiles'][prof]:
@@ -177,7 +182,7 @@ class Scheduler:
                 m=re.fullmatch(r'(\d\d:\d\d)(?:x([12]))?',ent); stamp=m.group(1); count=int(m.group(2) or 1)
             else:stamp=ent['time'];count=ent.get('count',1)
             hour,minute=map(int,stamp.split(':')); target=dt.datetime.combine(date,dt.time(hour,minute),ZoneInfo(ZONE)); age=(now-target).total_seconds()
-            if 0<=age<=30:result.append((f'{ds}/{prof}/{stamp}',count,c['gap_seconds']))
+            if 0<=age<=30:result.append((f'{ds}/{prof}/{stamp}',count,c['gap_seconds'],c['bell_duration_seconds']))
             elif 30<age<=300:
                 key=f'{ds}/{prof}/{stamp}'
                 if self.store.claim(key,'missed'):
@@ -195,20 +200,20 @@ class Scheduler:
             return
         if self.started_at is None:self.started_at=now.timestamp()
         if mono<self.suppress_until:return
-        for key,count,gap in self.due(now):
+        for key,count,gap,duration in self.due(now):
             if self.store.claim(key,'scheduled'):
                 scheduled_date,_,scheduled_time=key.split('/')
                 scheduled_at=dt.datetime.fromisoformat(scheduled_date+'T'+scheduled_time).replace(tzinfo=ZoneInfo(ZONE)).timestamp()
                 if scheduled_at < self.started_at:
                     self.store.finish(key,{'ok':False,'skipped':'service started after scheduled time'});self.skipped+=1;continue
-                out=fire(count,gap,os.environ.get('KENNEMER_BELL_SIMULATION')=='1');self.store.finish(key,out)
+                out=fire(count,gap,simulation=os.environ.get('KENNEMER_BELL_SIMULATION')=='1',bell_duration_seconds=duration);self.store.finish(key,out)
     def next_event(self,now=None):
         now=now or self.now(); _,c=self.store.get()
         if c['paused']:return None
         upcoming=[]
         for advance in range(8):
             day=now.date()+dt.timedelta(days=advance)
-            if day.weekday()>=5 or day.weekday() not in c['weekdays']:continue
+            if day.weekday() not in c['weekdays']:continue
             profile=c['active_profile']
             for entry in c['profiles'][profile]:
                 stamp=(entry if isinstance(entry,str) else entry['time']).split('x')[0]
@@ -245,13 +250,13 @@ class Handler(BaseHTTPRequestHandler):
             s=self.server.scheduler; rev,c=s.store.get(); health=[]
             def check_health(relay):
                 if os.environ.get('KENNEMER_BELL_SIMULATION')=='1':
-                    return {'id':relay['id'],'reachable':True,'identity_ok':True,'initial_state_off':True,'auto_off_seconds':1,'output_off':True,'simulated':True}
+                    return {'id':relay['id'],'reachable':True,'identity_ok':True,'initial_state_off':True,'auto_off_seconds':c['bell_duration_seconds'],'output_off':True,'simulated':True}
                 try:
                     item=relay_check(relay);item['output_off']=read_switch(relay);return item
                 except Exception as e:return {'id':relay['id'],'reachable':False,'error':str(e)}
             with ThreadPoolExecutor(max_workers=2) as pool:health=list(pool.map(check_health,RELAYS))
             now=s.now(); next_event=s.next_event(now)
-            return self.send(200,{'ok':True,'paused':c['paused'],'enabled':not c['paused'],'simulation':os.environ.get('KENNEMER_BELL_SIMULATION')=='1','clock':{'synchronized':s.synchronized(),'timezone':ZONE,'now':now.isoformat()},'config_revision':rev,'next_event':next_event,'last_outcome':s.store.recent(),'relay_health':health,'scheduler':{'last_scan':s.last_scan,'skipped_missed':s.skipped,'error':s.store.meta('last_error')}})
+            return self.send(200,{'ok':True,'paused':c['paused'],'enabled':not c['paused'],'simulation':os.environ.get('KENNEMER_BELL_SIMULATION')=='1','bell_duration_seconds':c['bell_duration_seconds'],'clock':{'synchronized':s.synchronized(),'timezone':ZONE,'now':now.isoformat()},'config_revision':rev,'next_event':next_event,'last_outcome':s.store.recent(),'relay_health':health,'scheduler':{'last_scan':s.last_scan,'skipped_missed':s.skipped,'error':s.store.meta('last_error')}})
         return self.send(404,{'ok':False,'error':'not found'})
     def do_POST(self):
         if not self.auth():return self.send(401,{'ok':False,'error':'unauthorized'})
@@ -260,7 +265,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.path=='/config':
                 if set(d)!={'revision','config'}:raise ValueError('revision and config required')
                 if not d['config'].get('paused') and os.environ.get('KENNEMER_BELL_LIVE')=='1':
-                    for relay in RELAYS:relay_ready(relay)
+                    for relay in RELAYS:relay_ready(relay,d['config'].get('bell_duration_seconds',1))
                 rev=store.set(d['revision'],d['config']);return self.send(200,{'ok':True,'revision':rev})
             if self.path in ('/pause','/resume','/restore'):
                 rev,c=store.get()
@@ -273,7 +278,7 @@ class Handler(BaseHTTPRequestHandler):
                     c=restored
                 else:c['paused']=self.path=='/pause'
                 if self.path=='/resume' and os.environ.get('KENNEMER_BELL_LIVE')=='1':
-                    for relay in RELAYS:relay_ready(relay)
+                    for relay in RELAYS:relay_ready(relay,c['bell_duration_seconds'])
                 nxt=store.set(rev,c);return self.send(200,{'ok':True,'revision':nxt,'config':c})
             if self.path=='/demo':
                 rid=d.get('request_id');count=d.get('count',1)
@@ -281,7 +286,9 @@ class Handler(BaseHTTPRequestHandler):
                 key='demo/'+rid
                 if not store.claim(key,'demo'):return self.send(200,{'ok':True,'duplicate':True,'outcome':store.event(key)})
                 def run_demo():
-                    try:out=fire(count,store.get()[1]['gap_seconds'],os.environ.get('KENNEMER_BELL_SIMULATION')=='1')
+                    try:
+                        _,config=store.get()
+                        out=fire(count,config['gap_seconds'],simulation=os.environ.get('KENNEMER_BELL_SIMULATION')=='1',bell_duration_seconds=config['bell_duration_seconds'])
                     except Exception as exc:out={'ok':False,'error':str(exc)}
                     store.finish(key,out)
                 threading.Thread(target=run_demo,daemon=True).start();return self.send(202,{'ok':True,'request_id':rid,'status':'running'})

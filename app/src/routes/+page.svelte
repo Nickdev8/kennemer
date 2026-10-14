@@ -87,6 +87,13 @@
 		};
 	};
 
+	type BellHeaderEvent = { at: string; profile: string; time: string };
+	type BellHeaderStatus = {
+		paused?: boolean;
+		preview?: boolean;
+		next_event?: BellHeaderEvent | null;
+	};
+
 	type UpdatePhase =
 		| 'idle'
 		| 'checking'
@@ -150,6 +157,7 @@
 		Object.entries(data?.deviceStates ?? {}) as [string, DeviceCommandKey][]
 	);
 	let statusDeviceStates = new Map<string, DeviceCommandKey>();
+	let bellHeaderStatus: BellHeaderStatus | null = null;
 	let offlineStatusDeviceIds = new Set<string>();
 	let statusFailureCounts = new Map<string, number>();
 	let offlineStatusByDeviceId = new Map<string, boolean>();
@@ -1418,10 +1426,31 @@
 		await handleEnergyTriggerPress();
 	}
 
+	async function refreshBellHeader() {
+		if (data?.mode === 'mock') return;
+		try {
+			const response = await fetch('/api/bells/status', { cache: 'no-store' });
+			if (!response.ok) throw new Error('Bell status unavailable');
+			bellHeaderStatus = (await response.json()) as BellHeaderStatus;
+		} catch {
+			bellHeaderStatus = null;
+		}
+	}
+
+	function formatHeaderBellTime(event: BellHeaderEvent) {
+		return new Intl.DateTimeFormat('nl-NL', {
+			weekday: 'short',
+			hour: '2-digit',
+			minute: '2-digit',
+			timeZone: 'Europe/Amsterdam'
+		}).format(new Date(event.at));
+	}
+
 	const polling = createPollingGroup([
 		{ intervalMs: connectivityRefreshMs, run: checkConnectivity },
 		{ intervalMs: hardwareRefreshMs, run: checkHardware },
-		{ intervalMs: 5_000, run: loadDeviceStates }
+		{ intervalMs: 5_000, run: loadDeviceStates },
+		{ intervalMs: 30_000, run: refreshBellHeader }
 	]);
 
 	function pauseIdleSensitivePolling() {
@@ -1459,6 +1488,7 @@
 			void loadDeviceStates();
 			void checkConnectivity();
 			void checkHardware();
+			void refreshBellHeader();
 			void refreshStatusDevices();
 			if (!wattageDisabled) {
 				void refreshWattage(true);
@@ -1523,7 +1553,20 @@
 			<div>
 				<h1 class="text-2xl font-semibold text-slate-900">Shelly-bediening</h1>
 			</div>
-			<div class="flex flex-wrap items-center gap-3"></div>
+			<div class="flex flex-wrap items-center justify-end gap-3">
+				{#if selectedTab === 'home' && data.mode !== 'mock' && bellHeaderStatus}
+					<div class="text-right" aria-label="Schoolbel">
+						<p class="text-xs font-medium text-slate-500">Volgende bel</p>
+						<p class="text-sm font-semibold text-slate-800">
+							{bellHeaderStatus.paused
+								? 'Uit'
+								: bellHeaderStatus.next_event
+									? formatHeaderBellTime(bellHeaderStatus.next_event)
+									: 'onbekend'}
+						</p>
+					</div>
+				{/if}
+			</div>
 		</div>
 	</header>
 

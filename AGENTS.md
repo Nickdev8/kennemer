@@ -386,3 +386,10 @@ Opslaan, uses HTTP-compatible random IDs for manual bells, and shows concise
 relay outcomes. Global touch keyboard is mounted in the app layout for kiosk
 text fields. App check/build pass; these UI changes are not yet deployed. No
 Git operations.
+
+Light incident review (14 October 2026): polling and timer expiry do not send
+light scenes. Browser retries after scene timeouts and exhausted rate limits
+could resend a prior press; local UI now stops those retries and asks the user
+to verify physical state after a timeout. App check/build and mocked UI pass.
+Actual incidents remain unverified without production audit times and affected
+lights. No Git operations or deployment performed.

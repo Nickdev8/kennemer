@@ -44,10 +44,14 @@ try {
 	});
 	const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, hasTouch: true });
 	page.setDefaultTimeout(8000);
+	const dismissTouchKeyboard = async () => {
+		const keyboard = page.getByRole('group', { name: 'Schermtoetsenbord' });
+		if (await keyboard.isVisible()) await keyboard.getByRole('button', { name: 'Sluiten' }).click();
+	};
 	const external = [],
 		actions = [],
 		errors = [];
-	const offlineStatusDeviceId = '8813bfd6d300';
+	const offlineStatusDeviceId = '8813bfd6d300_1';
 	let statusRequestCount = 0;
 	await page.route(`${origin}/api/device-output*`, async (route) => {
 		statusRequestCount += 1;
@@ -213,6 +217,7 @@ try {
 		0
 	);
 	await record.getByRole('textbox', { name: 'Label 1ste etage', exact: true }).fill('Test etage');
+	await dismissTouchKeyboard();
 	const enabled = record.getByRole('checkbox', { name: 'Ingeschakeld 1ste etage', exact: true });
 	await enabled.uncheck();
 	await record.getByText('Nee', { exact: true }).waitFor();
@@ -233,6 +238,7 @@ try {
 		.getByRole('combobox', { name: 'Tab Overwerktimer Hoofdgebouw' })
 		.selectOption('devices');
 	await timerRow.getByRole('spinbutton', { name: 'Positie Overwerktimer Hoofdgebouw' }).fill('2');
+	await dismissTouchKeyboard();
 	await expect(
 		timerRow.getByRole('combobox', { name: 'Tab Overwerktimer Hoofdgebouw' })
 	).toHaveValue('devices');
@@ -241,6 +247,7 @@ try {
 	).toHaveValue('2');
 	await editor.getByRole('button', { name: 'Wijzigingen opslaan', exact: true }).click();
 	await editor.getByLabel('Configuratie-PIN', { exact: true }).fill('1234');
+	await dismissTouchKeyboard();
 	await editor.getByRole('button', { name: 'Bevestigen', exact: true }).click();
 	await editor.getByText('Configuratie opgeslagen.', { exact: true }).waitFor();
 	await editor.getByRole('button', { name: 'Sluiten', exact: true }).click();
@@ -258,6 +265,7 @@ try {
 	await editor.getByText('Configuratie lezen…').waitFor({ state: 'hidden' });
 	await editor.getByRole('button', { name: 'Vorige opslag herstellen', exact: true }).click();
 	await editor.getByLabel('Configuratie-PIN', { exact: true }).fill('1234');
+	await dismissTouchKeyboard();
 	await editor.getByRole('button', { name: 'Bevestigen', exact: true }).click();
 	await editor.getByText('Vorige configuratie hersteld.', { exact: true }).waitFor();
 	assert.equal(actions.length, 4);
@@ -277,10 +285,34 @@ try {
 		await row.getByRole('textbox', { name: 'Label 1ste etage', exact: true }).fill('1ste etage');
 	}
 	assert.equal(actions.length, 4);
+	await dismissTouchKeyboard();
+	await page.setViewportSize({ width: 1280, height: 900 });
+	await editor.getByRole('button', { name: 'Sluiten', exact: true }).click();
+	await page
+		.getByRole('dialog', { name: 'Geavanceerde bediening', exact: true })
+		.getByRole('button', { name: 'Sluiten', exact: true })
+		.click();
+	await page.getByRole('button', { name: 'Home', exact: true }).click();
+	await page.route(`${origin}/actions`, (route) =>
+		route.fulfill({
+			status: 504,
+			contentType: 'application/json',
+			body: JSON.stringify({ error: 'Shelly request timed out', errorCode: 'TIMEOUT' })
+		})
+	);
+	await offlineCard.getByRole('button').first().click();
+	await page
+		.getByText('Shelly antwoordde niet. Controleer de lampstatus voordat u opnieuw drukt.', {
+			exact: true
+		})
+		.first()
+		.waitFor();
+	await page.waitForTimeout(6000);
+	assert.equal(actions.length, 5);
 	assert.deepEqual(errors, []);
 	assert.deepEqual(external, []);
 	console.log(
-		'UI passed: tabs, numbering, mock on/off, confirmation, first-touch wake, timer confirmation and persistence after closing/reopening, advanced information, responsive inline editor/save/restore, debug version/commit popup, column numbers, blue navigation, popup placement, zero external browser calls.'
+		'UI passed: tabs, numbering, mock on/off, confirmation, first-touch wake, timer confirmation and persistence after closing/reopening, advanced information, responsive inline editor/save/restore, debug version/commit popup, column numbers, blue navigation, popup placement, no timeout resend, zero external browser calls.'
 	);
 } catch (error) {
 	console.error(log.slice(-4000));
@@ -288,6 +320,6 @@ try {
 } finally {
 	await browser?.close();
 	child.kill('SIGTERM');
-	await new Promise((resolve) => child.once('exit', resolve));
+	if (child.exitCode === null) await new Promise((resolve) => child.once('exit', resolve));
 	await rm(storage, { recursive: true, force: true });
 }

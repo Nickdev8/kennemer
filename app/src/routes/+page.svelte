@@ -589,8 +589,6 @@
 	}
 
 	type PressOptions = { suppressRefresh?: boolean; stateless?: boolean };
-	const timeoutRetryDelaySeconds = 5;
-	const maxTimeoutRetries = 2;
 
 	let wattageRefreshTimeout: ReturnType<typeof setTimeout> | null = null;
 	let wattageAutomaticRefreshTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -765,8 +763,7 @@
 	async function handlePress(
 		deviceId: string,
 		command: DeviceCommandKey,
-		options: PressOptions = {},
-		retryAttempt = 0
+		options: PressOptions = {}
 	): Promise<void> {
 		const device = deviceById.get(deviceId);
 		if (!device || !isDeviceCommandConfigured(device, command)) {
@@ -799,20 +796,13 @@
 			}
 		} catch (err) {
 			const error = err as Error & { code?: string };
-			if (error?.code === 'TIMEOUT' && retryAttempt < maxTimeoutRetries) {
-				for (let seconds = timeoutRetryDelaySeconds; seconds > 0; seconds -= 1) {
-					const message = `Shelly reageert niet. Opnieuw proberen over ${seconds}s…`;
-					errorMsg = message;
-					advancedErrorMsg = message;
-					await sleep(1000);
-				}
-				return handlePress(deviceId, command, options, retryAttempt + 1);
-			}
-			if (error?.code === 'RATE_LIMIT') {
-				await sleep(1000);
-				return handlePress(deviceId, command, options, retryAttempt);
-			}
-			errorMsg = error instanceof Error ? error.message : 'Onbekende fout';
+			errorMsg =
+				error?.code === 'TIMEOUT'
+					? 'Shelly antwoordde niet. Controleer de lampstatus voordat u opnieuw drukt.'
+					: error instanceof Error
+						? error.message
+						: 'Onbekende fout';
+			advancedErrorMsg = errorMsg;
 		} finally {
 			const nextLoadingCommandKeys = new Set(loadingCommandKeys);
 			nextLoadingCommandKeys.delete(key);
@@ -1285,7 +1275,7 @@
 		}
 	}
 
-	async function handleTriggerPress(triggerId: string, retryAttempt = 0) {
+	async function handleTriggerPress(triggerId: string) {
 		loadingTriggerIds = new Set([...loadingTriggerIds, triggerId]);
 		advancedErrorMsg = '';
 		advancedStatusMsg = '';
@@ -1313,14 +1303,12 @@
 			}
 		} catch (err) {
 			const error = err as Error & { code?: string };
-			if (error?.code === 'TIMEOUT' && retryAttempt < maxTimeoutRetries) {
-				for (let seconds = timeoutRetryDelaySeconds; seconds > 0; seconds -= 1) {
-					advancedErrorMsg = `Shelly reageert niet. Opnieuw proberen over ${seconds}s…`;
-					await sleep(1000);
-				}
-				return handleTriggerPress(triggerId, retryAttempt + 1);
-			}
-			advancedErrorMsg = error instanceof Error ? error.message : 'Onbekende fout';
+			advancedErrorMsg =
+				error?.code === 'TIMEOUT'
+					? 'Shelly antwoordde niet. Controleer de lampstatus voordat u opnieuw drukt.'
+					: error instanceof Error
+						? error.message
+						: 'Onbekende fout';
 		} finally {
 			const nextLoadingTriggerIds = new Set(loadingTriggerIds);
 			nextLoadingTriggerIds.delete(triggerId);
@@ -1394,7 +1382,7 @@
 		}
 	}
 
-	async function handleEnergyTriggerPress(retryAttempt = 0) {
+	async function handleEnergyTriggerPress() {
 		const energyTriggerId = energyDevicesTrigger.id;
 		loadingTriggerIds = new Set([...loadingTriggerIds, energyTriggerId]);
 		energyTriggerError = '';
@@ -1403,15 +1391,12 @@
 			requestWattageRefresh();
 		} catch (err) {
 			const error = err as Error & { code?: string };
-			if (error?.code === 'TIMEOUT' && retryAttempt < maxTimeoutRetries) {
-				for (let seconds = timeoutRetryDelaySeconds; seconds > 0; seconds -= 1) {
-					energyTriggerError = `Shelly reageert niet. Opnieuw proberen over ${seconds}s…`;
-					await sleep(1000);
-				}
-				return handleEnergyTriggerPress(retryAttempt + 1);
-			}
 			energyTriggerError =
-				error instanceof Error ? error.message : 'Scène kon niet worden uitgevoerd';
+				error?.code === 'TIMEOUT'
+					? 'Shelly antwoordde niet. Controleer de status voordat u opnieuw drukt.'
+					: error instanceof Error
+						? error.message
+						: 'Scène kon niet worden uitgevoerd';
 		} finally {
 			const nextLoadingTriggerIds = new Set(loadingTriggerIds);
 			nextLoadingTriggerIds.delete(energyTriggerId);

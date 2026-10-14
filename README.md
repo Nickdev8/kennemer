@@ -39,6 +39,7 @@ zwart scherm geven terwijl Xorg en Brave opnieuw opstarten.
 De gewone negen knoppen staan in:
 
 ```text
+app/config/home.ts
 app/config/devices.ts
 ```
 

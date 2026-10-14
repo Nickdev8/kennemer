@@ -1,5 +1,5 @@
 import { devices } from '../../../config/devices';
-import { apparaten } from '../../../config/apparaten';
+import { home } from '../../../config/home';
 import { advancedControls } from '../../../config/advanced';
 import { triggers } from '../../../config/triggers';
 import { tabs } from '../../../config/tabs';
@@ -15,4 +15,4 @@ export const inventory: DeviceInventoryEntry[] = [
 		channel: 0
 	}
 ];
-export const controls: DashboardControl[] = [...devices, ...apparaten, ...advancedControls, ...triggers];
+export const controls: DashboardControl[] = [...home, ...devices, ...advancedControls, ...triggers];

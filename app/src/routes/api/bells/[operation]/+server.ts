@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
+import { mockBells } from '$lib/server/mock-bells';
 import type { RequestHandler } from './$types';
 import { authorizeSceneConfig } from '$lib/server/scene-config-auth';
 import { recordAuditEvent } from '$lib/server/audit-log';
@@ -7,7 +8,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 const reads = new Set(['status', 'config']);
-const writes = new Set(['config', 'pause', 'resume', 'restore', 'demo', 'verify-pin', 'relays']);
+const writes = new Set(['config', 'pause', 'resume', 'restore', 'demo', 'relays']);
 const reply = (body: unknown, status = 200) =>
 	json(body, { status, headers: { 'cache-control': 'no-store' } });
 
@@ -15,6 +16,11 @@ const proxy: RequestHandler = async ({ request, params, url }) => {
 	const operation = params.operation;
 	if (!(request.method === 'GET' ? reads : writes).has(operation))
 		return reply({ error: 'Onbekende belactie.' }, 404);
+	if (request.method === 'POST') {
+		const failure = authorizeSceneConfig(request, url.origin);
+		if (failure) return reply(failure, failure.status);
+	}
+	if (env.KENNEMER_RUNTIME_MODE === 'mock') return mockBells(request, operation);
 	if (env.KENNEMER_RUNTIME_MODE) {
 		if (request.method === 'POST')
 			return reply({ error: 'De belservice werkt alleen op de ODROID.' }, 403);
@@ -38,9 +44,7 @@ const proxy: RequestHandler = async ({ request, params, url }) => {
 	}
 	if (request.method === 'POST') {
 		const failure = authorizeSceneConfig(request, url.origin);
-		await recordAuditEvent('pin.entered', { source: 'bell-roster', accepted: !failure });
 		if (failure) return reply(failure, failure.status);
-		if (operation === 'verify-pin') return reply({ ok: true });
 	}
 	if (!env.KENNEMER_MAINTENANCE_TOKEN)
 		return reply({ error: 'Belservice is niet geconfigureerd.' }, 503);

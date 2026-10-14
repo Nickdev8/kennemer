@@ -48,7 +48,6 @@
 	let errorMessage = '';
 	let successMessage = '';
 	let importText = '';
-	let editPin = '';
 	let pendingOperation: 'save' | 'reset' | 'restore' | 'bell-relays' | null = null;
 	let bellRelayIds: string[] = [];
 	let originalBellRelayIds: string[] = [];
@@ -86,7 +85,6 @@
 			event.preventDefault();
 			if (pendingOperation) {
 				pendingOperation = null;
-				editPin = '';
 			} else close();
 		}
 		if (event.key !== 'Tab') return;
@@ -239,7 +237,7 @@
 			pendingOperation = operation;
 			await tick();
 			pinForm?.scrollIntoView({ block: 'nearest' });
-			pinForm?.querySelector('input')?.focus();
+			if (operation === 'save' || operation === 'bell-relays') await submit();
 		} catch (error) {
 			errorMessage =
 				error instanceof Error && !('issues' in error)
@@ -249,17 +247,13 @@
 	}
 	async function submit() {
 		if (!pendingOperation || saving) return;
-		if (!editPin.trim()) {
-			errorMessage = 'Vul de configuratie-PIN in.';
-			return;
-		}
 		const operation = pendingOperation;
 		saving = true;
 		try {
 			if (operation === 'bell-relays') {
 				const response = await fetch('/api/bells/relays', {
 					method: 'POST',
-					headers: { 'content-type': 'application/json', 'x-kennemer-config-pin': editPin },
+					headers: { 'content-type': 'application/json' },
 					body: JSON.stringify({ revision: bellRevision, relayIds: bellRelayIds })
 				});
 				const payload = await response.json();
@@ -277,7 +271,7 @@
 						: { revision, changes, metadata: metadataChanges, ...(tabsChanged ? { tabs } : {}) };
 			const response = await fetch(`/api/config/scenes${suffix}`, {
 				method: 'POST',
-				headers: { 'content-type': 'application/json', 'x-kennemer-config-pin': editPin },
+				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify(body)
 			});
 			const payload = (await response.json()) as ConfigResponse;
@@ -303,7 +297,6 @@
 			errorMessage = error instanceof Error ? error.message : 'Opslaan mislukt.';
 		} finally {
 			saving = false;
-			editPin = '';
 			pendingOperation = null;
 		}
 	}
@@ -322,7 +315,7 @@
 		try {
 			importedSnapshot = configurationSnapshotSchema.parse(JSON.parse(importText));
 			errorMessage = '';
-			successMessage = 'Import klaar voor controle. Opslaan vereist de configuratie-PIN.';
+			successMessage = 'Import klaar voor controle. Sla op om de import toe te passen.';
 		} catch {
 			errorMessage = 'Ongeldig configuratiebestand. Gebruik een Kennemer-export van versie 2.';
 		}
@@ -651,13 +644,6 @@
 									? 'De vorige opgeslagen configuratie herstellen?'
 									: 'Deze configuratie opslaan?'}
 						</p>
-						<label
-							>Configuratie-PIN<input
-								type="password"
-								bind:value={editPin}
-								autocomplete="off"
-							/></label
-						>
 						<div class="actions">
 							<button class="primary" type="submit" disabled={saving}
 								>{saving ? 'Opslaan…' : 'Bevestigen'}</button
@@ -665,8 +651,7 @@
 								type="button"
 								on:click={() => {
 									pendingOperation = null;
-									editPin = '';
-								}}
+													}}
 								disabled={saving}>Annuleren</button
 							>
 						</div>

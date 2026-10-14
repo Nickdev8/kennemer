@@ -63,3 +63,6 @@ Public configuration removes transports/headers; direct identity is fixed.
 `direct-device` uses registered inventory and bounded RGBCCT RPC requests.
 Mocks are selected server-side before any external route I/O. Never bypass that
 boundary with new direct fetches. IP cache routes honor `IP_CACHE_PATH`.
+Configured direct relay controls resolve their base Shelly ID through the cache;
+the optional channel suffix selects Switch RPC output. Inventory entries retain
+their explicit component (for example RGBCCT). Preserve successful off readings.

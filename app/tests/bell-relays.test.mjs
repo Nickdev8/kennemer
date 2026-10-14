@@ -9,7 +9,6 @@ test('relay editor keeps roster and mode, stores IDs only, and rejects unknown o
 	const directory = await mkdtemp(join(tmpdir(), 'kennemer-relay-editor-'));
 	const settings = {
 		KENNEMER_MAINTENANCE_TOKEN: 'test-token',
-		KENNEMER_CONFIG_EDIT_PIN: 'test-pin',
 		KENNEMER_BELL_URL: 'http://localhost:8788',
 		IP_CACHE_PATH: join(directory, 'ips.json'),
 		KENNEMER_AUDIT_LOG_DIR: join(directory, 'logs')
@@ -56,8 +55,7 @@ test('relay editor keeps roster and mode, stores IDs only, and rejects unknown o
 						origin: 'http://localhost',
 						host: 'localhost',
 						'content-type': 'application/json',
-						'x-kennemer-config-pin': 'test-pin'
-					},
+						},
 					body: JSON.stringify(body)
 				})
 			});

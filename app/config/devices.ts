@@ -1,135 +1,123 @@
-import { sceneToggle, sceneButton } from '../src/lib/config/control-helpers';
+import { controlHelpers } from '../src/lib/config/control-presets';
 import type { DashboardControl } from '../src/lib/config/schema';
 
+const { directDevice, sceneTrigger, sceneDualButton } = controlHelpers({
+	placement: 'main',
+	tabId: 'devices'
+});
+
 export const devices: DashboardControl[] = [
-	sceneToggle({
-		id: 'push-1',
-		label: '1ste etage',
-		placement: 'main',
-		tabId: 'home',
+	sceneDualButton({
+		id: 'gangcolorgroup',
+		label: 'Gang Color',
 		pushNumber: 1,
-		statusdeviceid: '8813bfd6d300_1',
-		on: '1789560412180',
-		off: '1789560433138'
+		on: '1791985205549',
+		off: '1791985208675',
+		offColor: 'red'
 	}),
-	sceneToggle({
-		id: 'scene-1ste',
-		label: '1ste',
-		placement: 'main',
-		tabId: 'home',
+	sceneTrigger({
+		id: 'gangcolor-830',
+		label: 'Gang Color 830',
 		pushNumber: 2,
-		statusdeviceid: '30c92276c1d4_0',
-		on: '1789560339941',
-		off: '1789560362113'
+		sceneId: '1763040330000',
+		color: '#f4c27a'
 	}),
-	sceneToggle({
-		id: 'scene-parterre',
-		label: 'Parterre',
-		placement: 'main',
-		tabId: 'home',
+	sceneTrigger({
+		id: 'gangcolor-865',
+		label: 'Gang Color 865',
 		pushNumber: 3,
-		statusdeviceid: '30c92276c1d4_1',
-		on: '1789560289492',
-		off: '1789560313748'
+		sceneId: '1791981097936',
+		color: '#b9d9f5'
 	}),
-	sceneToggle({
-		id: 'scene-aula-plafond',
-		label: 'Aula plafond',
-		placement: 'main',
-		tabId: 'home',
+	sceneTrigger({
+		id: 'gangcolor-paars',
+		label: 'Gang Color Paars',
 		pushNumber: 4,
-		statusdeviceid: '8813bfd6d300_0',
-		on: '1789560234895',
-		off: '1789560262228'
+		sceneId: '1763038295754',
+		color: 'purple'
 	}),
-	sceneButton({
-		id: 'scene-screen-lokalen',
-		label: 'Screen lokalen',
-		placement: 'main',
-		tabId: 'home',
+	directDevice({
+		id: 'nb-gangdeel',
+		label: 'NB gangdeel',
 		pushNumber: 5,
-		sceneId: '1781189778293',
-		buttonLabel: 'Schermen omhoog',
-		color: 'blue',
-		icon: 'arrow-up',
-		activeDurationMs: 60_000
+		directDeviceId: '2805a5ca1d18_0'
 	}),
-	sceneToggle({
-		id: 'scene-aula-vide',
-		label: 'Aula vide',
-		placement: 'main',
-		tabId: 'home',
+	directDevice({
+		id: 'aula-ring-buiten',
+		label: 'Aula ring buiten',
 		pushNumber: 6,
-		statusdeviceid: '2cbcbb3d9af0_0',
-		on: '1789560154701',
-		off: '1789560202028'
+		directDeviceId: '2805a5ca1d18_1'
 	}),
-	sceneToggle({
-		id: 'scene-gang-entree',
-		label: 'Gang + entree',
-		placement: 'main',
-		tabId: 'home',
+	directDevice({
+		id: 'vide-boven',
+		label: 'Vide boven',
 		pushNumber: 7,
-		statusdeviceid: '2043a80ac3e4_0',
-		on: '1789559627914',
-		off: '1789559664484'
+		directDeviceId: '2805a5ca1d18_2'
 	}),
-	sceneToggle({
-		id: 'scene-kantine',
-		label: 'Kantine',
-		placement: 'main',
-		tabId: 'home',
+	directDevice({
+		id: 'locker-vide',
+		label: 'Locker vide',
 		pushNumber: 8,
-		statusdeviceid: '2043a80ac3e4_1',
-		on: '1789559514915',
-		off: '1789559559159'
+		directDeviceId: '2805a5ca1d18_3'
 	}),
-	sceneToggle({
-		id: 'scene-kopje-gang',
-		label: 'Kopje',
-		placement: 'main',
-		tabId: 'home',
+	directDevice({
+		id: 'koof-licht',
+		label: 'Koof licht',
 		pushNumber: 9,
-		statusdeviceid: '2cbcbb3d9af0_1',
-		on: '1789557426197',
-		off: '1789557375466'
+		directDeviceId: '2805a5ca1d18_0'
 	}),
-
-
-	{
-		controlType: 'timed-trigger',
-		placement: 'main',
-		tabId: 'overwerktimer',
-		pushNumber: 1,
-		id: 'Overwerktimer-1',
-		label: 'Overwerktimer Hoofdgebouw',
-		color: 'orange',
-		buttonLabel: 'Start timer',
-		activeDurationMs: 14_400_000,
-		sceneId: '1789568539275'
-	},
-	{
-		controlType: 'timed-trigger',
-		placement: 'main',
-		tabId: 'overwerktimer',
-		pushNumber: 2,
-		id: 'Overwerktimer-2',
-		label: 'Overwerktimer Nieuwbouw',
-		color: 'orange',
-		buttonLabel: 'Start timer',
-		activeDurationMs: 14_400_000,
-		sceneId: '1789568549892'
-	},
-	{
-		controlType: 'timed-trigger',
-		placement: 'main',
-		tabId: 'overwerktimer',
-		pushNumber: 3,
-		id: 'Overwerktimer-3',
-		label: 'Overwerktimer Kopje',
-		color: 'orange',
-		buttonLabel: 'Start timer',
-		activeDurationMs: 14_400_000,
-		sceneId: '1789568570313'
-	},
+	directDevice({
+		id: 'vide-onderkant',
+		label: 'Vide onderkant',
+		pushNumber: 10,
+		directDeviceId: '2805a5ca1d18_1'
+	}),
+	directDevice({
+		id: 'aula-ring-binnen',
+		label: 'Aula Ring binnen',
+		pushNumber: 11,
+		directDeviceId: '2805a5ca1d18_2'
+	}),
+	directDevice({
+		id: 'locker-hoog',
+		label: 'Locker hoog',
+		pushNumber: 12,
+		directDeviceId: '2cbcbb2d8954_1'
+	}),
+	directDevice({
+		id: 'licht-gang-partere-scheikunde',
+		label: 'Licht gang partere Scheikunde',
+		pushNumber: 13,
+		directDeviceId: '083af27caf6c_3'
+	}),
+	directDevice({
+		id: 'licht-gang-partere-bio',
+		label: 'Licht gang partere Bio',
+		pushNumber: 14,
+		directDeviceId: '80646fc7f844_0'
+	}),
+	directDevice({
+		id: 'dakraam-licht',
+		label: 'Dakraam licht',
+		pushNumber: 15,
+		directDeviceId: '78ee4cd5bfac_0'
+	}),
+	directDevice({
+		id: 'licht-gang-rechts-1-ste',
+		label: 'Licht gang rechts 1 ste',
+		pushNumber: 16,
+		directDeviceId: 'ec62608c4d08_0'
+	}),
+	directDevice({
+		id: 'licht-gang-links-1ste',
+		label: 'Licht gang links 1ste',
+		pushNumber: 17,
+		directDeviceId: '80646fdb0d1c'
+	}),
+	directDevice({
+		id: 'gedenklicht',
+		label: 'Gedenklicht',
+		pushNumber: 18,
+		directDeviceId: 'b0b21c1a7c28'
+	})
 ];

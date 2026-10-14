@@ -14,6 +14,7 @@
 	import ControlCard from '$lib/components/control-card.svelte';
 	import SceneIdEditor from '$lib/components/scene-id-editor.svelte';
 	import { devices } from '$lib/config/devices';
+	import { home } from '$lib/config/home';
 	import { advancedControls as configuredAdvancedControls } from '$lib/config/advanced';
 	import {
 		energyDevicesTrigger as defaultEnergyDevicesTrigger,
@@ -166,7 +167,7 @@
 	let statusFailureCounts = new Map<string, number>();
 	let offlineStatusByDeviceId = new Map<string, boolean>();
 
-	const baseControls: DashboardControl[] = [...devices, ...configuredAdvancedControls, ...triggers];
+	const baseControls: DashboardControl[] = [...home, ...devices, ...configuredAdvancedControls, ...triggers];
 	let sceneControls: DashboardControl[] = data?.controls ?? baseControls;
 	let dashboardTabs: DashboardTab[] = data?.tabs ?? [
 		{ id: 'home', label: 'Home', order: 0 },

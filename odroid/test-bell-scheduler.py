@@ -15,8 +15,8 @@ class BellTests(unittest.TestCase):
         self.now=dt.datetime(2026,10,12,8,10,tzinfo=b.ZoneInfo(b.ZONE));self.scheduler.clock=lambda:self.now
         self.scheduler.synchronized=lambda:True
     def test_rosters_and_double(self):
-        _,c=self.store.get();self.assertEqual(c['profiles']['regular'][0],'08:10x2');self.assertEqual(len(c['profiles']['ten-minute']),25)
-        self.assertEqual(c['profiles']['ten-minute'][0],'16:00');self.assertEqual(c['profiles']['ten-minute'][-1],'18:00')
+        _,c=self.store.get();self.assertEqual(c['profiles']['regular'][0],'08:10x2');self.assertEqual(len(c['profiles']['ten-minute']),34)
+        self.assertEqual(c['profiles']['ten-minute'][0],'16:00');self.assertEqual(c['profiles']['ten-minute'][-1],'21:30')
         c['paused']=False;self.store.set(1,c)
         self.assertEqual(self.scheduler.due()[0][1],2)
     def test_off_mode_has_no_due_bell(self):
@@ -26,7 +26,7 @@ class BellTests(unittest.TestCase):
     def test_weekends_and_ten_minute_active_profile(self):
         _,c=self.store.get();c['paused']=False;c['active_profile']='ten-minute';self.store.set(1,c)
         self.now=dt.datetime(2026,10,12,16,0,tzinfo=b.ZoneInfo(b.ZONE));self.assertEqual(self.scheduler.due()[0][0], '2026-10-12/ten-minute/16:00')
-        self.now=dt.datetime(2026,10,12,16,5,tzinfo=b.ZoneInfo(b.ZONE));self.assertEqual(self.scheduler.due()[0][0], '2026-10-12/ten-minute/16:05')
+        self.now=dt.datetime(2026,10,12,16,10,tzinfo=b.ZoneInfo(b.ZONE));self.assertEqual(self.scheduler.due()[0][0], '2026-10-12/ten-minute/16:10')
         self.now=dt.datetime(2026,10,18,16,0,tzinfo=b.ZoneInfo(b.ZONE));self.assertEqual(self.scheduler.due(),[])
         c['weekdays'].append(6);self.store.set(2,c)
         self.assertEqual(self.scheduler.due()[0][0], '2026-10-18/ten-minute/16:00')
@@ -58,6 +58,14 @@ class BellTests(unittest.TestCase):
         with self.assertRaises(ValueError):self.store.set(1,config)
         config['bell_duration_seconds']=31
         with self.assertRaises(ValueError):self.store.set(1,config)
+
+    def test_fractional_timings_survive_save(self):
+        revision,config=self.store.get();config['gap_seconds']=.2;config['bell_duration_seconds']=.1
+        self.store.set(revision,config)
+        self.assertEqual(self.store.get()[1]['gap_seconds'],.2)
+        self.assertEqual(self.store.get()[1]['bell_duration_seconds'],.1)
+        config['bell_duration_seconds']=.09
+        with self.assertRaises(ValueError):b.validate(config)
 
     def test_second_pulse_checks_run_inside_silent_gap(self):
         clock=[10.0];events=[]

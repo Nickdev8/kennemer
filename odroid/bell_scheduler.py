@@ -79,7 +79,7 @@ def pulse(relay, bell_duration_seconds=1, not_before=None):
         off=read_switch(relay)
         if not off:saw_on=True
         elif saw_on:return {'ok':True,'relay':relay['id']}
-        time.sleep(.1)
+        time.sleep(min(.1,bell_duration_seconds/5))
     raise BellError('relay pulse did not complete on then off')
 
 _sequence_lock=threading.Lock()
@@ -178,7 +178,7 @@ def validate(c):
         if isinstance(relay,dict) and set(relay)<={'id','ip'}:relays[index]={'id':relay.get('id')}
         validate_relay(relays[index])
     duration=c.setdefault('bell_duration_seconds',1)
-    if type(duration) is not int or not 1<=duration<=30:raise ValueError('bell_duration_seconds out of range')
+    if type(duration) not in (int,float) or not .1<=duration<=30:raise ValueError('bell_duration_seconds out of range')
     profiles=c.get('profiles')
     if not isinstance(profiles,dict) or set(profiles)!=set(PROFILES):raise ValueError('invalid profiles')
     for name,entries in profiles.items():

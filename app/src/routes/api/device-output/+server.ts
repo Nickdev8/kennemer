@@ -341,6 +341,7 @@ export const GET: RequestHandler = async ({ url }) => {
 	);
 	for (const result of localResults) {
 		if (!directIds.has(result.deviceId)) continue;
+		if (result.state) continue;
 		const control = directControls.find(
 			(c) => c.controlType === 'device' && c.statusdeviceid === result.deviceId
 		);

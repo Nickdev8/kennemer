@@ -21,14 +21,6 @@
 	let editingProfile: ProfileId = 'regular';
 	let editingEntries: TimeEntry[] = [];
 	let revision = 0;
-	let pin = '';
-	let pinEntered = false;
-	$: pinEntered = pin.length > 0;
-
-	let pinVerified = false;
-	let pinCheck = 0;
-	let bellPinPadOpen = false;
-	let bellPinInput: HTMLInputElement;
 	let busy = false;
 	let message = '';
 	let status: Record<string, unknown> | null = null;
@@ -59,7 +51,6 @@
 		{ value: 5, label: 'Za' },
 		{ value: 6, label: 'Zo' }
 	];
-	const bellPinNodes = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
 	$: runningProfile =
 		(status?.paused ?? config?.paused)
@@ -194,8 +185,8 @@
 	function updateGap(value: string) {
 		if (!draftConfig) return;
 		const gap = Number(value);
-		if (Number.isInteger(gap) && gap >= 0 && gap <= 30) {
-			draftConfig = { ...draftConfig, gap_seconds: gap };
+		if (Number.isFinite(gap) && gap >= 0 && gap <= 30) {
+			draftConfig = { ...draftConfig, gap_seconds: Math.round(gap * 10) / 10 };
 			message = '';
 		}
 	}
@@ -203,8 +194,8 @@
 	function updateBellDuration(value: string) {
 		if (!draftConfig) return;
 		const duration = Number(value);
-		if (Number.isInteger(duration) && duration >= 1 && duration <= 30) {
-			draftConfig = { ...draftConfig, bell_duration_seconds: duration };
+		if (Number.isFinite(duration) && duration >= 0.1 && duration <= 30) {
+			draftConfig = { ...draftConfig, bell_duration_seconds: Math.round(duration * 10) / 10 };
 			message = '';
 		}
 	}
@@ -212,92 +203,6 @@
 	function requestId() {
 		const bytes = crypto.getRandomValues(new Uint32Array(4));
 		return Array.from(bytes, (part) => part.toString(16).padStart(8, '0')).join('');
-	}
-
-	function maskedPin(value: string) {
-		return value ? `${'•'.repeat(Math.max(0, value.length - 1))}${value.slice(-1)}` : '';
-	}
-
-	function appendUniquePinDigits(value: string) {
-		for (const digit of value) {
-			if (/\d/.test(digit) && !pin.includes(digit) && pin.length < 10) pin += digit;
-		}
-	}
-
-	function appendBellPinDigit(digit: number) {
-		appendUniquePinDigits(String(digit));
-		pinVerified = false;
-		pinCheck += 1;
-		bellPinInput?.focus({ preventScroll: true });
-	}
-
-	function removeBellPinDigit() {
-		pin = pin.slice(0, -1);
-		pinVerified = false;
-		pinCheck += 1;
-		bellPinInput?.focus({ preventScroll: true });
-	}
-
-	function handlePinInput(event: Event) {
-		const input = event.currentTarget as HTMLInputElement;
-		pinVerified = false;
-		pinCheck += 1;
-		const visibleBeforeInput = maskedPin(pin);
-		const nextValue = input.value;
-
-		if (nextValue.startsWith(visibleBeforeInput)) {
-			appendUniquePinDigits(nextValue.slice(visibleBeforeInput.length));
-		} else if (visibleBeforeInput.startsWith(nextValue)) {
-			pin = pin.slice(0, nextValue.length);
-		} else if (/^\d*$/.test(nextValue)) {
-			pin = '';
-			appendUniquePinDigits(nextValue);
-		}
-
-		input.value = maskedPin(pin);
-		input.setSelectionRange(input.value.length, input.value.length);
-	}
-
-	async function verifyPin() {
-		const candidate = pin;
-		const check = ++pinCheck;
-		if (!candidate) {
-			pinVerified = false;
-			return;
-		}
-		try {
-			const response = await fetch('/api/bells/verify-pin', {
-				method: 'POST',
-				headers: { 'x-kennemer-config-pin': candidate }
-			});
-			if (check === pinCheck && candidate === pin) pinVerified = response.ok;
-		} catch {
-			if (check === pinCheck) pinVerified = false;
-		}
-	}
-
-	function movePinCaretToEnd(event: Event) {
-		const input = event.currentTarget as HTMLInputElement;
-		requestAnimationFrame(() => input.setSelectionRange(input.value.length, input.value.length));
-	}
-
-	function handlePinBlur(event: FocusEvent) {
-		const next = event.relatedTarget;
-		if (next instanceof Element && next.closest('[data-bell-pin-pad]')) return;
-		setTimeout(() => {
-			if (!bellPinPadOpen) return;
-			const focused = document.activeElement;
-			if (focused instanceof Element && focused.closest('[data-bell-pin-entry]')) return;
-			bellPinPadOpen = false;
-			void verifyPin();
-		}, 0);
-	}
-
-	function handleOutsidePinPad(event: PointerEvent) {
-		const target = event.target instanceof Element ? event.target : null;
-		if (!bellPinPadOpen || target?.closest('[data-bell-pin-entry]')) return;
-		bellPinPadOpen = false;
-		void verifyPin();
 	}
 
 	async function read(operation: string) {
@@ -335,26 +240,20 @@
 	}
 
 	async function mutate(operation: string, data: unknown) {
-		if (!pin.trim()) {
-			message = 'Vul de configuratie-PIN in.';
-			return false;
-		}
 		busy = true;
 		message = '';
 		try {
 			const response = await fetch(`/api/bells/${operation}`, {
 				method: 'POST',
-				headers: { 'content-type': 'application/json', 'x-kennemer-config-pin': pin },
+				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify(data)
 			});
 			const result = await response.json();
 			if (!response.ok) throw new Error(result.error ?? result.message ?? 'Actie mislukt.');
-			pinVerified = true;
 			message = operation === 'demo' ? 'Bel gestart.' : '';
 			await refresh(operation !== 'demo');
 			return true;
 		} catch (error) {
-			if (error instanceof Error && error.message.includes('PIN')) pinVerified = false;
 			message = error instanceof Error ? error.message : String(error);
 			return false;
 		} finally {
@@ -406,7 +305,7 @@
 			if (imported.active_profile in profileNames)
 				editingProfile = imported.active_profile as ProfileId;
 			editing = true;
-			message = 'Import geladen. Controleer het rooster en sla op met PIN.';
+			message = 'Import geladen. Controleer het rooster en sla op.';
 		} catch {
 			message = 'Ongeldig roosterbestand.';
 		}
@@ -414,13 +313,11 @@
 
 	onMount(() => {
 		void refresh(true);
-		window.addEventListener('pointerdown', handleOutsidePinPad, true);
 		const timer = setInterval(() => {
 			if (!document.hidden && Date.now() >= retryAfter) void refresh();
 		}, 3000);
 		return () => {
 			clearInterval(timer);
-			window.removeEventListener('pointerdown', handleOutsidePinPad, true);
 		};
 	});
 </script>
@@ -444,14 +341,14 @@
 		<div class="grid grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Belrooster">
 			{#each Object.entries(names) as [id, label]}
 				<label
-					class={`flex min-h-14 items-center gap-2 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-900 ${pinEntered && !busy && !preview ? '' : 'opacity-50'}`}
+					class={`flex min-h-14 items-center gap-2 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-900 ${!busy && !preview ? '' : 'opacity-50'}`}
 				>
 					<input
 						type="radio"
 						name="bell-mode"
 						value={id}
 						checked={selectedMode === id}
-						disabled={busy || preview || !pinEntered}
+						disabled={busy || preview}
 						on:change={() => {
 							selectedMode = id;
 							message = '';
@@ -463,70 +360,20 @@
 		</div>
 
 		<div class="mt-2 flex flex-wrap items-center gap-2">
-			{#if !preview}
-				<div class="bell-pin-entry relative flex items-center gap-2" data-bell-pin-entry>
-					<input
-						bind:this={bellPinInput}
-						class={`min-h-12 w-28 rounded-md border px-3 ${pinVerified ? 'border-emerald-600 bg-emerald-50' : 'border-slate-300'}`}
-						type="text"
-						inputmode="none"
-						autocomplete="off"
-						autocapitalize="off"
-						maxlength="10"
-						placeholder="PIN"
-						aria-label="Configuratie-PIN"
-						value={maskedPin(pin)}
-						on:input={handlePinInput}
-						on:focus={() => {
-							bellPinPadOpen = true;
-						}}
-						on:click={movePinCaretToEnd}
-						on:blur={handlePinBlur}
-					/>
-					{#if !pinEntered}<span class="text-xs text-slate-500">PIN nodig</span>{/if}
-					{#if bellPinPadOpen}
-						<div
-							class="bell-pin-pad absolute top-full left-0 z-30 mt-2 grid grid-cols-3 gap-1 rounded-md border border-slate-300 bg-white p-2 shadow-lg"
-							data-bell-pin-pad
-							role="group"
-							aria-label="PIN-toetsenbord"
-						>
-							{#each bellPinNodes as digit (digit)}
-								<button
-									type="button"
-									aria-label={`PIN ${digit}`}
-									on:click={() => appendBellPinDigit(digit)}>{digit}</button
-								>
-							{/each}
-							<button type="button" aria-label="Laatste cijfer wissen" on:click={removeBellPinDigit}
-								>⌫</button
-							>
-							<button type="button" on:click={() => appendBellPinDigit(0)}>0</button>
-							<button
-								type="button"
-								on:click={() => {
-									bellPinPadOpen = false;
-									void verifyPin();
-								}}>Gereed</button
-							>
-						</div>
-					{/if}
-				</div>
-			{/if}
 			<button
 				class:save-dirty={modeDirty}
-				disabled={busy || preview || !pinEntered || !modeDirty}
+				disabled={busy || preview || !modeDirty}
 				on:click={saveMode}>Opslaan</button
 			>
 			<button
-				disabled={busy || preview || !pinEntered}
+				disabled={busy || preview}
 				on:click={() => mutate('demo', { request_id: requestId(), count: 1 })}>Bel nu 1×</button
 			>
 			<button
-				disabled={busy || preview || !pinEntered}
+				disabled={busy || preview}
 				on:click={() => mutate('demo', { request_id: requestId(), count: 2 })}>Bel nu 2×</button
 			>
-			<button disabled={busy || preview || !pinEntered} on:click={() => (editing = true)}
+			<button disabled={busy || preview} on:click={() => (editing = true)}
 				>Rooster bewerken</button
 			>
 		</div>
@@ -633,7 +480,7 @@
 													aria-label="Kortere pauze"
 													disabled={draftConfig.gap_seconds <= 0 || busy}
 													on:click={() =>
-														updateGap(String(Math.max(0, draftConfig!.gap_seconds - 1)))}>−</button
+														updateGap(String(Math.max(0, draftConfig!.gap_seconds - 0.1)))}>−</button
 												>
 												<input
 													id="bell-gap"
@@ -642,8 +489,8 @@
 													type="number"
 													min="0"
 													max="30"
-													step="1"
-													value={draftConfig.gap_seconds}
+													step="0.1"
+													value={draftConfig.gap_seconds.toFixed(2)}
 													on:input={(event) => updateGap(event.currentTarget.value)}
 												/>
 												<button
@@ -652,7 +499,7 @@
 													aria-label="Langere pauze"
 													disabled={draftConfig.gap_seconds >= 30 || busy}
 													on:click={() =>
-														updateGap(String(Math.min(30, draftConfig!.gap_seconds + 1)))}>+</button
+														updateGap(String(Math.min(30, draftConfig!.gap_seconds + 0.1)))}>+</button
 												>
 												seconden
 											</span>
@@ -664,19 +511,19 @@
 													type="button"
 													class="timing-step"
 													aria-label="Kortere belduur"
-													disabled={draftConfig.bell_duration_seconds <= 1 || busy}
+													disabled={draftConfig.bell_duration_seconds <= 0.1 || busy}
 													on:click={() =>
 														updateBellDuration(
-															String(Math.max(1, draftConfig!.bell_duration_seconds - 1))
+															String(Math.max(0.1, draftConfig!.bell_duration_seconds - 0.1))
 														)}>−</button
 												>
 												<input
 													class="min-h-10 w-16 rounded-md border border-slate-300 px-2 text-slate-900"
 													type="number"
-													min="1"
+													min="0.1"
 													max="30"
-													step="1"
-													value={draftConfig.bell_duration_seconds}
+													step="0.1"
+													value={draftConfig.bell_duration_seconds.toFixed(2)}
 													on:input={(event) => updateBellDuration(event.currentTarget.value)}
 													aria-label="Duur per bel"
 												/>
@@ -687,7 +534,7 @@
 													disabled={draftConfig.bell_duration_seconds >= 30 || busy}
 													on:click={() =>
 														updateBellDuration(
-															String(Math.min(30, draftConfig!.bell_duration_seconds + 1))
+															String(Math.min(30, draftConfig!.bell_duration_seconds + 0.1))
 														)}>+</button
 												>
 												seconden
@@ -735,7 +582,7 @@
 																<TimePicker
 																	value={entry.time}
 																	label={`Tijd ${index + 1}`}
-																	disabled={busy || preview || !pinEntered}
+																	disabled={busy || preview}
 																	on:change={({ detail }) =>
 																		updateTimeEntry(index, { time: detail.value })}
 																/>
@@ -779,7 +626,7 @@
 											bind:value={newBellTime}
 											label="Kies nieuwe beltijd"
 											showLabel
-											disabled={busy || preview || !pinEntered}
+											disabled={busy || preview}
 										/>
 									</div>
 									<select
@@ -790,7 +637,7 @@
 									>
 									<button
 										type="button"
-										disabled={busy || preview || !pinEntered || !validNewTime}
+										disabled={busy || preview || !validNewTime}
 										on:click={addTimeEntry}>Tijd toevoegen</button
 									>
 								</div>
@@ -806,13 +653,13 @@
 					>
 						<button
 							class:save-dirty={rosterDirty}
-							disabled={busy || preview || !pinEntered || !rosterDirty}
+							disabled={busy || preview || !rosterDirty}
 							on:click={save}>Opslaan{rosterDirty ? ' · wijzigingen' : ''}</button
 						>
 						<button disabled={busy} on:click={() => refresh(true)}>Opnieuw laden</button>
 						<button type="button" on:click={download}>Exporteren</button>
 						<button
-							disabled={busy || preview || !pinEntered}
+							disabled={busy || preview}
 							on:click={() => {
 								if (confirm('Vorig rooster herstellen?')) void mutate('restore', { revision });
 							}}>Herstellen</button
@@ -881,13 +728,5 @@
 	.file-button:focus-within {
 		outline: 2px solid #2563eb;
 		outline-offset: 2px;
-	}
-	.bell-pin-pad {
-		width: 12rem;
-	}
-	.bell-pin-pad button {
-		justify-content: center;
-		min-height: 2.75rem;
-		padding: 0.5rem;
 	}
 </style>

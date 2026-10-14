@@ -1,13 +1,13 @@
-import { sceneToggle } from '../src/lib/config/control-helpers';
+import { controlHelpers } from '../src/lib/config/control-presets';
 import type { DashboardControl } from '../src/lib/config/schema';
+
+const { sceneToggle } = controlHelpers({ placement: 'advanced', type: 'Advanced' });
 
 export const advancedControls: DashboardControl[] = [
 	sceneToggle({
 		id: 'advanced-vacantie-begin',
 		label: 'Vakantiemodus',
-		placement: 'advanced',
 		pushNumber: 1,
-		type: 'Advanced',
 		on: '1789564319962',
 		off: '1789565464427',
 		onColor: 'red'
@@ -15,9 +15,7 @@ export const advancedControls: DashboardControl[] = [
 	sceneToggle({
 		id: 'winder-mode',
 		label: 'Wintermodus',
-		placement: 'advanced',
 		pushNumber: 2,
-		type: 'Advanced',
 		on: '',
 		off: '',
 		onColor: 'red',
@@ -26,9 +24,7 @@ export const advancedControls: DashboardControl[] = [
 	sceneToggle({
 		id: 'zomer-mode',
 		label: 'Zomermodus',
-		placement: 'advanced',
 		pushNumber: 3,
-		type: 'Advanced',
 		on: '',
 		off: '',
 		onColor: 'red',

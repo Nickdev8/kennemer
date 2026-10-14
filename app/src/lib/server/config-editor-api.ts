@@ -1,4 +1,3 @@
-import { env } from '$env/dynamic/private';
 import { toPublicControls } from '$lib/config/public-controls';
 import { tabs as defaultTabs } from '$lib/config/registry';
 import { ConfigValidationError } from './config-editor-core';
@@ -18,7 +17,7 @@ export async function configPayload() {
 	const { effective, editor, snapshot } = await readConfigEditorState();
 	return {
 		ok: true,
-		editable: Boolean(env.KENNEMER_CONFIG_EDIT_PIN?.trim()),
+		editable: true,
 		controls: toPublicControls(effective.controls),
 		tabs: effective.tabs,
 		defaultTabs,
@@ -35,16 +34,6 @@ export async function configMutation(
 ) {
 	const eventTimestamp = new Date();
 	const auth = authorizeSceneConfig(request, origin);
-	if (request.headers.get('x-kennemer-config-pin')) {
-		await recordAuditEvent(
-			'pin.entered',
-			{
-				source: 'configuration-editor',
-				accepted: !auth
-			},
-			eventTimestamp
-		);
-	}
 	if (auth) return configJson(auth, auth.status);
 	try {
 		const input: unknown = await request.json();

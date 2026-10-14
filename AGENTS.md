@@ -75,8 +75,8 @@ Additional instructions:
 
 ## Control model
 
-The dashboard is configuration-driven. Main controls live in the array in
-`app/config/devices.ts`; advanced controls live in `app/config/advanced.ts`;
+The dashboard is configuration-driven. Home controls and overwork timers live in
+`app/config/home.ts`; Apparaten controls live in `app/config/devices.ts`; advanced controls live in `app/config/advanced.ts`;
 standalone global scene triggers live in `app/config/triggers.ts`, and default
 dashboard tabs live in `app/config/tabs.ts`. Each control entry selects its
 renderer with `controlType` and records its surface with `placement`.

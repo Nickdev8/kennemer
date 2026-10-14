@@ -14,8 +14,8 @@ the second pulse. Saving a changed duration sets hardware auto-off on both relay
 duration after identity and off-state checks. A failed update restores the
 previous timer settings and leaves the saved roster unchanged. Pulses still
 require matching auto-off timers. The
-temporary ten-minute roster rings at even-minute intervals from 14:00 through
-16:00 inclusive on the selected days. Weekends are available in the editor and
+ten-minute roster rings every ten minutes from 16:00 through
+21:30 inclusive on the selected days. Weekends are available in the editor and
 remain off unless selected.
 
 The committed `bell-defaults.json` supplies the initial roster. The live roster

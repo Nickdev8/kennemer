@@ -134,9 +134,11 @@
 
 	async function save() {
 		try {
+			if (!config) return;
 			const next = JSON.parse(draft) as Config;
-			next.paused = selectedMode === 'off';
-			next.active_profile = selectedMode === 'off' ? config?.active_profile ?? 'regular' : selectedMode;
+			// Saving roster times must not implicitly apply an uncommitted mode choice.
+			next.paused = config.paused;
+			next.active_profile = config.active_profile;
 			await mutate('config', { revision, config: next });
 		} catch {
 			message = 'Ongeldige JSON. Concept bewaard.';

@@ -267,7 +267,10 @@ class Handler(BaseHTTPRequestHandler):
                 if d.get('revision')!=rev:raise Conflict()
                 if self.path=='/restore':
                     backup=json.loads(store.path.with_suffix(store.path.suffix+'.bak').read_text())
-                    c=backup['config'];c['paused']=True
+                    restored=backup['config']
+                    restored['paused']=c['paused']
+                    restored['active_profile']=c['active_profile']
+                    c=restored
                 else:c['paused']=self.path=='/pause'
                 if self.path=='/resume' and os.environ.get('KENNEMER_BELL_LIVE')=='1':
                     for relay in RELAYS:relay_ready(relay)

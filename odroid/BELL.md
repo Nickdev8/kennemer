@@ -32,7 +32,8 @@ All requests require `x-kennemer-maintenance-token` matching the token in
 - `GET /config` returns `{revision, config}`.
 - `POST /config` accepts `{revision, config}`. A stale revision returns 409.
 - `POST /pause`, `/resume`, `/restore` accept `{revision}`. Restore applies the
-  previous saved configuration and pauses it.
+  previous saved roster while preserving the current mode. Only an explicit
+  mode save changes the active profile or pauses the roster.
 - `POST /demo` accepts `{request_id, count: 1|2}` and returns 202 immediately.
   Poll `/status` for the outcome. Reusing an ID does not ring again.
 

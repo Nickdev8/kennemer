@@ -25,6 +25,20 @@ explicitly with `sudo update-bell-roster apply`; this prints the roster diff,
 updates schedule settings, and preserves the current mode. It does not trigger
 an immediate bell.
 
+Use `sudo update-bell-roster push` to publish the saved server schedule to
+`origin/main`. It prints the diff, creates a commit containing only
+`odroid/bell-defaults.json`, and pushes from a temporary checkout based on the
+latest remote main. It exports days, times, gap and duration; remote default
+mode and relay IDs are preserved. The production checkout, staging area and
+live mode stay intact. This does not deploy or ring the bells.
+
+The ODROID needs configured Git `user.name` and `user.email`, plus existing
+credentials with write access to origin. Push shares the deployment lock and
+never force-pushes. If the remote rejects the push, the local commit is retained
+under `refs/kennemer/bell-roster-pending/`; resolve access or remote changes and
+run the command again. Offline coverage: `python3 odroid/test-bell-roster.py`
+uses disposable repositories and a local bare remote.
+
 Each occurrence is claimed in SQLite before contacting relays. A restart,
 failed response, or lost response cannot repeat that occurrence. Missed events
 are skipped. The host waits for `timedatectl` synchronization; a wall-clock

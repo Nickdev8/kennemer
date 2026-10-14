@@ -68,11 +68,13 @@ def relay_ready(relay, bell_duration_seconds=1):
 def read_switch(relay):
     d=rpc(relay,'Switch.GetStatus',{'id':0}); return d.get('output') is False
 
-def pulse(relay, bell_duration_seconds=1):
+def pulse(relay, bell_duration_seconds=1, not_before=None):
     relay_ready(relay,bell_duration_seconds)
     if not read_switch(relay): raise BellError('relay is not off before pulse')
+    if not_before is not None:
+        time.sleep(max(0,not_before-time.monotonic()))
     rpc(relay,'Switch.Set',{'id':0,'on':True,'toggle_after':bell_duration_seconds})
-    deadline=time.monotonic()+max(2.0,bell_duration_seconds+1.0); saw_on=False
+    deadline=time.monotonic()+bell_duration_seconds+TIMEOUT+.5; saw_on=False
     while time.monotonic()<deadline:
         off=read_switch(relay)
         if not off:saw_on=True
@@ -85,7 +87,7 @@ def fire(count,gap,simulation=False,bell_duration_seconds=1,relays=None):
     relays=relays or RELAYS
     if count not in (1,2): raise BellError('count must be one or two')
     if not _sequence_lock.acquire(blocking=False): return {'ok':False,'error':'bell sequence already active'}
-    outcomes=[]
+    outcomes=[]; not_before=None
     try:
       for i in range(count):
         if simulation: result={'ok':True,'simulated':True,'relays':[{'ok':True,'relay':r['id'],'simulated':True} for r in relays]}
@@ -93,14 +95,19 @@ def fire(count,gap,simulation=False,bell_duration_seconds=1,relays=None):
             # Both relays receive each pulse concurrently; preserve partial results.
             out=[None,None]
             def run(i,relay):
-                try: out[i]=pulse(relay,bell_duration_seconds)
+                try:
+                    out[i]=pulse(relay,bell_duration_seconds) if not_before is None else pulse(relay,bell_duration_seconds,not_before=not_before)
                 except Exception as exc: out[i]={'ok':False,'error':str(exc)}
             ts=[threading.Thread(target=run,args=(j,r),daemon=True) for j,r in enumerate(relays)]
             [t.start() for t in ts]; [t.join() for t in ts]
             result={'ok':all(x is not None and x.get('ok') for x in out),'relays':out}
         outcomes.append(result)
         if not result['ok']: break
-        if i+1<count: time.sleep(gap)
+        if i+1<count:
+            # Start the silent gap only after both outputs are verified off.
+            # The next pulse's checks run during that gap, not after it.
+            if simulation: time.sleep(gap)
+            else: not_before=time.monotonic()+gap
       return {'ok':len(outcomes)==count and all(x['ok'] for x in outcomes),'pulses':outcomes}
     finally:_sequence_lock.release()
 

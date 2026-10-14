@@ -5,7 +5,8 @@ This directory is the maintainer-facing source for dashboard controls. Follow
 
 ## Files
 
-- `devices.ts`: the editable main-placement control array.
+- `devices.ts`: the Home controls and shared main-placement controls.
+- `apparaten.ts`: all controls shown on the Apparaten tab.
 - `advanced.ts`: the editable advanced-placement control array.
 - `triggers.ts`: standalone scene triggers, currently including **ALLES UIT**.
 - `tabs.ts`: the default dashboard tabs and their order.
@@ -145,8 +146,10 @@ transport and direct-device identity remain server-owned. Run validate:config.
 Keep the main source array sorted by pushNumber (1–9) for editing. Runtime
 layout still uses pushNumber; reordering source must not change mappings.
 
-Apparaten controls belong in devices.ts, including direct controls and scene
-triggers. Color spare's physical inventory stays in registry.ts. The commented
+Apparaten controls belong in apparaten.ts, including direct controls and scene
+triggers. The local `directDevice()` helper defaults to a direct toggle, its
+status ID, Dutch on/off labels, and green/white colors; entries only need an ID,
+label, position, and Shelly output ID. Color spare's physical inventory stays in registry.ts. The commented
 apparaten-scene-1 entry is a fill-in template: set label/sceneId/enabled,
 uncomment it, and copy it with a unique ID and devices-tab position. Apparaten displays nine
 controls per page ordered by pushNumber; its pager never executes a scene.

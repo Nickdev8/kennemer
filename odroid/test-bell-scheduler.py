@@ -15,8 +15,8 @@ class BellTests(unittest.TestCase):
         self.now=dt.datetime(2026,10,12,8,10,tzinfo=b.ZoneInfo(b.ZONE));self.scheduler.clock=lambda:self.now
         self.scheduler.synchronized=lambda:True
     def test_rosters_and_double(self):
-        _,c=self.store.get();self.assertEqual(c['profiles']['regular'][0],'08:10x2');self.assertEqual(len(c['profiles']['ten-minute']),61)
-        self.assertEqual(c['profiles']['ten-minute'][0],'14:00');self.assertEqual(c['profiles']['ten-minute'][-1],'16:00')
+        _,c=self.store.get();self.assertEqual(c['profiles']['regular'][0],'08:10x2');self.assertEqual(len(c['profiles']['ten-minute']),25)
+        self.assertEqual(c['profiles']['ten-minute'][0],'16:00');self.assertEqual(c['profiles']['ten-minute'][-1],'18:00')
         c['paused']=False;self.store.set(1,c)
         self.assertEqual(self.scheduler.due()[0][1],2)
     def test_off_mode_has_no_due_bell(self):
@@ -25,11 +25,11 @@ class BellTests(unittest.TestCase):
         self.assertTrue(config['paused'])
     def test_weekends_and_ten_minute_active_profile(self):
         _,c=self.store.get();c['paused']=False;c['active_profile']='ten-minute';self.store.set(1,c)
-        self.now=dt.datetime(2026,10,12,14,0,tzinfo=b.ZoneInfo(b.ZONE));self.assertEqual(self.scheduler.due()[0][0], '2026-10-12/ten-minute/14:00')
-        self.now=dt.datetime(2026,10,12,14,2,tzinfo=b.ZoneInfo(b.ZONE));self.assertEqual(self.scheduler.due()[0][0], '2026-10-12/ten-minute/14:02')
-        self.now=dt.datetime(2026,10,18,14,0,tzinfo=b.ZoneInfo(b.ZONE));self.assertEqual(self.scheduler.due(),[])
+        self.now=dt.datetime(2026,10,12,16,0,tzinfo=b.ZoneInfo(b.ZONE));self.assertEqual(self.scheduler.due()[0][0], '2026-10-12/ten-minute/16:00')
+        self.now=dt.datetime(2026,10,12,16,5,tzinfo=b.ZoneInfo(b.ZONE));self.assertEqual(self.scheduler.due()[0][0], '2026-10-12/ten-minute/16:05')
+        self.now=dt.datetime(2026,10,18,16,0,tzinfo=b.ZoneInfo(b.ZONE));self.assertEqual(self.scheduler.due(),[])
         c['weekdays'].append(6);self.store.set(2,c)
-        self.assertEqual(self.scheduler.due()[0][0], '2026-10-18/ten-minute/14:00')
+        self.assertEqual(self.scheduler.due()[0][0], '2026-10-18/ten-minute/16:00')
     def test_revision_conflict_backup_and_restore(self):
         _,c=self.store.get();c['gap_seconds']=2;self.assertEqual(self.store.set(1,c),2)
         with self.assertRaises(b.Conflict):self.store.set(1,c)
@@ -58,6 +58,25 @@ class BellTests(unittest.TestCase):
         with self.assertRaises(ValueError):self.store.set(1,config)
         config['bell_duration_seconds']=31
         with self.assertRaises(ValueError):self.store.set(1,config)
+
+    def test_second_pulse_checks_run_inside_silent_gap(self):
+        clock=[10.0];events=[]
+        def ready(relay,duration):
+            events.append(('check',clock[0]));clock[0]+=1
+        def sleep(seconds):clock[0]+=seconds
+        def rpc(relay,method,params):events.append(('ring',clock[0],params['toggle_after']))
+        with patch.object(b,'relay_ready',side_effect=ready),patch.object(b,'read_switch',side_effect=[True,False,True]),patch.object(b,'rpc',side_effect=rpc),patch.object(b.time,'monotonic',side_effect=lambda:clock[0]),patch.object(b.time,'sleep',side_effect=sleep):
+            self.assertTrue(b.pulse(b.RELAYS[0],3,not_before=15)['ok'])
+        self.assertEqual(events,[('check',10.0),('ring',15.0,3)])
+
+    def test_double_gap_deadline_follows_completion_for_each_duration(self):
+        for duration,gap in [(1,0),(3,2),(10,5)]:
+            calls=[]
+            def pulse(relay,length,not_before=None):
+                calls.append((length,not_before));return {'ok':True,'relay':relay['id']}
+            with patch.object(b,'pulse',side_effect=pulse),patch.object(b.time,'monotonic',return_value=100):
+                self.assertTrue(b.fire(2,gap,bell_duration_seconds=duration)['ok'])
+            self.assertEqual(calls,[(duration,None)]*2+[(duration,100+gap)]*2)
     def test_duration_save_updates_both_hardware_timers_without_pulsing(self):
         revision,config=self.store.get();config['bell_duration_seconds']=3
         calls=[]

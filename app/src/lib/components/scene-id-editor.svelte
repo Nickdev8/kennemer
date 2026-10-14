@@ -111,7 +111,7 @@
 	async function loadBellRelays() {
 		try {
 			const response = await fetch('/api/bells/config', { cache: 'no-store' });
-			if (!response.ok) return;
+			if (!response.ok) throw new Error('Bell config unavailable');
 			const payload = await response.json();
 			bellRelayIds = (payload.config.relays ?? []).map((relay: { id: string }) => relay.id);
 			originalBellRelayIds = [...bellRelayIds];
@@ -388,8 +388,8 @@
 						}}>Import annuleren</button
 					>
 				{:else}
+					<h3>Schoolbel relais</h3>
 					{#if bellRelayIds.length === 2}
-						<h3>Schoolbel relais</h3>
 						<div class="tab-row">
 							{#each bellRelayIds as id, index}
 								<label
@@ -412,6 +412,9 @@
 							disabled={saving || !bellRelaysEditable || !bellRelaysDirty || !bellRelayIdsValid}
 							on:click={() => requestOperation('bell-relays')}>Belrelais opslaan</button
 						>
+					{:else}
+						<p>Belrelais konden niet worden geladen.</p>
+						<button type="button" on:click={loadBellRelays}>Opnieuw laden</button>
 					{/if}
 					<h3>Tabs</h3>
 					{#each tabs as tab, index (tab.id)}

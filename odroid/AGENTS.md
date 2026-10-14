@@ -164,6 +164,13 @@ pass the tested target hash as `KENNEMER_BUILD_COMMIT`; retain health/rollback.
 `kennemer-bell.service` runs independently of the app and kiosk. Its SQLite
 ledger and API are in `bell_scheduler.py`; roster defaults are in
 `bell-defaults.json`. Read `BELL.md` for installation and commissioning.
-The link installer installs the unit link but does not enable or start it.
+The link installer installs the unit link and restarts an already active bell
+service; it does not enable or start an inactive service.
 Never perform a live pulse as a test; use the isolated simulation and the
 offline suite. The service starts paused until both relay settings are verified.
+
+`update-bell-roster check|apply|push` compares schedules, applies deployed
+defaults, or exports the saved schedule as a commit to origin/main. Push uses
+a temporary worktree and the update lock; it preserves production HEAD, index,
+live mode and relay IDs. Git identity and remote write access must be configured.
+Test push only against the disposable local remote in test-bell-roster.py.

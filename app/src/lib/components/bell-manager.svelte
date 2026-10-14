@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
+	import TimePicker from './time-picker.svelte';
 
 	type Config = {
 		paused: boolean;
@@ -96,7 +97,8 @@
 				weekday: 'short',
 				hour: '2-digit',
 				minute: '2-digit',
-				timeZone: 'Europe/Amsterdam'
+				timeZone: 'Europe/Amsterdam',
+				hourCycle: 'h23'
 			}).format(new Date(event.at)) + (event.count === 2 ? ' · 2×' : '')
 		);
 	}
@@ -536,7 +538,7 @@
 			>
 				<div class="absolute inset-0 bg-white" aria-hidden="true"></div>
 				<div
-					class="relative flex max-h-[calc(100vh-1.5rem)] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-slate-300 bg-white shadow-xl sm:max-h-[calc(100vh-3rem)]"
+					class="relative flex h-full w-full flex-col overflow-hidden rounded-lg border border-slate-300 bg-white shadow-xl"
 					role="dialog"
 					aria-modal="true"
 					aria-labelledby="bell-editor-title"
@@ -694,6 +696,10 @@
 									</div>
 								</div>
 
+								<p class="text-sm text-slate-600">
+									Dubbele bel: {draftConfig.bell_duration_seconds} s bel → {draftConfig.gap_seconds} s stilte → {draftConfig.bell_duration_seconds} s bel.
+								</p>
+
 								<div class="flex items-end justify-between gap-3 border-t border-slate-200 pt-3">
 									<div>
 										<h4 class="text-base font-semibold text-slate-900">Beltijden</h4>
@@ -726,13 +732,12 @@
 															<div
 																class="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1 rounded bg-slate-50 px-2"
 															>
-																<input
-																	class="min-h-11 min-w-0 rounded-md border-0 bg-transparent px-1 text-base font-medium text-slate-900 focus:outline-2 focus:outline-blue-600"
-																	type="time"
-																	aria-label={`Tijd ${index + 1}`}
+																<TimePicker
 																	value={entry.time}
-																	on:change={(event) =>
-																		updateTimeEntry(index, { time: event.currentTarget.value })}
+																	label={`Tijd ${index + 1}`}
+																	disabled={busy || preview || !pinEntered}
+																	on:change={({ detail }) =>
+																		updateTimeEntry(index, { time: detail.value })}
 																/>
 																<select
 																	class="min-h-10 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-800"
@@ -769,24 +774,14 @@
 									<p class="text-sm text-slate-600">Geen belmomenten in dit rooster.</p>
 								{/if}
 								<div class="flex flex-wrap items-end gap-2 border-t border-slate-200 pt-3">
-									<label class="text-sm font-medium"
-										>Nieuwe tijd<input
-											class="mt-1 block min-h-12 w-28 rounded-md border border-slate-300 px-3"
-											type="text"
-											placeholder="HH:MM"
-											maxlength="5"
+									<div class="w-40">
+										<TimePicker
 											bind:value={newBellTime}
-											aria-label="Nieuwe beltijd"
-										/></label
-									>
-									<label class="text-sm font-medium"
-										>Tijdkiezer<input
-											class="mt-1 block min-h-12 rounded-md border border-slate-300 px-3"
-											type="time"
-											bind:value={newBellTime}
-											aria-label="Kies nieuwe beltijd"
-										/></label
-									>
+											label="Kies nieuwe beltijd"
+											showLabel
+											disabled={busy || preview || !pinEntered}
+										/>
+									</div>
 									<select
 										class="min-h-12 rounded-md border border-slate-300 px-3"
 										bind:value={newBellCount}

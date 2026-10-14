@@ -11,12 +11,14 @@
 	export let trigger: ShellyTrigger;
 	export let cardNumber: number | undefined = undefined;
 	export let loadingTriggerIds: ReadonlySet<string> = new Set();
+	let showPressedFeedback = false;
 
 	const dispatch = createEventDispatcher<{
 		trigger: { triggerId: string };
 	}>();
 
 	$: isLoading = loadingTriggerIds.has(trigger.id);
+	$: showLoadingFeedback = showPressedFeedback;
 	$: isConfigured =
 		trigger.enabled !== false && Boolean(trigger.sceneId?.trim()) && !/^0+$/.test(trigger.sceneId);
 	$: triggerColor = resolveControlColor(trigger.color);
@@ -26,6 +28,10 @@
 
 	function handleTrigger() {
 		if (!isConfigured) return;
+		showPressedFeedback = true;
+		window.setTimeout(() => {
+			showPressedFeedback = false;
+		}, 500);
 		dispatch('trigger', { triggerId: trigger.id });
 	}
 </script>
@@ -54,7 +60,7 @@
 		<span class="pointer-events-none text-center">
 			{isConfigured ? trigger.label : 'Niet ingesteld'}
 		</span>
-		{#if isLoading}
+		{#if showLoadingFeedback}
 			<span
 				class="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-slate-900/60 text-sm font-semibold text-white"
 			>

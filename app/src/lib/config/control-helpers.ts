@@ -37,6 +37,27 @@ export function sceneToggle(
 		}
 	};
 }
+export function sceneDualButton(
+	options: Omit<DeviceControl, 'commands' | 'controlType' | 'buttonMode' | 'type' | 'stateless'> & {
+		on: string;
+		off: string;
+		onColor?: string;
+		offColor?: string;
+	}
+): DeviceControl {
+	const { on, off, onColor = 'green', offColor = 'white', ...metadata } = options;
+	return {
+		...metadata,
+		type: 'Scene',
+		controlType: 'device',
+		buttonMode: 'dual',
+		stateless: true,
+		commands: {
+			on: sceneCommand(on, { label: 'Aan', color: onColor }),
+			off: sceneCommand(off, { label: 'Uit', color: offColor })
+		}
+	};
+}
 export function sceneButton(
 	options: Omit<DeviceControl, 'commands' | 'controlType' | 'buttonMode' | 'type'> & {
 		sceneId: string;

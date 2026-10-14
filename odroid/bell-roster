@@ -1,17 +1,25 @@
 #!/usr/bin/env python3
-"""Compare or explicitly apply committed bell roster defaults on the ODROID."""
+"""Compare, apply, or push saved bell schedules on the ODROID."""
 
+import copy
+import fcntl
+import os
+import subprocess
+import tempfile
 import difflib
 import json
 import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
+from bell_scheduler import validate
 
 
 REPO = Path(__file__).resolve().parents[1]
 DEFAULTS_FILE = REPO / "odroid" / "bell-defaults.json"
 ENV_FILE = REPO / "app" / ".env"
+UPDATE_LOCK = Path("/run/lock/kennemer-update.lock")
+ROSTER_PATH = "odroid/bell-defaults.json"
 CONFIG_URL = "http://127.0.0.1:8788/config"
 SCHEDULE_FIELDS = ("timezone", "weekdays", "gap_seconds", "bell_duration_seconds", "profiles")
 
@@ -52,7 +60,7 @@ def request_json(method="GET", body=None):
             "x-kennemer-maintenance-token": token,
         },
     )
-    with urllib.request.urlopen(request, timeout=5) as response:
+    with urllib.request.urlopen(request, timeout=60 if method == "POST" else 5) as response:
         result = json.load(response)
     if not isinstance(result, dict):
         raise RuntimeError("Bell service returned invalid JSON")
@@ -73,7 +81,7 @@ def difference_names(defaults, current):
     return differences
 
 
-def print_differences(defaults, current, differences):
+def print_differences(defaults, current, differences, before_label="server", after_label="deployed-git"):
     def emit(line):
         if not sys.stdout.isatty():
             print(line)
@@ -99,15 +107,15 @@ def print_differences(defaults, current, differences):
         for line in difflib.unified_diff(
             old_lines,
             new_lines,
-            fromfile=f"server/{name}",
-            tofile=f"deployed-git/{name}",
+            fromfile=f"{before_label}/{name}",
+            tofile=f"{after_label}/{name}",
             lineterm="",
         ):
             emit(line)
 
 
-def load_defaults():
-    with DEFAULTS_FILE.open(encoding="utf-8") as source:
+def load_defaults(path=None):
+    with (path or DEFAULTS_FILE).open(encoding="utf-8") as source:
         defaults = json.load(source)
     if not isinstance(defaults, dict) or not isinstance(defaults.get("profiles"), dict):
         raise RuntimeError("Committed bell defaults are invalid")
@@ -133,6 +141,7 @@ def check():
     warning("saved bell roster differs from deployed Git defaults: " + ", ".join(differences))
     print_differences(defaults, current, differences)
     print("To apply the committed schedule while preserving the current mode, run: sudo update-bell-roster apply")
+    print("To commit the saved server schedule to origin/main, run: sudo update-bell-roster push")
     return 1
 
 
@@ -160,14 +169,95 @@ def apply():
     return 0
 
 
+class GitCommandError(RuntimeError):
+    pass
+
+
+def git(*arguments, cwd=None, optional=False):
+    try:
+        result = subprocess.run(
+            ['git', *arguments], cwd=cwd or REPO,
+            env={**os.environ, 'GIT_TERMINAL_PROMPT': '0'},
+            capture_output=True, text=True, timeout=120,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise GitCommandError(f'Git {arguments[0]} timed out.') from error
+    if result.returncode and not optional:
+        message = f'Git {arguments[0]} failed.'
+        if arguments[0] in ('fetch', 'push'):
+            message += ' Check the configured origin and Git credentials; push requires write access.'
+        raise GitCommandError(message)
+    return result.stdout.strip() if result.returncode == 0 else ''
+
+
+def push():
+    with UPDATE_LOCK.open('a') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise RuntimeError('Another Kennemer update or roster push is running. Try again when it finishes.') from error
+        _, live = load_live_config()
+        live = copy.deepcopy(live)
+        validate(live)
+        git('fetch', '--no-tags', 'origin', 'refs/heads/main:refs/remotes/origin/main')
+        remote_commit = git('rev-parse', 'refs/remotes/origin/main')
+        with tempfile.TemporaryDirectory(prefix='kennemer-bell-push-') as directory:
+            worktree = Path(directory) / 'checkout'
+            git('worktree', 'add', '--detach', str(worktree), remote_commit)
+            try:
+                target = worktree / ROSTER_PATH
+                if target.is_symlink():
+                    raise RuntimeError('Bell defaults must be a regular repository file.')
+                defaults = load_defaults(target)
+                differences = difference_names(live, defaults)
+                if not differences:
+                    print('Remote bell defaults already match the saved schedule.')
+                    return 0
+                updated = copy.deepcopy(defaults)
+                for field in SCHEDULE_FIELDS:
+                    updated[field] = live[field]
+                validate(copy.deepcopy(updated))
+                print_differences(live, defaults, differences, before_label='remote', after_label='server')
+                for name in ('user.name', 'user.email'):
+                    if not git('config', '--get', name, cwd=worktree, optional=True):
+                        raise RuntimeError(f'Configure Git {name} on the ODROID before pushing a roster.')
+                _, latest = load_live_config()
+                if difference_names(live, latest):
+                    raise RuntimeError('The saved schedule changed during export. Run update-bell-roster push again.')
+                target.write_text(json.dumps(updated, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+                git('add', '--', ROSTER_PATH, cwd=worktree)
+                if git('diff', '--cached', '--name-only', cwd=worktree) != ROSTER_PATH:
+                    raise RuntimeError('Unexpected files staged for the roster commit.')
+                git('commit', '-m', 'Save bell roster from dashboard', cwd=worktree)
+                commit = git('rev-parse', 'HEAD', cwd=worktree)
+                pending_ref = f'refs/kennemer/bell-roster-pending/{commit}'
+                git('update-ref', pending_ref, commit)
+                if git('diff-tree', '--no-commit-id', '--name-only', '-r', commit, cwd=worktree) != ROSTER_PATH:
+                    raise RuntimeError(f'Unexpected files in roster commit {commit[:12]}; nothing was pushed.')
+                try:
+                    git('push', 'origin', 'HEAD:refs/heads/main', cwd=worktree)
+                except GitCommandError:
+                    warning(f'Roster commit {commit[:12]} was saved locally, but the push failed. Run update-bell-roster push again after resolving Git access or remote changes.')
+                    raise
+                git('update-ref', '-d', pending_ref)
+                print(f'Bell roster committed and pushed to origin/main: {commit[:12]}')
+                print('Current bell mode and production checkout are unchanged.')
+                return 0
+            finally:
+                try:
+                    git('worktree', 'remove', '--force', str(worktree))
+                except GitCommandError:
+                    warning(f'Could not remove temporary roster worktree: {worktree}')
+
+
 def main():
-    if len(sys.argv) != 2 or sys.argv[1] not in ("check", "apply"):
-        print("Usage: bell-roster check|apply", file=sys.stderr)
+    if len(sys.argv) != 2 or sys.argv[1] not in ("check", "apply", "push"):
+        print("Usage: bell-roster check|apply|push", file=sys.stderr)
         return 2
     try:
-        return check() if sys.argv[1] == "check" else apply()
+        return {"check": check, "apply": apply, "push": push}[sys.argv[1]]()
     except (OSError, ValueError, RuntimeError, urllib.error.URLError, urllib.error.HTTPError) as error:
-        warning(f"could not check bell roster: {type(error).__name__}")
+        warning(str(error) if isinstance(error, RuntimeError) else f"Bell roster command failed: {type(error).__name__}")
         return 2
 
 

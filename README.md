@@ -69,6 +69,12 @@ wijzigingen worden op de ODROID bewaard in
 update. Alleen bestaande scène-ID's kunnen worden aangepast; de endpoint en
 Shelly-sleutel blijven serverconfiguratie.
 
+Het opgeslagen belrooster blijft los van Git bewaard. Gebruik
+`sudo update-bell-roster apply` om het rooster uit de gedeployde code toe te
+passen, of `sudo update-bell-roster push` om het opgeslagen serverrooster als
+commit naar `origin/main` te sturen. Beide behouden de huidige belmodus.
+Voor push zijn Git-auteursgegevens en schrijfrechten op de remote nodig.
+
 Gestarte overwerktimers blijven zichtbaar wanneer het paneel wordt gesloten en
 opnieuw geopend. De app bewaart de eindtijd van actieve timers in runtime-
 opslag. Bedieningsacties, PIN-uitkomsten en wijzigingen in de bediening worden

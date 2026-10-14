@@ -1517,7 +1517,8 @@
 				weekday: 'short',
 				hour: '2-digit',
 				minute: '2-digit',
-				timeZone: 'Europe/Amsterdam'
+				timeZone: 'Europe/Amsterdam',
+				hourCycle: 'h23'
 			}).format(new Date(event.at)) + (event.count === 2 ? ' · 2×' : '')
 		);
 	}

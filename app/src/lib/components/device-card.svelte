@@ -18,7 +18,7 @@
 	const cardCustomClass = 'bg-white';
 
 	const baseButtonClass =
-		'relative flex w-full items-center justify-center rounded-lg border px-5 py-6 text-xl font-semibold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 min-h-[4rem]';
+		'relative flex w-full items-center justify-center rounded-lg border-2 px-5 py-6 text-xl font-semibold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 min-h-[4rem]';
 	const buttonOnIdleClass = 'border border-emerald-500 bg-white text-slate-700';
 	const buttonOffIdleClass = 'border border-rose-500 bg-white text-slate-700';
 	const buttonOnProminentClass =

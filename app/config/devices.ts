@@ -94,35 +94,8 @@ export const devices: DashboardControl[] = [
 		on: '1789557426197',
 		off: '1789557375466'
 	}),
-	{
-		id: 'color-spare-051026',
-		label: 'Color spare 051026',
-		controlType: 'device',
-		placement: 'main',
-		tabId: 'devices',
-		pushNumber: 1,
-		type: 'Direct',
-		buttonMode: 'toggle',
-		directDeviceId: '90706948e37c',
-		statusdeviceid: '90706948e37c',
-		enabled: true,
-		commands: {
-			on: { label: 'Aan', color: 'green', configured: true },
-			off: { label: 'Uit', color: 'white', configured: true }
-		}
-	},
-	/*
-	{
-		id: 'paars',
-		label: 'SCÈNENAAM',
-		controlType: 'trigger',
-		placement: 'main',
-		tabId: 'devices',
-		pushNumber: 2,
-		sceneId: '1763038295754',
-		enabled: false
-	},
-	*/
+
+
 	{
 		controlType: 'timed-trigger',
 		placement: 'main',
@@ -158,5 +131,5 @@ export const devices: DashboardControl[] = [
 		buttonLabel: 'Start timer',
 		activeDurationMs: 14_400_000,
 		sceneId: '1789568570313'
-	}
+	},
 ];

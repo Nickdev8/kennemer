@@ -1554,15 +1554,19 @@
 				<h1 class="text-2xl font-semibold text-slate-900">Shelly-bediening</h1>
 			</div>
 			<div class="flex flex-wrap items-center justify-end gap-3">
-				{#if selectedTab === 'home' && data.mode !== 'mock' && bellHeaderStatus}
+				{#if selectedTab === 'home' && (data.mode === 'mock' || bellHeaderStatus)}
 					<div class="text-right" aria-label="Schoolbel">
 						<p class="text-xs font-medium text-slate-500">Volgende bel</p>
 						<p class="text-sm font-semibold text-slate-800">
-							{bellHeaderStatus.paused
-								? 'Uit'
-								: bellHeaderStatus.next_event
-									? formatHeaderBellTime(bellHeaderStatus.next_event)
-									: 'onbekend'}
+							{#if data.mode === 'mock'}
+								<span class="text-slate-500">Lokaal voorbeeld</span>
+							{:else if bellHeaderStatus?.paused}
+								Uit
+							{:else if bellHeaderStatus?.next_event}
+								{formatHeaderBellTime(bellHeaderStatus.next_event)}
+							{:else}
+								onbekend
+							{/if}
 						</p>
 					</div>
 				{/if}

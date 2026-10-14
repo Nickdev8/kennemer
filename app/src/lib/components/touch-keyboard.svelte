@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
 	import 'simple-keyboard/build/css/index.css';
-	import Keyboard from 'simple-keyboard';
 	import type SimpleKeyboard from 'simple-keyboard';
 	import type { KeyboardLayoutObject } from 'simple-keyboard';
 
@@ -108,26 +107,34 @@
 
 	onMount(() => {
 		mobileBrowser = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+		let disposed = false;
 		if (!mobileBrowser) {
-			keyboard = new Keyboard(keyboardElement, {
-				layout: keyboardLayouts,
-				layoutName: layout,
-				theme: 'hg-theme-default kennemer-touch-keyboard',
-				display: {
-					'{bksp}': '⌫',
-					'{done}': 'Gereed',
-					'{enter}': '↵',
-					'{shift}': '⇧',
-					'{symbols}': '?123',
-					'{abc}': 'ABC',
-					'{space}': 'Spatie'
-				},
-				useButtonTag: true,
-				autoUseTouchEvents: true,
-				preventMouseDownDefault: true,
-				stopMouseDownPropagation: true,
-				disableButtonHold: true,
-				onKeyPress: press
+			void import('simple-keyboard')
+				.then(({ default: Keyboard }) => {
+					if (disposed || !keyboardElement) return;
+					keyboard = new Keyboard(keyboardElement, {
+						layout: keyboardLayouts,
+						layoutName: layout,
+					theme: 'hg-theme-default kennemer-touch-keyboard',
+						display: {
+							'{bksp}': '⌫',
+							'{done}': 'Gereed',
+							'{enter}': '↵',
+							'{shift}': '⇧',
+							'{symbols}': '?123',
+							'{abc}': 'ABC',
+							'{space}': 'Spatie'
+						},
+						useButtonTag: true,
+						autoUseTouchEvents: true,
+						preventMouseDownDefault: true,
+						stopMouseDownPropagation: true,
+						disableButtonHold: true,
+						onKeyPress: press
+					});
+				})
+				.catch(() => {
+					if (!disposed) visible = false;
 			});
 		}
 		const onPointerDown = (event: PointerEvent) => {
@@ -149,6 +156,7 @@
 		window.addEventListener('focusin', onFocusIn, true);
 		window.addEventListener('keydown', onKeyDown, true);
 		return () => {
+			disposed = true;
 			keyboard?.destroy();
 			keyboard = null;
 			window.removeEventListener('pointerdown', onPointerDown, true);
@@ -165,7 +173,6 @@
 	role="group"
 	aria-label="Schermtoetsenbord"
 	aria-hidden={!visible || mobileBrowser}
-	on:pointerdown|preventDefault
 >
 	<div class="mx-auto max-w-5xl">
 		<div class="mb-2 flex items-center justify-between px-1 text-sm text-slate-600">

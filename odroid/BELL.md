@@ -8,14 +8,27 @@ auto-off settings; they never ring the bells. Select one of four modes in the da
 10-minutenbel, or Uit. Uit pauses automatic bells.
 
 Regular and short rosters are copied from the school email in `todo.md`.
+Each sequence completes both relays' identity, timer and off-state checks before
+releasing the ON requests together. A failed preflight excludes that relay;
+the healthy relay still runs. No failed command is retried.
+SQLite event outcomes include per-relay UTC `preflight_started_at`, `ready_at`,
+`command_sent_at`, `command_acknowledged_at`, `on_observed_at`,
+`off_observed_at` and, on failure, `failed_at`. Each pulse also records
+`command_dispatch_skew_ms` using the host monotonic clock. These measure host
+dispatch and status observations, not exact physical contact switching times.
+Older events retain their original outcomes without these timestamps.
+Double bells reuse the first pulse's preflight; its successful OFF observations
+establish readiness for the second pulse. The pause contains no repeated
+identity/settings requests. Second-pulse logs mark `preflight_reused_from_pulse: 1`
+and still include their own command and ON/OFF observation timestamps.
 A double entry such as `08:10x2` sends a pulse for the configured bell duration,
 waits until both relays are off, then waits the configured silent gap and sends
 the second pulse. Saving a changed duration sets hardware auto-off on both relays to the same
 duration after identity and off-state checks. A failed update restores the
 previous timer settings and leaves the saved roster unchanged. Pulses still
 require matching auto-off timers. The
-ten-minute roster rings every ten minutes from 16:00 through
-21:30 inclusive on the selected days. Weekends are available in the editor and
+temporary ten-minute roster rings every odd minute from 17:01 through
+19:59 inclusive on the selected days. Weekends are available in the editor and
 remain off unless selected.
 
 The committed `bell-defaults.json` supplies the initial roster. The live roster

@@ -68,17 +68,30 @@ def relay_ready(relay, bell_duration_seconds=1):
 def read_switch(relay):
     d=rpc(relay,'Switch.GetStatus',{'id':0}); return d.get('output') is False
 
-def pulse(relay, bell_duration_seconds=1, not_before=None):
-    relay_ready(relay,bell_duration_seconds)
+def prepare_pulse(relay, duration, trace):
+    trace['preflight_started_at']=utcnow()
+    relay_ready(relay,duration)
     if not read_switch(relay): raise BellError('relay is not off before pulse')
-    if not_before is not None:
-        time.sleep(max(0,not_before-time.monotonic()))
+    trace['ready_at']=utcnow()
+
+
+def pulse(relay, bell_duration_seconds=1, not_before=None, prepared=False, trace=None):
+    trace=trace if trace is not None else {}
+    if not prepared:prepare_pulse(relay,bell_duration_seconds,trace)
+    if not_before is not None:time.sleep(max(0,not_before-time.monotonic()))
+    trace['command_sent_at']=utcnow()
+    trace['command_sent_monotonic']=time.monotonic()
     rpc(relay,'Switch.Set',{'id':0,'on':True,'toggle_after':bell_duration_seconds})
+    trace['command_acknowledged_at']=utcnow()
     deadline=time.monotonic()+bell_duration_seconds+TIMEOUT+.5; saw_on=False
     while time.monotonic()<deadline:
         off=read_switch(relay)
-        if not off:saw_on=True
-        elif saw_on:return {'ok':True,'relay':relay['id']}
+        if not off:
+            if not saw_on:trace['on_observed_at']=utcnow()
+            saw_on=True
+        elif saw_on:
+            trace['off_observed_at']=utcnow()
+            return {'ok':True,'relay':relay['id'],**trace}
         time.sleep(min(.1,bell_duration_seconds/5))
     raise BellError('relay pulse did not complete on then off')
 
@@ -92,20 +105,34 @@ def fire(count,gap,simulation=False,bell_duration_seconds=1,relays=None):
       for i in range(count):
         if simulation: result={'ok':True,'simulated':True,'relays':[{'ok':True,'relay':r['id'],'simulated':True} for r in relays]}
         else:
-            # Both relays receive each pulse concurrently; preserve partial results.
-            out=[None,None]
-            def run(i,relay):
-                try:
-                    out[i]=pulse(relay,bell_duration_seconds) if not_before is None else pulse(relay,bell_duration_seconds,not_before=not_before)
-                except Exception as exc: out[i]={'ok':False,'error':str(exc)}
-            ts=[threading.Thread(target=run,args=(j,r),daemon=True) for j,r in enumerate(relays)]
-            [t.start() for t in ts]; [t.join() for t in ts]
-            result={'ok':all(x is not None and x.get('ok') for x in out),'relays':out}
+            out=[None for _ in relays]; traces=[{} for _ in relays]
+            def prepare(j,relay):
+                try:prepare_pulse(relay,bell_duration_seconds,traces[j])
+                except Exception as exc:out[j]={'ok':False,'relay':relay['id'],'error':str(exc),'failed_at':utcnow(),**traces[j]}
+            if i==0:
+                checks=[threading.Thread(target=prepare,args=(j,r),daemon=True) for j,r in enumerate(relays)]
+                [t.start() for t in checks]; [t.join() for t in checks]
+            else:
+                # First-pulse success already verifies both outputs returned off.
+                traces=[{'preflight_reused_from_pulse':1} for _ in relays]
+            # Complete initial preflight before releasing any ON request. A failed
+            # relay never starts late; healthy siblings still provide redundancy.
+            start=threading.Event()
+            def run(j,relay):
+                start.wait()
+                try:out[j]=pulse(relay,bell_duration_seconds,prepared=True,trace=traces[j])
+                except Exception as exc:out[j]={'ok':False,'relay':relay['id'],'error':str(exc),'failed_at':utcnow(),**traces[j]}
+            workers=[threading.Thread(target=run,args=(j,r),daemon=True) for j,r in enumerate(relays) if out[j] is None]
+            [t.start() for t in workers]
+            if not_before is not None:time.sleep(max(0,not_before-time.monotonic()))
+            start.set()
+            [t.join() for t in workers]
+            sent=[x.pop('command_sent_monotonic') for x in out if 'command_sent_monotonic' in x]
+            result={'ok':all(x.get('ok') for x in out),'relays':out,
+                    'command_dispatch_skew_ms':round((max(sent)-min(sent))*1000,3) if len(sent)>1 else None}
         outcomes.append(result)
         if not result['ok']: break
         if i+1<count:
-            # Start the silent gap only after both outputs are verified off.
-            # The next pulse's checks run during that gap, not after it.
             if simulation: time.sleep(gap)
             else: not_before=time.monotonic()+gap
       return {'ok':len(outcomes)==count and all(x['ok'] for x in outcomes),'pulses':outcomes}

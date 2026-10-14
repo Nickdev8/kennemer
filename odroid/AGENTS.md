@@ -168,6 +168,9 @@ The link installer installs the unit link and restarts an already active bell
 service; it does not enable or start an inactive service.
 Never perform a live pulse as a test; use the isolated simulation and the
 offline suite. The service starts paused until both relay settings are verified.
+Relay preflights finish before a shared ON dispatch gate. Event outcomes retain
+individual UTC command/observation/failure timestamps and monotonic dispatch
+skew; healthy siblings still execute if another relay fails preflight.
 
 `update-bell-roster check|apply|push` compares schedules, applies deployed
 defaults, or exports the saved schedule as a commit to origin/main. Push uses

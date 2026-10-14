@@ -15,8 +15,8 @@ class BellTests(unittest.TestCase):
         self.now=dt.datetime(2026,10,12,8,10,tzinfo=b.ZoneInfo(b.ZONE));self.scheduler.clock=lambda:self.now
         self.scheduler.synchronized=lambda:True
     def test_rosters_and_double(self):
-        _,c=self.store.get();self.assertEqual(c['profiles']['regular'][0],'08:10x2');self.assertEqual(len(c['profiles']['ten-minute']),34)
-        self.assertEqual(c['profiles']['ten-minute'][0],'16:00');self.assertEqual(c['profiles']['ten-minute'][-1],'21:30')
+        _,c=self.store.get();self.assertEqual(c['profiles']['regular'][0],'08:10x2');self.assertEqual(len(c['profiles']['ten-minute']),90)
+        self.assertEqual(c['profiles']['ten-minute'][0],'17:01');self.assertEqual(c['profiles']['ten-minute'][-1],'19:59')
         c['paused']=False;self.store.set(1,c)
         self.assertEqual(self.scheduler.due()[0][1],2)
     def test_off_mode_has_no_due_bell(self):
@@ -25,11 +25,11 @@ class BellTests(unittest.TestCase):
         self.assertTrue(config['paused'])
     def test_weekends_and_ten_minute_active_profile(self):
         _,c=self.store.get();c['paused']=False;c['active_profile']='ten-minute';self.store.set(1,c)
-        self.now=dt.datetime(2026,10,12,16,0,tzinfo=b.ZoneInfo(b.ZONE));self.assertEqual(self.scheduler.due()[0][0], '2026-10-12/ten-minute/16:00')
-        self.now=dt.datetime(2026,10,12,16,10,tzinfo=b.ZoneInfo(b.ZONE));self.assertEqual(self.scheduler.due()[0][0], '2026-10-12/ten-minute/16:10')
-        self.now=dt.datetime(2026,10,18,16,0,tzinfo=b.ZoneInfo(b.ZONE));self.assertEqual(self.scheduler.due(),[])
+        self.now=dt.datetime(2026,10,12,17,1,tzinfo=b.ZoneInfo(b.ZONE));self.assertEqual(self.scheduler.due()[0][0], '2026-10-12/ten-minute/17:01')
+        self.now=dt.datetime(2026,10,12,17,3,tzinfo=b.ZoneInfo(b.ZONE));self.assertEqual(self.scheduler.due()[0][0], '2026-10-12/ten-minute/17:03')
+        self.now=dt.datetime(2026,10,18,17,1,tzinfo=b.ZoneInfo(b.ZONE));self.assertEqual(self.scheduler.due(),[])
         c['weekdays'].append(6);self.store.set(2,c)
-        self.assertEqual(self.scheduler.due()[0][0], '2026-10-18/ten-minute/16:00')
+        self.assertEqual(self.scheduler.due()[0][0], '2026-10-18/ten-minute/17:01')
     def test_revision_conflict_backup_and_restore(self):
         _,c=self.store.get();c['gap_seconds']=2;self.assertEqual(self.store.set(1,c),2)
         with self.assertRaises(b.Conflict):self.store.set(1,c)
@@ -41,7 +41,7 @@ class BellTests(unittest.TestCase):
         seq=iter([{'ok':True,'relay':'a'}, {'ok':False,'error':'timeout'}])
         with patch.object(b,'relay_ready',return_value={}),patch.object(b,'read_switch',return_value=True),patch.object(b,'rpc',return_value={}):
             # Verify sibling relay threads both attempt pulse and aggregate partial failure.
-            with patch.object(b,'pulse',side_effect=lambda r,duration: next(seq)):
+            with patch.object(b,'pulse',side_effect=lambda r,duration,**kwargs: next(seq)):
                 result=b.fire(1,1)
         self.assertFalse(result['ok']);self.assertEqual(len(result['pulses'][0]['relays']),2)
 
@@ -51,6 +51,41 @@ class BellTests(unittest.TestCase):
             self.assertTrue(b.pulse(relay,3)['ok'])
         ready.assert_called_once_with(relay,3)
         rpc.assert_called_once_with(relay,'Switch.Set',{'id':0,'on':True,'toggle_after':3})
+    def test_slow_relay_preflight_cannot_dispatch_after_fast_relay(self):
+        slow_entered=threading.Event();fast_ready=threading.Event();release=threading.Event();sent=threading.Event()
+        result=[];reads={r['id']:0 for r in b.RELAYS}
+        def ready(relay,duration):
+            if relay==b.RELAYS[1]:
+                slow_entered.set()
+                if not release.wait(2):raise RuntimeError('test release timed out')
+        def read(relay):
+            reads[relay['id']]+=1
+            if reads[relay['id']]==1 and relay==b.RELAYS[0]:fast_ready.set()
+            return reads[relay['id']]!=2
+        def rpc(*args):sent.set();return {}
+        with patch.object(b,'relay_ready',side_effect=ready),patch.object(b,'read_switch',side_effect=read),patch.object(b,'rpc',side_effect=rpc):
+            worker=threading.Thread(target=lambda:result.append(b.fire(1,1)))
+            worker.start()
+            try:
+                self.assertTrue(slow_entered.wait(2));self.assertTrue(fast_ready.wait(2))
+                self.assertFalse(sent.is_set())
+            finally:release.set();worker.join(3)
+        self.assertFalse(worker.is_alive());self.assertTrue(result[0]['ok'])
+        outcome=result[0]['pulses'][0]
+        self.assertIsNotNone(outcome['command_dispatch_skew_ms'])
+        for relay in outcome['relays']:
+            for key in ['preflight_started_at','ready_at','command_sent_at','command_acknowledged_at','on_observed_at','off_observed_at']:
+                self.assertIsNotNone(dt.datetime.fromisoformat(relay[key]).tzinfo)
+
+    def test_preflight_failure_keeps_identity_timestamp_and_healthy_relay(self):
+        def ready(relay,duration):
+            if relay==b.RELAYS[1]:raise b.BellError('unavailable')
+        with patch.object(b,'relay_ready',side_effect=ready),patch.object(b,'read_switch',return_value=True),patch.object(b,'pulse',return_value={'ok':True}) as pulsed:
+            result=b.fire(1,1)
+        self.assertFalse(result['ok']);pulsed.assert_called_once()
+        failure=result['pulses'][0]['relays'][1]
+        self.assertEqual(failure['relay'],b.RELAYS[1]['id'])
+        self.assertIn('failed_at',failure);self.assertNotIn('command_sent_at',failure)
 
     def test_duration_bounds_and_legacy_default(self):
         _,config=self.store.get();self.assertEqual(config['bell_duration_seconds'],1)
@@ -80,11 +115,27 @@ class BellTests(unittest.TestCase):
     def test_double_gap_deadline_follows_completion_for_each_duration(self):
         for duration,gap in [(1,0),(3,2),(10,5)]:
             calls=[]
-            def pulse(relay,length,not_before=None):
-                calls.append((length,not_before));return {'ok':True,'relay':relay['id']}
-            with patch.object(b,'pulse',side_effect=pulse),patch.object(b.time,'monotonic',return_value=100):
+            def pulse(relay,length,**kwargs):
+                calls.append(length);return {'ok':True,'relay':relay['id']}
+            with patch.object(b,'prepare_pulse') as prepare,patch.object(b,'pulse',side_effect=pulse),patch.object(b.time,'monotonic',return_value=100),patch.object(b.time,'sleep') as sleep:
                 self.assertTrue(b.fire(2,gap,bell_duration_seconds=duration)['ok'])
-            self.assertEqual(calls,[(duration,None)]*2+[(duration,100+gap)]*2)
+            self.assertEqual(calls,[duration]*4)
+            self.assertEqual(prepare.call_count,2)
+            sleep.assert_called_once_with(gap)
+    def test_double_checks_once_but_verifies_both_pulses(self):
+        reads={r['id']:0 for r in b.RELAYS}
+        def read(relay):
+            reads[relay['id']]+=1
+            return reads[relay['id']] not in (2,4)
+        with patch.object(b,'relay_ready') as ready,patch.object(b,'read_switch',side_effect=read),patch.object(b,'rpc') as rpc,patch.object(b.time,'sleep'):
+            result=b.fire(2,.1)
+        self.assertTrue(result['ok']);self.assertEqual(ready.call_count,2)
+        self.assertEqual(rpc.call_count,4)
+        self.assertEqual(list(reads.values()),[5,5])
+        for relay in result['pulses'][1]['relays']:
+            self.assertEqual(relay['preflight_reused_from_pulse'],1)
+            self.assertNotIn('preflight_started_at',relay)
+            self.assertIn('on_observed_at',relay);self.assertIn('off_observed_at',relay)
     def test_duration_save_updates_both_hardware_timers_without_pulsing(self):
         revision,config=self.store.get();config['bell_duration_seconds']=3
         calls=[]

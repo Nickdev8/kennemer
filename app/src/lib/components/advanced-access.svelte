@@ -8,6 +8,10 @@
 	export let appendAdvancedPinDigit: (node: number) => void;
 	export let clearAdvancedPin: () => void;
 	export let submitAdvancedPin: () => void;
+
+	$: maskedPin = advancedPin
+		? `${'•'.repeat(Math.max(0, advancedPin.length - 1))}${advancedPin.slice(-1)}`
+		: '—';
 </script>
 
 <div
@@ -43,17 +47,20 @@
 			</p>
 		{/if}
 		<div
+			class="flex min-h-9 items-center justify-center rounded-md bg-slate-50 font-mono text-base tracking-[0.25em] text-slate-700"
+			aria-label="PIN ingevoerd"
+			aria-live="polite"
+		>
+			{maskedPin}
+		</div>
+		<div
 			class="grid grid-cols-3 justify-items-center gap-4 select-none"
 			aria-label="PIN-toetsenbord"
 		>
 			{#each pinNodes as node (node)}
 				<button
 					type="button"
-					class={`flex h-16 w-16 items-center justify-center rounded-full border-2 text-lg font-semibold transition-colors ${
-						advancedPin.includes(String(node))
-							? 'border-slate-800 bg-slate-800 text-white'
-							: 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100'
-					} ${node === 0 ? 'col-span-3 justify-self-center' : ''}`}
+					class={`flex h-16 w-16 items-center justify-center rounded-full border-2 border-slate-300 bg-white text-lg font-semibold text-slate-600 transition-colors hover:bg-slate-100 ${node === 0 ? 'col-span-3 justify-self-center' : ''}`}
 					aria-label={`PIN ${node}`}
 					on:click={() => appendAdvancedPinDigit(node)}
 				>

@@ -63,6 +63,39 @@
 		return Array.from(bytes, (part) => part.toString(16).padStart(8, '0')).join('');
 	}
 
+	function maskedPin(value: string) {
+		return value ? `${'•'.repeat(Math.max(0, value.length - 1))}${value.slice(-1)}` : '';
+	}
+
+	function appendUniquePinDigits(value: string) {
+		for (const digit of value) {
+			if (/\d/.test(digit) && !pin.includes(digit)) pin += digit;
+		}
+	}
+
+	function handlePinInput(event: Event) {
+		const input = event.currentTarget as HTMLInputElement;
+		const visibleBeforeInput = maskedPin(pin);
+		const nextValue = input.value;
+
+		if (nextValue.startsWith(visibleBeforeInput)) {
+			appendUniquePinDigits(nextValue.slice(visibleBeforeInput.length));
+		} else if (visibleBeforeInput.startsWith(nextValue)) {
+			pin = pin.slice(0, nextValue.length);
+		} else if (/^\d*$/.test(nextValue)) {
+			pin = '';
+			appendUniquePinDigits(nextValue);
+		}
+
+		input.value = maskedPin(pin);
+		input.setSelectionRange(input.value.length, input.value.length);
+	}
+
+	function movePinCaretToEnd(event: Event) {
+		const input = event.currentTarget as HTMLInputElement;
+		requestAnimationFrame(() => input.setSelectionRange(input.value.length, input.value.length));
+	}
+
 	function outcomeCount(relayId: string) {
 		return (outcome?.pulses ?? []).filter((pulse) =>
 			pulse.relays?.some((relay) => relay.relay === relayId && relay.ok)
@@ -207,7 +240,7 @@
 
 		<div class="mt-2 flex flex-wrap items-center gap-2">
 			{#if !preview}
-				<input class="min-h-12 w-28 rounded-md border border-slate-300 px-3" type="password" autocomplete="off" placeholder="PIN" aria-label="Configuratie-PIN" bind:value={pin} />
+				<input class="min-h-12 w-28 rounded-md border border-slate-300 px-3" type="text" inputmode="numeric" autocomplete="off" autocapitalize="off" maxlength="10" placeholder="PIN" aria-label="Configuratie-PIN" value={maskedPin(pin)} on:input={handlePinInput} on:focus={movePinCaretToEnd} on:click={movePinCaretToEnd} />
 			{/if}
 			<button disabled={busy || preview || !modeDirty} on:click={saveMode}>Opslaan</button>
 			<button disabled={busy || preview} on:click={() => mutate('demo', { request_id: requestId(), count: 1 })}>Bel nu 1×</button>

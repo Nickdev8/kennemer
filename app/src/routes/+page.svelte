@@ -1018,8 +1018,9 @@
 	}
 
 	function appendAdvancedPinDigit(digit: number) {
-		if (advancedPin.length >= 32) return;
-		advancedPin += String(digit);
+		const value = String(digit);
+		if (advancedPin.length >= 32 || advancedPin.includes(value)) return;
+		advancedPin += value;
 		advancedAccessError = '';
 		markAdvancedActivity();
 	}

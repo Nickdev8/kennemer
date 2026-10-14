@@ -9,7 +9,7 @@ roster. Select one of four modes in the dashboard: Regulier, Verkort,
 Regular and short rosters are copied from the school email in `todo.md`.
 A double entry such as `08:10x2` sends one 1-second pulse, waits until both
 relays are off, then waits a 1-second silent gap and sends the second pulse.
-The ten-minute roster rings every weekday from 16:00 through 21:30 inclusive
+The ten-minute roster rings every weekday from 12:00 through 21:30 inclusive
 while that profile is active. Weekends never ring.
 
 Each occurrence is claimed in SQLite before contacting relays. A restart,

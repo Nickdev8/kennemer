@@ -13,7 +13,7 @@ class BellTests(unittest.TestCase):
         self.now=dt.datetime(2026,10,12,8,10,tzinfo=b.ZoneInfo(b.ZONE));self.scheduler.clock=lambda:self.now
         self.scheduler.synchronized=lambda:True
     def test_rosters_and_double(self):
-        _,c=self.store.get();self.assertEqual(c['profiles']['regular'][0],'08:10x2');self.assertEqual(len(c['profiles']['ten-minute']),34)
+        _,c=self.store.get();self.assertEqual(c['profiles']['regular'][0],'08:10x2');self.assertEqual(len(c['profiles']['ten-minute']),58)
         c['paused']=False;self.store.set(1,c)
         self.assertEqual(self.scheduler.due()[0][1],2)
     def test_off_mode_has_no_due_bell(self):
@@ -22,7 +22,7 @@ class BellTests(unittest.TestCase):
         self.assertTrue(config['paused'])
     def test_weekends_and_ten_minute_active_profile(self):
         _,c=self.store.get();c['paused']=False;c['active_profile']='ten-minute';self.store.set(1,c)
-        self.now=dt.datetime(2026,10,12,16,0,tzinfo=b.ZoneInfo(b.ZONE));self.assertEqual(self.scheduler.due()[0][0], '2026-10-12/ten-minute/16:00')
+        self.now=dt.datetime(2026,10,12,12,0,tzinfo=b.ZoneInfo(b.ZONE));self.assertEqual(self.scheduler.due()[0][0], '2026-10-12/ten-minute/12:00')
         self.now=dt.datetime(2026,10,18,16,0,tzinfo=b.ZoneInfo(b.ZONE));self.assertEqual(self.scheduler.due(),[])
     def test_revision_conflict_backup_and_restore(self):
         _,c=self.store.get();c['gap_seconds']=2;self.assertEqual(self.store.set(1,c),2)

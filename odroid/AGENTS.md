@@ -122,9 +122,10 @@ The web image runs on the current Node.js 24 LTS line. Its default self-signed
 HTTPS certificate is generated at container start and renewed when it has less
 than 30 days remaining. Mounted certificates are left unchanged.
 
-The scheduled timer runs around 03:00 with a randomized delay. A manual update
-and a timer update must not be able to corrupt each other; preserve systemd's
-single-unit execution semantics.
+The scheduled timer runs around 03:00 with a randomized delay. `odroid/update`
+holds the shared `/run/lock/kennemer-update.lock` for both manual and service
+invocations; the service must call that script directly. Preserve this lock so
+overlapping builds cannot share the candidate worktree.
 
 ## Validation
 

@@ -6,7 +6,7 @@ Requires=docker.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/flock --nonblock /run/lock/kennemer-update.lock /usr/local/sbin/kennemer-update
+ExecStart=/usr/local/sbin/kennemer-update
 Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7

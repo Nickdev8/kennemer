@@ -69,6 +69,7 @@ if [[ "$current_commit" == "$target_commit" ]]; then
 	log "No new commit; nothing to deploy"
 	/usr/local/sbin/kennemer-wait-ready
 	restart_screen
+	"$REPO/odroid/bell-roster" check || true
 	exit 0
 fi
 
@@ -118,4 +119,5 @@ printf '%s\n' "$target_commit" > /var/lib/kennemer/last-successful-commit
 docker builder prune --force --filter 'until=168h'
 docker image prune --force --filter 'until=168h'
 restart_screen
+"$REPO/odroid/bell-roster" check || true
 log "Deployment completed successfully"

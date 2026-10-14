@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+"""Compare or explicitly apply committed bell roster defaults on the ODROID."""
+
+import json
+import sys
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+
+REPO = Path(__file__).resolve().parents[1]
+DEFAULTS_FILE = REPO / "odroid" / "bell-defaults.json"
+ENV_FILE = REPO / "app" / ".env"
+CONFIG_URL = "http://127.0.0.1:8788/config"
+SCHEDULE_FIELDS = ("timezone", "weekdays", "gap_seconds", "profiles")
+
+
+def warning(text):
+    if sys.stdout.isatty():
+        print(f"\033[1;33mWARNING: {text}\033[0m")
+    else:
+        print(f"WARNING: {text}")
+
+
+def maintenance_token():
+    for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line.startswith("export "):
+            line = line[7:].lstrip()
+        key, separator, value = line.partition("=")
+        if separator and key.strip() == "KENNEMER_MAINTENANCE_TOKEN":
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+                value = value[1:-1]
+            return value
+    return ""
+
+
+def request_json(method="GET", body=None):
+    token = maintenance_token()
+    if not token:
+        raise RuntimeError("KENNEMER_MAINTENANCE_TOKEN is missing from app/.env")
+    data = json.dumps(body).encode() if body is not None else None
+    request = urllib.request.Request(
+        CONFIG_URL,
+        data=data,
+        method=method,
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "x-kennemer-maintenance-token": token,
+        },
+    )
+    with urllib.request.urlopen(request, timeout=5) as response:
+        result = json.load(response)
+    if not isinstance(result, dict):
+        raise RuntimeError("Bell service returned invalid JSON")
+    return result
+
+
+def difference_names(defaults, current):
+    differences = []
+    for field in SCHEDULE_FIELDS:
+        expected = defaults.get(field)
+        actual = current.get(field)
+        if field == "profiles" and isinstance(expected, dict) and isinstance(actual, dict):
+            for profile in sorted(set(expected) | set(actual)):
+                if expected.get(profile) != actual.get(profile):
+                    differences.append(f"profiles.{profile}")
+        elif expected != actual:
+            differences.append(field)
+    return differences
+
+
+def load_defaults():
+    with DEFAULTS_FILE.open(encoding="utf-8") as source:
+        defaults = json.load(source)
+    if not isinstance(defaults, dict) or not isinstance(defaults.get("profiles"), dict):
+        raise RuntimeError("Committed bell defaults are invalid")
+    return defaults
+
+
+def load_live_config():
+    result = request_json()
+    config = result.get("config")
+    revision = result.get("revision")
+    if not isinstance(config, dict) or not isinstance(revision, int):
+        raise RuntimeError("Bell service returned an invalid configuration")
+    return revision, config
+
+
+def check():
+    defaults = load_defaults()
+    _, current = load_live_config()
+    differences = difference_names(defaults, current)
+    if not differences:
+        print("Bell roster matches the deployed Git defaults.")
+        return 0
+    warning("saved bell roster differs from deployed Git defaults: " + ", ".join(differences))
+    print("To apply the committed schedule while preserving the current mode, run: sudo update-bell-roster")
+    return 1
+
+
+def apply():
+    defaults = load_defaults()
+    revision, current = load_live_config()
+    differences = difference_names(defaults, current)
+    if not differences:
+        print("Bell roster already matches the deployed Git defaults.")
+        return 0
+
+    updated = dict(current)
+    for field in SCHEDULE_FIELDS:
+        updated[field] = defaults[field]
+    result = request_json("POST", {"revision": revision, "config": updated})
+    if result.get("ok") is not True:
+        raise RuntimeError("Bell service did not save the roster")
+
+    _, verified = load_live_config()
+    if difference_names(defaults, verified):
+        raise RuntimeError("Saved roster still differs from the committed defaults")
+    mode = "Uit" if verified.get("paused") else verified.get("active_profile")
+    print(f"Bell schedule updated; mode remains {mode}.")
+    return 0
+
+
+def main():
+    if len(sys.argv) != 2 or sys.argv[1] not in ("check", "apply"):
+        print("Usage: bell-roster check|apply", file=sys.stderr)
+        return 2
+    try:
+        return check() if sys.argv[1] == "check" else apply()
+    except (OSError, ValueError, RuntimeError, urllib.error.URLError, urllib.error.HTTPError) as error:
+        warning(f"could not check bell roster: {type(error).__name__}")
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

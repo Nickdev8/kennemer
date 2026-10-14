@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Compare or explicitly apply committed bell roster defaults on the ODROID."""
 
+import difflib
 import json
 import sys
 import urllib.error
@@ -72,6 +73,39 @@ def difference_names(defaults, current):
     return differences
 
 
+def print_differences(defaults, current, differences):
+    def emit(line):
+        if not sys.stdout.isatty():
+            print(line)
+        elif line.startswith("+") and not line.startswith("+++"):
+            print(f"\033[32m{line}\033[0m")
+        elif line.startswith("-") and not line.startswith("---"):
+            print(f"\033[31m{line}\033[0m")
+        elif line.startswith(("+++", "---", "@@")):
+            print(f"\033[36m{line}\033[0m")
+        else:
+            print(line)
+
+    for name in differences:
+        if name.startswith("profiles."):
+            profile = name.partition(".")[2]
+            before = current.get("profiles", {}).get(profile)
+            after = defaults.get("profiles", {}).get(profile)
+        else:
+            before = current.get(name)
+            after = defaults.get(name)
+        old_lines = json.dumps(before, ensure_ascii=False, indent=2, sort_keys=True).splitlines()
+        new_lines = json.dumps(after, ensure_ascii=False, indent=2, sort_keys=True).splitlines()
+        for line in difflib.unified_diff(
+            old_lines,
+            new_lines,
+            fromfile=f"server/{name}",
+            tofile=f"deployed-git/{name}",
+            lineterm="",
+        ):
+            emit(line)
+
+
 def load_defaults():
     with DEFAULTS_FILE.open(encoding="utf-8") as source:
         defaults = json.load(source)
@@ -97,7 +131,8 @@ def check():
         print("Bell roster matches the deployed Git defaults.")
         return 0
     warning("saved bell roster differs from deployed Git defaults: " + ", ".join(differences))
-    print("To apply the committed schedule while preserving the current mode, run: sudo update-bell-roster")
+    print_differences(defaults, current, differences)
+    print("To apply the committed schedule while preserving the current mode, run: sudo update-bell-roster apply")
     return 1
 
 
@@ -109,6 +144,7 @@ def apply():
         print("Bell roster already matches the deployed Git defaults.")
         return 0
 
+    print_differences(defaults, current, differences)
     updated = dict(current)
     for field in SCHEDULE_FIELDS:
         updated[field] = defaults[field]

@@ -15,8 +15,9 @@ while that profile is active. Weekends never ring.
 The committed `bell-defaults.json` supplies the initial roster. The live roster
 is saved separately in SQLite, so `update` compares its schedule fields with
 the deployed defaults and prints a warning when they differ. Apply them
-explicitly with `sudo update-bell-roster`; this updates schedule settings and
-preserves the current mode. It does not trigger an immediate bell.
+explicitly with `sudo update-bell-roster apply`; this prints the roster diff,
+updates schedule settings, and preserves the current mode. It does not trigger
+an immediate bell.
 
 Each occurrence is claimed in SQLite before contacting relays. A restart,
 failed response, or lost response cannot repeat that occurrence. Missed events

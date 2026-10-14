@@ -152,6 +152,7 @@
 	let loadingCommandKeys = new Set<string>();
 	let errorMsg = '';
 	let deviceActionErrors = new Map<string, string>();
+	let deviceActionErrorTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 	let advancedErrorMsg = '';
 	let advancedStatusMsg = '';
 	let deviceStates = new Map<string, DeviceCommandKey>(
@@ -689,10 +690,24 @@
 		if (confirmedIds.size) {
 			const nextActionErrors = new Map(deviceActionErrors);
 			for (const device of allDevices) {
-				if (confirmedIds.has(device.statusdeviceid?.trim() ?? '')) nextActionErrors.delete(device.id);
+				if (!confirmedIds.has(device.statusdeviceid?.trim() ?? '')) continue;
+				nextActionErrors.delete(device.id);
+				const timeout = deviceActionErrorTimeouts.get(device.id);
+				if (timeout) clearTimeout(timeout);
+				deviceActionErrorTimeouts.delete(device.id);
 			}
 			deviceActionErrors = nextActionErrors;
 		}
+	}
+
+	function clearDeviceActionError(deviceId: string) {
+		const timeout = deviceActionErrorTimeouts.get(deviceId);
+		if (timeout) clearTimeout(timeout);
+		deviceActionErrorTimeouts.delete(deviceId);
+		if (!deviceActionErrors.has(deviceId)) return;
+		const next = new Map(deviceActionErrors);
+		next.delete(deviceId);
+		deviceActionErrors = next;
 	}
 
 	async function refreshStatusDevices(ids = statusDeviceIds) {
@@ -800,9 +815,7 @@
 		}
 		const key = commandKey(deviceId, command);
 		loadingCommandKeys = new Set([...loadingCommandKeys, key]);
-		const nextActionErrors = new Map(deviceActionErrors);
-		nextActionErrors.delete(deviceId);
-		deviceActionErrors = nextActionErrors;
+		clearDeviceActionError(deviceId);
 		errorMsg = '';
 		advancedErrorMsg = '';
 		let succeeded = false;
@@ -829,14 +842,10 @@
 			const error = err as Error & { code?: string };
 			const detail =
 				error?.code === 'TIMEOUT'
-					? 'Geen antwoord van apparaat.'
+					? 'Apparaat reageert niet.'
 					: error instanceof Error
 						? error.message
 						: 'Onbekende fout';
-			errorMsg =
-					error?.code === 'TIMEOUT'
-						? 'Shelly antwoordde niet. Controleer de lampstatus voordat u opnieuw drukt.'
-						: detail;
 			const nextErrors = new Map(deviceActionErrors);
 			nextErrors.set(
 				deviceId,
@@ -845,8 +854,13 @@
 					: detail
 			);
 			deviceActionErrors = nextErrors;
+			const existingTimeout = deviceActionErrorTimeouts.get(deviceId);
+			if (existingTimeout) clearTimeout(existingTimeout);
+			deviceActionErrorTimeouts.set(
+				deviceId,
+				setTimeout(() => clearDeviceActionError(deviceId), 8000)
+			);
 			if (device.statusdeviceid) startStatusFollowup(device.statusdeviceid);
-			advancedErrorMsg = errorMsg;
 		} finally {
 			const nextLoadingCommandKeys = new Set(loadingCommandKeys);
 			nextLoadingCommandKeys.delete(key);
@@ -1568,6 +1582,8 @@
 		pauseIdleSensitivePolling();
 		transientActiveTimeouts.forEach((timeout) => clearTimeout(timeout));
 		transientActiveTimeouts.clear();
+		deviceActionErrorTimeouts.forEach((timeout) => clearTimeout(timeout));
+		deviceActionErrorTimeouts.clear();
 		triggerActiveTimeouts.forEach((timeout) => clearTimeout(timeout));
 		triggerActiveTimeouts.clear();
 		clearUpdatePoll();

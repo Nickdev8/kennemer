@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { BellRing } from 'lucide-svelte';
 
 	type Config = {
 		paused: boolean;
@@ -30,6 +29,8 @@
 	let pin = '';
 	let pinVerified = false;
 	let pinCheck = 0;
+	let bellPinPadOpen = false;
+	let bellPinInput: HTMLInputElement;
 	let busy = false;
 	let message = '';
 	let status: Record<string, unknown> | null = null;
@@ -59,6 +60,7 @@
 		{ value: 3, label: 'Do' },
 		{ value: 4, label: 'Vr' }
 	];
+	const bellPinNodes = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
 	$: nextBell = status?.next_event as BellEvent | null;
 	$: editingEntries = (draftConfig?.profiles?.[editingProfile] ?? []).map(parseTimeEntry);
@@ -87,6 +89,10 @@
 
 	function serializeTimeEntry(entry: TimeEntry) {
 		return entry.count === 2 ? `${entry.time}x2` : entry.time;
+	}
+
+	function hourEntryCount(hour: string) {
+		return editingEntries.filter((entry) => entry.time.slice(0, 2) === hour).length;
 	}
 
 	function setProfileEntries(entries: TimeEntry[]) {
@@ -170,8 +176,22 @@
 
 	function appendUniquePinDigits(value: string) {
 		for (const digit of value) {
-			if (/\d/.test(digit) && !pin.includes(digit)) pin += digit;
+			if (/\d/.test(digit) && !pin.includes(digit) && pin.length < 10) pin += digit;
 		}
+	}
+
+	function appendBellPinDigit(digit: number) {
+		appendUniquePinDigits(String(digit));
+		pinVerified = false;
+		pinCheck += 1;
+		bellPinInput?.focus({ preventScroll: true });
+	}
+
+	function removeBellPinDigit() {
+		pin = pin.slice(0, -1);
+		pinVerified = false;
+		pinCheck += 1;
+		bellPinInput?.focus({ preventScroll: true });
 	}
 
 	function handlePinInput(event: Event) {
@@ -215,6 +235,25 @@
 	function movePinCaretToEnd(event: Event) {
 		const input = event.currentTarget as HTMLInputElement;
 		requestAnimationFrame(() => input.setSelectionRange(input.value.length, input.value.length));
+	}
+
+	function handlePinBlur(event: FocusEvent) {
+		const next = event.relatedTarget;
+		if (next instanceof Element && next.closest('[data-bell-pin-pad]')) return;
+		setTimeout(() => {
+			if (!bellPinPadOpen) return;
+			const focused = document.activeElement;
+			if (focused instanceof Element && focused.closest('[data-bell-pin-entry]')) return;
+			bellPinPadOpen = false;
+			void verifyPin();
+		}, 0);
+	}
+
+	function handleOutsidePinPad(event: PointerEvent) {
+		const target = event.target instanceof Element ? event.target : null;
+		if (!bellPinPadOpen || target?.closest('[data-bell-pin-entry]')) return;
+		bellPinPadOpen = false;
+		void verifyPin();
 	}
 
 	function outcomeCount(relayId: string) {
@@ -339,24 +378,21 @@
 
 	onMount(() => {
 		void refresh(true);
+		window.addEventListener('pointerdown', handleOutsidePinPad, true);
 		const timer = setInterval(() => { if (!document.hidden && Date.now() >= retryAfter) void refresh(); }, 3000);
-		return () => clearInterval(timer);
+		return () => {
+			clearInterval(timer);
+			window.removeEventListener('pointerdown', handleOutsidePinPad, true);
+		};
 	});
 </script>
 
-<section class="bell-panel mb-4" aria-labelledby="bell-manager-title">
+<section class="mb-4 border-b border-slate-200 pb-4" aria-labelledby="bell-manager-title">
 	<div class="mb-2 flex min-h-11 items-start justify-between gap-2">
-		<div class="flex items-center gap-3">
-			<div class="bell-mark" aria-hidden="true"><BellRing size={21} strokeWidth={2} /></div>
-			<div>
-				<h3 id="bell-manager-title" class="text-base font-semibold text-slate-900">Schoolbel</h3>
-				<p class="text-xs text-slate-500">Rooster en handmatige bel</p>
-			</div>
-		</div>
-		<div class="next-bell ml-auto w-52 shrink-0 text-right text-sm leading-5 sm:w-64">
-			<div class="text-xs font-medium uppercase tracking-wide text-slate-500">Volgende bel</div>
-			<div class="font-semibold text-slate-800">{config?.paused ? 'Uit' : nextBell ? nextBellLabel(nextBell) : 'onbekend'}</div>
-			<div class="min-h-4 truncate text-xs">
+		<h3 id="bell-manager-title" class="text-base font-semibold text-slate-900">Schoolbel</h3>
+		<div class="ml-auto w-52 shrink-0 text-right text-sm leading-5 sm:w-64">
+			<div class="truncate text-slate-600">Volgende bel: {config?.paused ? 'Uit' : nextBell ? nextBellLabel(nextBell) : 'onbekend'}</div>
+			<div class="h-5 truncate">
 				{#if preview}
 					<span class="text-slate-600">Lokaal voorbeeld</span>
 				{:else if fault}
@@ -369,24 +405,34 @@
 	{#if config}
 		<div class="grid grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Belrooster">
 			{#each Object.entries(names) as [id, label]}
-				<label class={`mode-option flex min-h-14 items-center gap-2 rounded-lg border px-3 text-sm font-semibold ${selectedMode === id ? `selected ${id === 'off' ? 'paused' : ''}` : ''}`}>
+				<label class="flex min-h-14 items-center gap-2 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-900">
 					<input type="radio" name="bell-mode" value={id} checked={selectedMode === id} disabled={busy || preview} on:change={() => { selectedMode = id; message = ''; }} />
 					{label}
 				</label>
 			{/each}
 		</div>
 
-		<div class="bell-actions mt-3 flex flex-wrap items-center gap-2 rounded-lg p-2">
+		<div class="mt-2 flex flex-wrap items-center gap-2">
 			{#if !preview}
-				<div class="flex items-center gap-2">
-					<input class={`min-h-12 w-28 rounded-md border px-3 ${pinVerified ? 'border-emerald-600 bg-emerald-50' : 'border-slate-300'}`} type="text" inputmode="numeric" autocomplete="off" autocapitalize="off" maxlength="10" placeholder="PIN" aria-label="Configuratie-PIN" value={maskedPin(pin)} on:input={handlePinInput} on:focus={movePinCaretToEnd} on:click={movePinCaretToEnd} on:blur={verifyPin} />
+				<div class="bell-pin-entry relative flex items-center gap-2" data-bell-pin-entry>
+					<input bind:this={bellPinInput} class={`min-h-12 w-28 rounded-md border px-3 ${pinVerified ? 'border-emerald-600 bg-emerald-50' : 'border-slate-300'}`} type="text" inputmode="none" autocomplete="off" autocapitalize="off" maxlength="10" placeholder="PIN" aria-label="Configuratie-PIN" value={maskedPin(pin)} on:input={handlePinInput} on:focus={() => { bellPinPadOpen = true; }} on:click={movePinCaretToEnd} on:blur={handlePinBlur} />
 					{#if pinVerified}<span class="text-sm font-medium text-emerald-700" role="status" aria-label="PIN gecontroleerd">✓ PIN klopt</span>{/if}
+					{#if bellPinPadOpen}
+						<div class="bell-pin-pad absolute top-full left-0 z-30 mt-2 grid grid-cols-3 gap-1 rounded-md border border-slate-300 bg-white p-2 shadow-lg" data-bell-pin-pad role="group" aria-label="PIN-toetsenbord">
+							{#each bellPinNodes as digit (digit)}
+								<button type="button" aria-label={`PIN ${digit}`} on:click={() => appendBellPinDigit(digit)}>{digit}</button>
+							{/each}
+							<button type="button" aria-label="Laatste cijfer wissen" on:click={removeBellPinDigit}>⌫</button>
+							<button type="button" on:click={() => appendBellPinDigit(0)}>0</button>
+							<button type="button" on:click={() => { bellPinPadOpen = false; void verifyPin(); }}>Gereed</button>
+						</div>
+					{/if}
 				</div>
 			{/if}
-			<button class="save-action" disabled={busy || preview || !modeDirty} on:click={saveMode}>Modus opslaan</button>
-			<button class="demo-action" disabled={busy || preview} on:click={() => mutate('demo', { request_id: requestId(), count: 1 })}>Bel nu 1×</button>
-			<button class="demo-action" disabled={busy || preview} on:click={() => mutate('demo', { request_id: requestId(), count: 2 })}>Bel nu 2×</button>
-			<button class="edit-action" on:click={() => editing = !editing}>{editing ? 'Sluiten' : 'Tijden bewerken'}</button>
+			<button disabled={busy || preview || !modeDirty} on:click={saveMode}>Opslaan</button>
+			<button disabled={busy || preview} on:click={() => mutate('demo', { request_id: requestId(), count: 1 })}>Bel nu 1×</button>
+			<button disabled={busy || preview} on:click={() => mutate('demo', { request_id: requestId(), count: 2 })}>Bel nu 2×</button>
+			<button on:click={() => editing = !editing}>{editing ? 'Sluiten' : 'Tijden bewerken'}</button>
 			{#if status && !preview}
 				<details class="ml-auto text-sm text-slate-700">
 					<summary class="cursor-pointer">Belstatus</summary>
@@ -478,8 +524,10 @@
 					{#if editingEntries.length}
 						<div class="grid grid-cols-1 gap-3 xl:grid-cols-2">
 							{#each entryHours as hour}
-								<fieldset class="min-w-0 rounded-md border border-slate-200 p-2">
-									<legend class="px-1 text-sm font-semibold text-slate-700">{hour}:00 uur</legend>
+								<details class="min-w-0 rounded-md border border-slate-200" open={hour === entryHours[0]}>
+									<summary class="cursor-pointer px-3 py-3 text-sm font-semibold text-slate-700">
+										{hour}:00 uur <span class="ml-1 font-normal text-slate-500">· {hourEntryCount(hour)} belmomenten</span>
+									</summary>
 									<div class="grid grid-cols-1 gap-1 sm:grid-cols-2">
 										{#each editingEntries as entry, index (index)}
 											{#if entry.time.slice(0, 2) === hour}
@@ -513,7 +561,7 @@
 											{/if}
 										{/each}
 									</div>
-								</fieldset>
+								</details>
 							{/each}
 						</div>
 					{:else}
@@ -538,22 +586,9 @@
 </section>
 
 <style>
-	.bell-panel { border: 1px solid #cbd5e1; border-left: 4px solid #2563eb; border-radius: 0.8rem; background: #f8fafc; padding: 1rem; box-shadow: 0 2px 8px rgb(15 23 42 / 5%); }
-	.bell-mark { display: grid; width: 2.5rem; height: 2.5rem; place-items: center; border-radius: 0.7rem; background: #dbeafe; color: #1d4ed8; font-size: 1.35rem; font-weight: 700; }
-	.next-bell { border: 1px solid #bfdbfe; border-radius: 0.65rem; background: #eff6ff; padding: 0.45rem 0.7rem; }
-	.mode-option { border-color: #cbd5e1; background: #fff; color: #334155; cursor: pointer; transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease; }
-	.mode-option:hover { border-color: #94a3b8; background: #f1f5f9; }
-	.mode-option.selected { border-color: #3b82f6; background: #eff6ff; color: #1e3a8a; box-shadow: inset 0 0 0 1px #3b82f6, 0 1px 3px rgb(30 64 175 / 12%); }
-	.mode-option.selected.paused { border-color: #64748b; background: #f1f5f9; color: #334155; box-shadow: inset 0 0 0 1px #64748b; }
-	.mode-option input { accent-color: #2563eb; }
-	.bell-actions { border: 1px solid #dbe3ed; background: #eef2f7; }
 	button, .file-button { display: inline-flex; align-items: center; min-height: 48px; padding: 8px 14px; border: 1px solid #94a3b8; border-radius: 6px; background: white; color: #0f172a; cursor: pointer; }
-	button.save-action { border-color: #1d4ed8; background: #1d4ed8; color: white; font-weight: 600; }
-	button.demo-action { border-color: #94a3b8; background: #fff; color: #334155; }
-	button.edit-action { border-color: #334155; background: #fff; color: #1e293b; font-weight: 600; }
-	button.save-action:hover:not(:disabled) { background: #1e40af; }
-	button.demo-action:hover:not(:disabled), button.edit-action:hover:not(:disabled) { background: #f8fafc; }
 	button:disabled { opacity: .5; }
 	.file-button:focus-within { outline: 2px solid #2563eb; outline-offset: 2px; }
-	@media (max-width: 640px) { .bell-panel { padding: 0.75rem; } .next-bell { width: auto; } }
+	.bell-pin-pad { width: 12rem; }
+	.bell-pin-pad button { justify-content: center; min-height: 2.75rem; padding: 0.5rem; }
 </style>

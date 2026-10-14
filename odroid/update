@@ -50,10 +50,21 @@ color_status() {
 	local color="$1"
 	shift
 	if [[ -t 1 ]]; then
-		printf '\033[1;%sm%s\033[0m\n' "$color" "$*"
+		printf '\033[%sm%s\033[0m\n' "$color" "$*"
 	else
 		printf '%s\n' "$*"
 	fi
+}
+
+print_fetch_output() {
+	local line
+	while IFS= read -r line; do
+		if [[ -t 1 && ( "$line" == *"-> FETCH_HEAD"* || "$line" == *"-> origin/$BRANCH"* ) ]]; then
+			printf '\033[2;37m%s\033[0m\n' "$line"
+		else
+			printf '%s\n' "$line"
+		fi
+	done <<< "$fetch_output"
 }
 
 restore_image() {
@@ -87,7 +98,7 @@ cleanup() {
 trap cleanup EXIT
 
 FETCH_LOG_FILE="$(mktemp /tmp/kennemer-fetch.XXXXXX)"
-if ! git fetch --prune origin "$BRANCH" >"$FETCH_LOG_FILE" 2>&1; then
+if ! git -c color.ui=false fetch --prune origin "$BRANCH" >"$FETCH_LOG_FILE" 2>&1; then
 	cat "$FETCH_LOG_FILE" >&2
 	exit 1
 fi
@@ -98,17 +109,19 @@ current_commit="$(git rev-parse HEAD)"
 target_commit="$(git rev-parse "origin/$BRANCH")"
 
 if [[ "$current_commit" == "$target_commit" ]]; then
-	color_status 33 "$fetch_output"
-	color_status 33 "No new commit found on origin/$BRANCH ($(git rev-parse --short "$target_commit"))"
+	print_fetch_output
+	color_status '1;33' "No new commit found on origin/$BRANCH ($(git rev-parse --short "$target_commit"))"
 	/usr/local/sbin/kennemer-wait-ready
 	restart_screen
-	color_status 36 "Checking saved bell roster against deployed defaults"
+	color_status '1;36' "Checking saved bell roster against deployed defaults"
 	"$REPO/odroid/bell-roster" check || true
 	exit 0
 fi
 
-color_status 32 "$fetch_output"
-color_status 32 "New commit fetched: $(git rev-parse --short "$current_commit") -> $(git rev-parse --short "$target_commit"); deploying"
+print_fetch_output
+color_status '2;37' "New commit fetched: $(git rev-parse --short "$current_commit") -> $(git rev-parse --short "$target_commit"); deploying"
+commit_subject="$(git log -1 --format=%s "$target_commit")"
+color_status '1;36' "Commit: $commit_subject"
 if [[ -t 1 ]]; then
 	git --no-pager diff --stat --color=always "$current_commit" "$target_commit"
 else
@@ -161,6 +174,6 @@ printf '%s\n' "$target_commit" > /var/lib/kennemer/last-successful-commit
 docker builder prune --force --filter 'until=168h'
 docker image prune --force --filter 'until=168h'
 restart_screen
-color_status 36 "Checking saved bell roster against deployed defaults"
+color_status '1;36' "Checking saved bell roster against deployed defaults"
 "$CANDIDATE_DIR/odroid/bell-roster" check || true
 log "Deployment completed successfully"

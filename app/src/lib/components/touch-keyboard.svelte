@@ -1,37 +1,48 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
+	import 'simple-keyboard/build/css/index.css';
+	import type SimpleKeyboard from 'simple-keyboard';
+	import type { KeyboardLayoutObject } from 'simple-keyboard';
 
 	type Editable = HTMLInputElement | HTMLTextAreaElement;
-	type Layout = 'letters' | 'symbols' | 'numeric';
+	type Layout = 'default' | 'shift' | 'symbols' | 'numeric';
 
 	const textTypes = new Set(['text', 'password', 'search', 'email', 'tel', 'url', 'number']);
-	const letterRows = [
-		['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
-		['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'],
-		['⇧', 'z', 'x', 'c', 'v', 'b', 'n', 'm', '⌫'],
-		['?123', ',', 'Spatie', '.', 'Gereed']
-	];
-	const symbolRows = [
-		['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'],
-		['-', '/', ':', ';', '(', ')', '€', '&', '@', '"'],
-		['ABC', '.', ',', '?', '!', "'", '[', ']', '⌫'],
-		['{', '}', '_', '#', '\\', 'Spatie', '=', '+', 'Gereed']
-	];
-	const numericRows = [
-		['1', '2', '3'],
-		['4', '5', '6'],
-		['7', '8', '9'],
-		['ABC', '0', '⌫'],
-		['-', '.', 'Gereed']
-	];
+	const keyboardLayouts: KeyboardLayoutObject = {
+		default: [
+			'q w e r t y u i o p {bksp}',
+			'a s d f g h j k l {enter}',
+			'{shift} z x c v b n m {shift}',
+			'{symbols} , {space} . {done}'
+		],
+		shift: [
+			'Q W E R T Y U I O P {bksp}',
+			'A S D F G H J K L {enter}',
+			'{shift} Z X C V B N M {shift}',
+			'{symbols} < {space} > {done}'
+		],
+		symbols: [
+			'1 2 3 4 5 6 7 8 9 0 {bksp}',
+			'- / : ; ( ) € & @ " {enter}',
+			'{abc} . , ? ! \' [ ] {bksp}',
+			'# % & + = _ {space} {done}'
+		],
+		numeric: [
+			'1 2 3',
+			'4 5 6',
+			'7 8 9',
+			'{abc} 0 {bksp}',
+			'- . {done}'
+		]
+	};
 
 	let visible = false;
 	let active: Editable | null = null;
-	let layout: Layout = 'letters';
-	let shift = false;
+	let layout: Layout = 'default';
 	let touchSeen = false;
 	let mobileBrowser = false;
-	$: rows = layout === 'numeric' ? numericRows : layout === 'symbols' ? symbolRows : letterRows;
+	let keyboardElement: HTMLDivElement;
+	let keyboard: SimpleKeyboard | null = null;
 
 	function editable(target: EventTarget | null): Editable | null {
 		if (target instanceof HTMLTextAreaElement) return target.disabled || target.readOnly ? null : target;
@@ -46,8 +57,8 @@
 		active = input;
 		layout = input instanceof HTMLInputElement &&
 			(input.type === 'number' || input.inputMode === 'numeric' || input.inputMode === 'decimal' || input.type === 'password')
-			? 'numeric' : 'letters';
-		shift = false;
+			? 'numeric' : 'default';
+		keyboard?.setOptions({ layoutName: layout });
 		visible = true;
 		await tick();
 		input.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -72,17 +83,56 @@
 	}
 
 	function press(key: string) {
-		if (key === 'Gereed') { visible = false; return; }
-		if (key === 'ABC') { layout = 'letters'; return; }
-		if (key === '?123') { layout = 'symbols'; return; }
-		if (key === '⇧') { shift = !shift; return; }
-		if (key === '⌫') { insert('', true); return; }
-		insert(key === 'Spatie' ? ' ' : shift ? key.toUpperCase() : key);
-		if (shift) shift = false;
+		if (key === '{done}') { visible = false; return; }
+		if (key === '{abc}') { layout = 'default'; keyboard?.setOptions({ layoutName: layout }); return; }
+		if (key === '{symbols}') { layout = 'symbols'; keyboard?.setOptions({ layoutName: layout }); return; }
+		if (key === '{shift}') {
+			layout = layout === 'shift' ? 'default' : 'shift';
+			keyboard?.setOptions({ layoutName: layout });
+			return;
+		}
+		if (key === '{bksp}') { insert('', true); return; }
+		if (key === '{enter}') {
+			if (active instanceof HTMLTextAreaElement) insert('\n');
+			else visible = false;
+			return;
+		}
+		if (key === '{space}') { insert(' '); return; }
+		insert(layout === 'shift' ? key.toUpperCase() : key);
+		if (layout === 'shift') {
+			layout = 'default';
+			keyboard?.setOptions({ layoutName: layout });
+		}
 	}
 
 	onMount(() => {
 		mobileBrowser = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+		let disposed = false;
+		if (!mobileBrowser) {
+			void import('simple-keyboard').then(({ default: Keyboard }) => {
+				if (disposed || !keyboardElement) return;
+				keyboard = new Keyboard(keyboardElement, {
+					layout: keyboardLayouts,
+					layoutName: layout,
+					theme: 'hg-theme-default kennemer-touch-keyboard',
+					display: {
+						'{bksp}': '⌫',
+						'{done}': 'Gereed',
+						'{enter}': '↵',
+						'{shift}': '⇧',
+						'{symbols}': '?123',
+						'{abc}': 'ABC',
+						'{space}': 'Spatie'
+					},
+					useButtonTag: true,
+					autoUseTouchEvents: true,
+					preventMouseDownDefault: true,
+					stopMouseDownPropagation: true,
+					disableButtonHold: true,
+					onKeyPress: press
+				});
+			});
+		}
 		const onPointerDown = (event: PointerEvent) => {
 			if (event.pointerType === 'touch') touchSeen = true;
 			const element = event.target instanceof Element ? event.target : null;
@@ -102,6 +152,9 @@
 		window.addEventListener('focusin', onFocusIn, true);
 		window.addEventListener('keydown', onKeyDown, true);
 		return () => {
+			disposed = true;
+			keyboard?.destroy();
+			keyboard = null;
 			window.removeEventListener('pointerdown', onPointerDown, true);
 			window.removeEventListener('focusin', onFocusIn, true);
 			window.removeEventListener('keydown', onKeyDown, true);
@@ -109,26 +162,62 @@
 	});
 </script>
 
-{#if visible}
-	<div class="fixed inset-x-0 bottom-0 z-[100] border-t border-slate-400 bg-slate-100 p-2 shadow-lg" data-touch-keyboard role="group" aria-label="Schermtoetsenbord" on:pointerdown|preventDefault>
-		<div class="mx-auto max-w-4xl">
-			<div class="mb-1 flex items-center justify-between px-1 text-sm text-slate-700">
-				<span>Toetsenbord</span>
-				<button type="button" class="rounded border border-slate-400 bg-white px-3 py-1" on:click={() => visible = false}>Sluiten</button>
-			</div>
-			{#each rows as row, rowIndex}
-				<div class="mb-1 flex justify-center gap-1">
-					{#each row as key, keyIndex (`${rowIndex}-${keyIndex}`)}
-						<button type="button" class:wide={key === 'Spatie'} class="key" aria-label={key === '⌫' ? 'Backspace' : key === '⇧' ? 'Shift' : key} on:click={() => press(key)}>{shift && key.length === 1 ? key.toUpperCase() : key}</button>
-					{/each}
-				</div>
-			{/each}
+<div
+	class="fixed inset-x-0 bottom-0 z-[100] border-t border-slate-300 bg-slate-100 p-2 shadow-[0_-8px_24px_rgba(15,23,42,0.14)]"
+	class:hidden={!visible || mobileBrowser}
+	data-touch-keyboard
+	role="group"
+	aria-label="Schermtoetsenbord"
+	aria-hidden={!visible || mobileBrowser}
+	on:pointerdown|preventDefault
+>
+	<div class="mx-auto max-w-5xl">
+		<div class="mb-2 flex items-center justify-between px-1 text-sm text-slate-600">
+			<span class="font-medium">Toetsenbord</span>
+			<button
+				type="button"
+				class="rounded-md border border-slate-300 bg-white px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-50"
+				on:click={() => (visible = false)}
+			>
+				Sluiten
+			</button>
 		</div>
+		<div bind:this={keyboardElement}></div>
 	</div>
-{/if}
+</div>
 
 <style>
-	.key { min-width: 0; flex: 1 1 0; min-height: 48px; max-width: 80px; border: 1px solid #94a3b8; border-radius: 5px; background: white; color: #0f172a; font-size: 1.2rem; }
-	.key.wide { flex: 3 1 0; max-width: 240px; }
-	.key:active { background: #cbd5e1; }
+	:global(.kennemer-touch-keyboard .hg-rows) {
+		gap: 0.35rem;
+	}
+
+	:global(.kennemer-touch-keyboard .hg-row) {
+		gap: 0.35rem;
+	}
+
+	:global(.kennemer-touch-keyboard .hg-button) {
+		min-height: 3.25rem;
+		border: 1px solid #cbd5e1;
+		border-radius: 0.55rem;
+		background: #fff;
+		color: #0f172a;
+		font-size: 1.1rem;
+		font-weight: 600;
+		box-shadow: 0 1px 0 #94a3b8;
+	}
+
+	:global(.kennemer-touch-keyboard .hg-button:active) {
+		background: #e2e8f0;
+		box-shadow: inset 0 1px 2px rgb(15 23 42 / 12%);
+	}
+
+	:global(.kennemer-touch-keyboard .hg-button[data-skbtn="{space}"]) {
+		flex: 4;
+		max-width: none;
+	}
+
+	:global(.kennemer-touch-keyboard .hg-button[data-skbtn="{done}"]) {
+		background: #1e293b;
+		color: #fff;
+	}
 </style>

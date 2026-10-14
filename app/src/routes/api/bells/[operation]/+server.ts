@@ -7,7 +7,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 const reads = new Set(['status', 'config']);
-const writes = new Set(['config', 'pause', 'resume', 'restore', 'demo']);
+const writes = new Set(['config', 'pause', 'resume', 'restore', 'demo', 'verify-pin']);
 const reply = (body: unknown, status = 200) => json(body, { status, headers: { 'cache-control': 'no-store' } });
 
 const proxy: RequestHandler = async ({ request, params, url }) => {
@@ -28,6 +28,7 @@ const proxy: RequestHandler = async ({ request, params, url }) => {
 		const failure = authorizeSceneConfig(request, url.origin);
 		await recordAuditEvent('pin.entered', { source: 'bell-roster', accepted: !failure });
 		if (failure) return reply(failure, failure.status);
+		if (operation === 'verify-pin') return reply({ ok: true });
 	}
 	if (!env.KENNEMER_MAINTENANCE_TOKEN) return reply({ error: 'Belservice is niet geconfigureerd.' }, 503);
 	let body: string | undefined;

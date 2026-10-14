@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
 	import 'simple-keyboard/build/css/index.css';
+	import Keyboard from 'simple-keyboard';
 	import type SimpleKeyboard from 'simple-keyboard';
 	import type { KeyboardLayoutObject } from 'simple-keyboard';
 
@@ -107,30 +108,26 @@
 
 	onMount(() => {
 		mobileBrowser = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-		let disposed = false;
 		if (!mobileBrowser) {
-			void import('simple-keyboard').then(({ default: Keyboard }) => {
-				if (disposed || !keyboardElement) return;
-				keyboard = new Keyboard(keyboardElement, {
-					layout: keyboardLayouts,
-					layoutName: layout,
-					theme: 'hg-theme-default kennemer-touch-keyboard',
-					display: {
-						'{bksp}': '⌫',
-						'{done}': 'Gereed',
-						'{enter}': '↵',
-						'{shift}': '⇧',
-						'{symbols}': '?123',
-						'{abc}': 'ABC',
-						'{space}': 'Spatie'
-					},
-					useButtonTag: true,
-					autoUseTouchEvents: true,
-					preventMouseDownDefault: true,
-					stopMouseDownPropagation: true,
-					disableButtonHold: true,
-					onKeyPress: press
-				});
+			keyboard = new Keyboard(keyboardElement, {
+				layout: keyboardLayouts,
+				layoutName: layout,
+				theme: 'hg-theme-default kennemer-touch-keyboard',
+				display: {
+					'{bksp}': '⌫',
+					'{done}': 'Gereed',
+					'{enter}': '↵',
+					'{shift}': '⇧',
+					'{symbols}': '?123',
+					'{abc}': 'ABC',
+					'{space}': 'Spatie'
+				},
+				useButtonTag: true,
+				autoUseTouchEvents: true,
+				preventMouseDownDefault: true,
+				stopMouseDownPropagation: true,
+				disableButtonHold: true,
+				onKeyPress: press
 			});
 		}
 		const onPointerDown = (event: PointerEvent) => {
@@ -152,7 +149,6 @@
 		window.addEventListener('focusin', onFocusIn, true);
 		window.addEventListener('keydown', onKeyDown, true);
 		return () => {
-			disposed = true;
 			keyboard?.destroy();
 			keyboard = null;
 			window.removeEventListener('pointerdown', onPointerDown, true);

@@ -35,6 +35,7 @@
 	export let loadingCommandKeys: ReadonlySet<string> = new Set();
 	export let initialStatus: DeviceCommandKey | null = null;
 	export let statusOffline = false;
+	export let actionError: string | null = null;
 	export let transientActive = false;
 	export let showType = false;
 	export let cardNumber: number | undefined = undefined;
@@ -308,6 +309,9 @@
 			</h3>
 			{#if statusOffline}
 				<p class="text-sm font-semibold text-amber-800" role="status">Apparaat offline</p>
+			{/if}
+			{#if actionError}
+				<p class="text-sm font-semibold text-red-700" role="alert">{actionError}</p>
 			{/if}
 			{#if showType}
 				<p class="text-xs tracking-wide text-slate-400 uppercase">{device.type}</p>

@@ -151,6 +151,7 @@
 
 	let loadingCommandKeys = new Set<string>();
 	let errorMsg = '';
+	let deviceActionErrors = new Map<string, string>();
 	let advancedErrorMsg = '';
 	let advancedStatusMsg = '';
 	let deviceStates = new Map<string, DeviceCommandKey>(
@@ -602,6 +603,7 @@
 	let wattageAutomaticRefreshTimeout: ReturnType<typeof setTimeout> | null = null;
 	let statusAutomaticRefreshTimeout: ReturnType<typeof setTimeout> | null = null;
 	let statusRefreshLoading = false;
+	let queuedStatusRefreshIds = new Set<string>();
 	let statusFollowupTimeouts: ReturnType<typeof setTimeout>[] = [];
 	let fastWattageRefreshUntil = 0;
 
@@ -683,11 +685,23 @@
 		deviceStates = nextDeviceStates;
 		statusFailureCounts = nextFailureCounts;
 		offlineStatusDeviceIds = nextOfflineIds;
+		const confirmedIds = new Set(Object.keys(states));
+		if (confirmedIds.size) {
+			const nextActionErrors = new Map(deviceActionErrors);
+			for (const device of allDevices) {
+				if (confirmedIds.has(device.statusdeviceid?.trim() ?? '')) nextActionErrors.delete(device.id);
+			}
+			deviceActionErrors = nextActionErrors;
+		}
 	}
 
 	async function refreshStatusDevices(ids = statusDeviceIds) {
 		const uniqueIds = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
-		if (displayDimmed || uniqueIds.length === 0 || statusRefreshLoading) return;
+		if (displayDimmed || uniqueIds.length === 0) return;
+		if (statusRefreshLoading) {
+			queuedStatusRefreshIds = new Set([...queuedStatusRefreshIds, ...uniqueIds]);
+			return;
+		}
 
 		statusRefreshLoading = true;
 		try {
@@ -716,7 +730,13 @@
 			// A failed dashboard request is not evidence that each individual Shelly is offline.
 		} finally {
 			statusRefreshLoading = false;
-			scheduleAutomaticStatusRefresh();
+			if (queuedStatusRefreshIds.size) {
+				const queuedIds = Array.from(queuedStatusRefreshIds);
+				queuedStatusRefreshIds = new Set();
+				void refreshStatusDevices(queuedIds);
+			} else {
+				scheduleAutomaticStatusRefresh();
+			}
 		}
 	}
 
@@ -780,6 +800,9 @@
 		}
 		const key = commandKey(deviceId, command);
 		loadingCommandKeys = new Set([...loadingCommandKeys, key]);
+		const nextActionErrors = new Map(deviceActionErrors);
+		nextActionErrors.delete(deviceId);
+		deviceActionErrors = nextActionErrors;
 		errorMsg = '';
 		advancedErrorMsg = '';
 		let succeeded = false;
@@ -804,12 +827,25 @@
 			}
 		} catch (err) {
 			const error = err as Error & { code?: string };
-			errorMsg =
+			const detail =
 				error?.code === 'TIMEOUT'
-					? 'Shelly antwoordde niet. Controleer de lampstatus voordat u opnieuw drukt.'
+					? 'Geen antwoord van apparaat.'
 					: error instanceof Error
 						? error.message
 						: 'Onbekende fout';
+			errorMsg =
+					error?.code === 'TIMEOUT'
+						? 'Shelly antwoordde niet. Controleer de lampstatus voordat u opnieuw drukt.'
+						: detail;
+			const nextErrors = new Map(deviceActionErrors);
+			nextErrors.set(
+				deviceId,
+				/niet bereikbaar|reageert niet|fetch failed|timed out|timeout/i.test(detail)
+					? 'Apparaat niet bereikbaar'
+					: detail
+			);
+			deviceActionErrors = nextErrors;
+			if (device.statusdeviceid) startStatusFollowup(device.statusdeviceid);
 			advancedErrorMsg = errorMsg;
 		} finally {
 			const nextLoadingCommandKeys = new Set(loadingCommandKeys);
@@ -1662,6 +1698,7 @@
 							cardNumber={selectedTab === 'home' ? control.pushNumber : undefined}
 							{control}
 							statusOffline={offlineStatusByDeviceId.get(control.id) ?? false}
+							actionError={deviceActionErrors.get(control.id) ?? null}
 							{commandOrder}
 							{commandKey}
 							{commandLabel}
@@ -1817,6 +1854,7 @@
 								<ControlCard
 									{control}
 									statusOffline={offlineStatusByDeviceId.get(control.id) ?? false}
+									actionError={deviceActionErrors.get(control.id) ?? null}
 									{commandOrder}
 									{commandKey}
 									{commandLabel}

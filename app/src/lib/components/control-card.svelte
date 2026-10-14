@@ -14,6 +14,7 @@
 	export let loadingTriggerIds: ReadonlySet<string> = new Set();
 	export let initialStatus: DeviceCommandKey | null = null;
 	export let statusOffline = false;
+	export let actionError: string | null = null;
 	export let transientActive = false;
 	export let activeUntil: number | null = null;
 	export let resolveToggleCommand: (status: DeviceCommandKey | null) => DeviceCommandKey = (
@@ -37,6 +38,7 @@
 		{loadingCommandKeys}
 		{initialStatus}
 		{statusOffline}
+		{actionError}
 		{transientActive}
 		on:command={({ detail }) => dispatch('command', detail)}
 	/>

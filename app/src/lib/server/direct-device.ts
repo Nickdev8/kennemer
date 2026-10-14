@@ -20,12 +20,21 @@ async function target(id: string, method: 'GetStatus' | 'Set', command?: DeviceC
 }
 async function request(id: string, method: 'GetStatus' | 'Set', command?: DeviceCommandKey) {
 	const { url, payload } = await target(id, method, command);
-	const response = await fetch(url, {
-		method: 'POST',
-		headers: { 'content-type': 'application/json' },
-		body: JSON.stringify(payload),
-		signal: AbortSignal.timeout(4000)
-	});
+	let response: Response;
+	try {
+		response = await fetch(url, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify(payload),
+			signal: AbortSignal.timeout(4000)
+		});
+	} catch (error) {
+		const name = error instanceof Error ? error.name : '';
+		if (name === 'TimeoutError' || name === 'AbortError') {
+			throw new Error('Apparaat reageert niet via LAN.');
+		}
+		throw new Error('Apparaat niet bereikbaar via LAN.');
+	}
 	if (!response.ok) throw new Error('Apparaat niet bereikbaar via LAN.');
 	const result = await response.json();
 	if (result.error) throw new Error('Apparaat heeft de opdracht geweigerd.');

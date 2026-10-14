@@ -1,5 +1,5 @@
+import writeFileAtomic from 'write-file-atomic';
 import { env } from '$env/dynamic/private';
-import { unlink, writeFile } from 'node:fs/promises';
 import { resolve as resolvePath } from 'node:path';
 
 import type { RequestHandler } from './$types';
@@ -9,15 +9,6 @@ const IP_CACHE_PATH = resolvePath(process.cwd(), env.IP_CACHE_PATH ?? 'ips.json'
 const DEVICE_LIST_ENDPOINT = 'https://shelly-115-eu.shelly.cloud/interface/device/get_all_lists';
 
 export const POST: RequestHandler = async () => {
-	try {
-		await unlink(IP_CACHE_PATH);
-	} catch (error) {
-		const code = (error as NodeJS.ErrnoException).code;
-		if (code !== 'ENOENT') {
-			return jsonError('Kon cache niet verwijderen', 500);
-		}
-	}
-
 	const fresh = await fetchDeviceListFromCloud();
 	if (!fresh) {
 		return jsonError('Kon apparaatlijst niet vernieuwen', 502);
@@ -87,5 +78,8 @@ async function writeDeviceListCache(payload: ShellyDeviceListPayload): Promise<v
 		rooms: payload?.rooms ?? {}
 	};
 
-	await writeFile(IP_CACHE_PATH, JSON.stringify(cachePayload, null, 2), 'utf-8');
+	await writeFileAtomic(IP_CACHE_PATH, JSON.stringify(cachePayload, null, 2), {
+		encoding: 'utf8',
+		mode: 0o644
+	});
 }

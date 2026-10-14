@@ -49,7 +49,16 @@
 	let successMessage = '';
 	let importText = '';
 	let editPin = '';
-	let pendingOperation: 'save' | 'reset' | 'restore' | null = null;
+	let pendingOperation: 'save' | 'reset' | 'restore' | 'bell-relays' | null = null;
+	let bellRelayIds: string[] = [];
+	let originalBellRelayIds: string[] = [];
+	let bellRevision = 0;
+	let bellRelaysEditable = false;
+	$: bellRelaysDirty = JSON.stringify(bellRelayIds) !== JSON.stringify(originalBellRelayIds);
+	$: bellRelayIdsValid =
+		bellRelayIds.length === 2 &&
+		bellRelayIds.every((id) => /^[0-9a-f]{12}$/i.test(id)) &&
+		bellRelayIds[0] !== bellRelayIds[1];
 	let dialog: HTMLDivElement;
 	let pinForm: HTMLFormElement;
 
@@ -99,6 +108,19 @@
 			first?.focus();
 		}
 	}
+	async function loadBellRelays() {
+		try {
+			const response = await fetch('/api/bells/config', { cache: 'no-store' });
+			if (!response.ok) return;
+			const payload = await response.json();
+			bellRelayIds = (payload.config.relays ?? []).map((relay: { id: string }) => relay.id);
+			originalBellRelayIds = [...bellRelayIds];
+			bellRevision = payload.revision;
+			bellRelaysEditable = !payload.preview;
+		} catch {
+			bellRelaysEditable = false;
+		}
+	}
 	function key(id: string, slot: string) {
 		return `${id}:${slot}`;
 	}
@@ -145,6 +167,7 @@
 			if (!response.ok || !payload.ok)
 				throw new Error(payload.error ?? 'Configuratie kon niet worden gelezen.');
 			hydrate(payload);
+			await loadBellRelays();
 			errorMessage = '';
 		} catch (error) {
 			errorMessage =
@@ -155,47 +178,6 @@
 	}
 	function field(id: string, name: keyof ControlOverride, value: unknown) {
 		metadata = { ...metadata, [id]: { ...metadata[id], [name]: value } };
-		successMessage = '';
-	}
-	function changePlacement(entry: SceneEditorEntry, placement: 'main' | 'advanced') {
-		const current = metadata[entry.controlId];
-		if (placement === 'advanced') {
-			metadata = {
-				...metadata,
-				[entry.controlId]: {
-					...current,
-					placement,
-					tabId: undefined,
-					pushNumber: undefined
-				}
-			};
-			successMessage = '';
-			return;
-		}
-
-		const preferredTabId =
-			current.tabId ??
-			tabs.find((tab) => tab.id === 'devices')?.id ??
-			tabs.find((tab) => tab.id !== 'home')?.id ??
-			'home';
-		const occupied = new Set(
-			entries
-				.filter((candidate) => candidate.controlId !== entry.controlId)
-				.filter((candidate) => metadata[candidate.controlId]?.placement === 'main')
-				.filter((candidate) => (metadata[candidate.controlId]?.tabId ?? 'home') === preferredTabId)
-				.map((candidate) => metadata[candidate.controlId]?.pushNumber)
-		);
-		let pushNumber = current.pushNumber ?? 1;
-		while (occupied.has(pushNumber) && pushNumber < 99) pushNumber++;
-		metadata = {
-			...metadata,
-			[entry.controlId]: {
-				...current,
-				placement,
-				tabId: preferredTabId,
-				pushNumber
-			}
-		};
 		successMessage = '';
 	}
 	function inputValue(event: Event) {
@@ -243,7 +225,7 @@
 		}
 		configurationSnapshotSchema.parse({ version: 2, overrides: {}, metadata: {}, tabs });
 	}
-	async function requestOperation(operation: 'save' | 'reset' | 'restore') {
+	async function requestOperation(operation: 'save' | 'reset' | 'restore' | 'bell-relays') {
 		errorMessage = '';
 		successMessage = '';
 		try {
@@ -274,6 +256,18 @@
 		const operation = pendingOperation;
 		saving = true;
 		try {
+			if (operation === 'bell-relays') {
+				const response = await fetch('/api/bells/relays', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json', 'x-kennemer-config-pin': editPin },
+					body: JSON.stringify({ revision: bellRevision, relayIds: bellRelayIds })
+				});
+				const payload = await response.json();
+				if (!response.ok) throw new Error(payload.error ?? 'Belrelais opslaan mislukt.');
+				await loadBellRelays();
+				successMessage = 'Belrelais opgeslagen.';
+				return;
+			}
 			const suffix = operation === 'save' ? '' : `/${operation}`;
 			const body =
 				operation !== 'save'
@@ -394,6 +388,31 @@
 						}}>Import annuleren</button
 					>
 				{:else}
+					{#if bellRelayIds.length === 2}
+						<h3>Schoolbel relais</h3>
+						<div class="tab-row">
+							{#each bellRelayIds as id, index}
+								<label
+									>Belrelais {index + 1} · Shelly-ID<input
+										value={id}
+										maxlength="12"
+										disabled={saving || !bellRelaysEditable}
+										on:input={(event) => {
+											bellRelayIds = bellRelayIds.map((value, position) =>
+												position === index ? inputValue(event).trim().toLowerCase() : value
+											);
+										}}
+									/></label
+								>
+							{/each}
+						</div>
+						<button
+							type="button"
+							class="primary"
+							disabled={saving || !bellRelaysEditable || !bellRelaysDirty || !bellRelayIdsValid}
+							on:click={() => requestOperation('bell-relays')}>Belrelais opslaan</button
+						>
+					{/if}
 					<h3>Tabs</h3>
 					{#each tabs as tab, index (tab.id)}
 						<div class="tab-row">
@@ -452,21 +471,7 @@
 											/></td
 										>
 										<td class="position-cell" data-label="Tab / positie">
-											{#if entry.placement === 'main' || entry.placement === 'advanced'}
-												<label
-													>Plaatsing<select
-														aria-label={`Plaatsing ${entry.label}`}
-														value={metadata[entry.controlId].placement ?? entry.placement}
-														disabled={saving}
-														on:change={(event) =>
-															changePlacement(entry, inputValue(event) as 'main' | 'advanced')}
-													>
-														<option value="main">Dashboardtab · zonder PIN</option>
-														<option value="advanced">Geavanceerd · PIN vereist</option>
-													</select></label
-												>
-											{/if}
-											{#if (metadata[entry.controlId].placement ?? entry.placement) === 'main'}
+											{#if entry.placement === 'main'}
 												<label
 													>Tab<select
 														aria-label={`Tab ${entry.label}`}
@@ -478,6 +483,20 @@
 															>{/each}</select
 													></label
 												>
+												<label
+													>Positie<input
+														aria-label={`Positie ${entry.label}`}
+														type="number"
+														min="1"
+														max="99"
+														value={metadata[entry.controlId].pushNumber}
+														disabled={saving}
+														on:input={(event) =>
+															field(entry.controlId, 'pushNumber', Number(inputValue(event)))}
+													/></label
+												>
+											{:else if entry.placement === 'advanced'}
+												<span>Geavanceerde bediening</span>
 												<label
 													>Positie<input
 														aria-label={`Positie ${entry.label}`}
@@ -764,9 +783,9 @@
 	}
 	label {
 		display: flex;
-		flex-direction: column;
 		gap: 6px;
 		min-width: 0;
+		align-items: center;
 	}
 	input,
 	select,
@@ -838,6 +857,11 @@
 	}
 	.duration-cell {
 		min-width: 105px;
+	}
+
+	.duration-cell > label {
+		flex-direction: column;
+		align-items: baseline;
 	}
 	td {
 		vertical-align: top;

@@ -36,6 +36,8 @@
 	import RefreshCw from 'lucide-svelte/icons/refresh-cw';
 	import TouchpadOff from 'lucide-svelte/icons/touchpad-off';
 	import WifiOff from 'lucide-svelte/icons/wifi-off';
+	import ChevronLeft from 'lucide-svelte/icons/chevron-left';
+	import ChevronRight from 'lucide-svelte/icons/chevron-right';
 
 	type WattageDeviceSummary = {
 		deviceId: string;
@@ -87,7 +89,7 @@
 		};
 	};
 
-	type BellHeaderEvent = { at: string; profile: string; time: string };
+	type BellHeaderEvent = { at: string; profile: string; time: string; count?: number };
 	type BellHeaderStatus = {
 		paused?: boolean;
 		preview?: boolean;
@@ -171,6 +173,9 @@
 		{ id: 'devices', label: 'Apparaten', order: 1 }
 	];
 	let selectedTab = 'home';
+	let devicesPage = 0;
+	let controlGrid: HTMLDivElement;
+	const controlsPerPage = 9;
 	let showAdvancedInformation = false;
 	$: if (!dashboardTabs.some((tab) => tab.id === selectedTab))
 		selectedTab = dashboardTabs[0]?.id ?? 'home';
@@ -193,7 +198,21 @@
 			const rightPosition = right.pushNumber;
 			return (leftPosition ?? Number.MAX_SAFE_INTEGER) - (rightPosition ?? Number.MAX_SAFE_INTEGER);
 		});
-	$: advancedControls = sceneControls.filter((control) => control.placement === 'advanced');
+	$: devicesPageCount = Math.max(1, Math.ceil(mainControls.length / controlsPerPage));
+	$: if (selectedTab !== 'devices') devicesPage = 0;
+	$: if (devicesPage >= devicesPageCount) devicesPage = devicesPageCount - 1;
+	$: visibleControls =
+		selectedTab === 'devices'
+			? mainControls.slice(devicesPage * controlsPerPage, (devicesPage + 1) * controlsPerPage)
+			: mainControls;
+
+	function changeDevicesPage(direction: number) {
+		devicesPage = Math.max(0, Math.min(devicesPageCount - 1, devicesPage + direction));
+		controlGrid?.scrollTo({ top: 0 });
+	}
+	$: advancedControls = sceneControls
+		.filter((control) => control.placement === 'advanced')
+		.sort((a, b) => (a.pushNumber ?? 99) - (b.pushNumber ?? 99));
 	$: energyDevicesTrigger =
 		sceneControls.find(
 			(control): control is Extract<DashboardControl, { controlType: 'trigger' }> =>
@@ -467,6 +486,10 @@
 		clearDisplayDimTimer();
 		if (displayDimTimeoutMs <= 0) return;
 		displayDimTimeout = setTimeout(() => {
+			selectedTab = 'home';
+			closeAdvancedPrompt();
+			closeAdvancedPanel();
+			cancelEnergyTriggerConfirmation();
 			displayDimmed = true;
 			displayDimTimeout = null;
 			pauseIdleSensitivePolling();
@@ -1489,12 +1512,14 @@
 	}
 
 	function formatHeaderBellTime(event: BellHeaderEvent) {
-		return new Intl.DateTimeFormat('nl-NL', {
-			weekday: 'short',
-			hour: '2-digit',
-			minute: '2-digit',
-			timeZone: 'Europe/Amsterdam'
-		}).format(new Date(event.at));
+		return (
+			new Intl.DateTimeFormat('nl-NL', {
+				weekday: 'short',
+				hour: '2-digit',
+				minute: '2-digit',
+				timeZone: 'Europe/Amsterdam'
+			}).format(new Date(event.at)) + (event.count === 2 ? ' · 2×' : '')
+		);
 	}
 
 	const polling = createPollingGroup([
@@ -1684,7 +1709,9 @@
 			/>
 		</EnergyPanel>
 
-		<section class="flex min-h-0 min-w-0 flex-1 flex-col rounded-lg border border-slate-300 bg-white p-4">
+		<section
+			class="flex min-h-0 min-w-0 flex-1 flex-col rounded-lg border border-slate-300 bg-white p-4"
+		>
 			<header class="mb-4 flex items-center justify-between">
 				<div>
 					<h2 class="text-2xl font-semibold text-slate-900">
@@ -1701,9 +1728,10 @@
 				</p>
 			{/if}
 			<div
-				class={`grid min-h-0 flex-1 gap-6 overflow-y-auto pr-1 pb-2 ${selectedTab === 'home' ? 'grid-cols-3 grid-rows-3' : 'auto-rows-[minmax(160px,1fr)] grid-cols-3'}`}
+				bind:this={controlGrid}
+				class={`grid min-h-0 flex-1 gap-6 overflow-y-auto pr-1 pb-2 ${selectedTab === 'home' || selectedTab === 'devices' ? 'grid-cols-3 grid-rows-3' : 'auto-rows-[minmax(160px,1fr)] grid-cols-3'}`}
 			>
-				{#each mainControls as control (control.id)}
+				{#each visibleControls as control (control.id)}
 					<div
 						class="relative flex min-h-0 flex-col"
 						style={selectedTab === 'home' && control.pushNumber
@@ -1736,6 +1764,32 @@
 					</div>
 				{/each}
 			</div>
+			{#if selectedTab === 'devices' && devicesPageCount > 1}
+				<nav
+					class="mt-3 flex shrink-0 items-center justify-between gap-3 border-t border-slate-200 pt-3"
+					aria-label="Pagina’s apparaten"
+				>
+					<button
+						type="button"
+						class="flex min-h-12 items-center gap-2 rounded-md border border-slate-300 px-4 py-2 font-semibold text-slate-700 disabled:opacity-40"
+						aria-label="Vorige pagina apparaten"
+						disabled={devicesPage === 0}
+						on:click={() => changeDevicesPage(-1)}
+						><ChevronLeft size={22} /><span class="hidden sm:inline">Vorige</span></button
+					>
+					<span class="text-sm font-semibold text-slate-700" aria-live="polite"
+						>Pagina {devicesPage + 1} van {devicesPageCount}</span
+					>
+					<button
+						type="button"
+						class="flex min-h-12 items-center gap-2 rounded-md border border-slate-300 px-4 py-2 font-semibold text-slate-700 disabled:opacity-40"
+						aria-label="Volgende pagina apparaten"
+						disabled={devicesPage === devicesPageCount - 1}
+						on:click={() => changeDevicesPage(1)}
+						><span class="hidden sm:inline">Volgende</span><ChevronRight size={22} /></button
+					>
+				</nav>
+			{/if}
 		</section>
 	</div>
 
@@ -1954,6 +2008,8 @@
 
 <style>
 	@media (max-width: 700px) {
-		.dashboard-content { flex-direction: column; }
+		.dashboard-content {
+			flex-direction: column;
+		}
 	}
 </style>

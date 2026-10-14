@@ -26,6 +26,7 @@ services:
       HOST: "0.0.0.0"
       KENNEMER_MAINTENANCE_URL: http://host.docker.internal:8787
       DEVICE_STATE_PATH: /data/device-states.json
+      IP_CACHE_PATH: /runtime/ips.json
       SCENE_OVERRIDE_PATH: /runtime/scene-overrides.json
       KENNEMER_TIMED_TRIGGER_PATH: /data/timed-triggers.json
       KENNEMER_AUDIT_LOG_DIR: /data/logs

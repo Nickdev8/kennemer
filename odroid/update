@@ -35,6 +35,16 @@ prepare_runtime_config() {
 		fi
 		chmod 0666 "$SCENE_OVERRIDE_FILE"
 	fi
+	if [[ ! -f "$RUNTIME_DIR/ips.json" ]]; then
+		local existing_cache
+		existing_cache=$(docker compose exec -T web sh -c 'printf "%s" "${IP_CACHE_PATH:-/app/ips.json}"' 2>/dev/null || true)
+		if [[ -n "$existing_cache" ]] && docker compose exec -T web test -f "$existing_cache" >/dev/null 2>&1; then
+			docker compose cp "web:$existing_cache" "$RUNTIME_DIR/ips.json"
+		elif [[ -f "$REPO/app/ips.json" ]]; then
+			cp "$REPO/app/ips.json" "$RUNTIME_DIR/ips.json"
+		fi
+		if [[ -f "$RUNTIME_DIR/ips.json" ]]; then chmod 0666 "$RUNTIME_DIR/ips.json"; fi
+	fi
 	if [[ -f "$SCENE_OVERRIDE_BACKUP" ]]; then
 		chmod 0666 "$SCENE_OVERRIDE_BACKUP"
 	fi

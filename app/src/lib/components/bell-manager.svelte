@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 
 	type Config = {
 		paused: boolean;
@@ -7,19 +7,12 @@
 		weekdays: number[];
 		gap_seconds: number;
 		bell_duration_seconds: number;
-		profiles: Record<string, string[]>;
+		profiles: Record<string, Array<string | { time: string; count?: number }>>;
 		timezone: string;
 	};
 	type ProfileId = 'regular' | 'short' | 'ten-minute';
 	type TimeEntry = { time: string; count: 1 | 2 };
-	type BellEvent = { at: string; profile: string; time: string };
-	type RelayHealth = Record<string, unknown>;
-	type BellOutcome = {
-		ok?: boolean;
-		error?: string;
-		skipped?: string;
-		pulses?: Array<{ relays?: Array<{ relay?: string; ok?: boolean }> }>;
-	};
+	type BellEvent = { at: string; profile: string; time: string; count?: number };
 
 	let config: Config | null = null;
 	let draftConfig: Config | null = null;
@@ -30,7 +23,7 @@
 	let pin = '';
 	let pinEntered = false;
 	$: pinEntered = pin.length > 0;
-	$: if (!pinEntered && editing) editing = false;
+
 	let pinVerified = false;
 	let pinCheck = 0;
 	let bellPinPadOpen = false;
@@ -38,14 +31,13 @@
 	let busy = false;
 	let message = '';
 	let status: Record<string, unknown> | null = null;
-	let outcome: BellOutcome | null = null;
-	let lastEvent: { status?: string; created?: string } | null = null;
-	let relayHealth: RelayHealth[] = [];
 	let editing = false;
+	let newBellTime = '';
+	let newBellCount: 1 | 2 = 1;
+	let openHours = new Set<string>();
 	let preview = false;
 	let connectionError = false;
 	let retryAfter = 0;
-	let healthFailureStreak = 0;
 	const names = {
 		regular: 'Regulier',
 		short: 'Verkort',
@@ -68,33 +60,59 @@
 	];
 	const bellPinNodes = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
+	$: runningProfile =
+		(status?.paused ?? config?.paused)
+			? null
+			: String(status?.active_profile ?? config?.active_profile ?? '');
 	$: nextBell = status?.next_event as BellEvent | null;
 	$: editingEntries = (draftConfig?.profiles?.[editingProfile] ?? []).map(parseTimeEntry);
 	$: entryHours = Array.from(new Set(editingEntries.map((entry) => entry.time.slice(0, 2))));
-	$: profileCounts = Object.fromEntries(Object.entries(draftConfig?.profiles ?? {}).map(([id, times]) => [id, times.length]));
+	$: profileCounts = Object.fromEntries(
+		Object.entries(draftConfig?.profiles ?? {}).map(([id, times]) => [id, times.length])
+	);
 	$: savedMode = config ? (config.paused ? 'off' : config.active_profile) : 'off';
 	$: modeDirty = selectedMode !== savedMode;
-	$: clockOk = (status?.clock as Record<string, unknown> | undefined)?.synchronized === true;
-	$: serviceOk = Boolean((status?.scheduler as Record<string, unknown> | undefined)?.last_scan);
-	$: lastOutcomeFailed = (status?.last_outcome as Record<string, unknown> | undefined)?.status === 'failed' && !outcome?.skipped;
-	$: relaysOk = relayHealth.length === 2 && relayHealth.every((relay) =>
-		relay.reachable && relay.identity_ok && relay.initial_state_off && relay.output_off && Number(relay.auto_off_seconds) === config?.bell_duration_seconds
+	$: rosterDirty = Boolean(
+		config &&
+			draftConfig &&
+			JSON.stringify([
+				draftConfig.profiles,
+				draftConfig.weekdays,
+				draftConfig.gap_seconds,
+				draftConfig.bell_duration_seconds
+			]) !==
+				JSON.stringify([
+					config.profiles,
+					config.weekdays,
+					config.gap_seconds,
+					config.bell_duration_seconds
+				])
 	);
-	$: fault = !preview && status && (healthFailureStreak >= 2 || lastOutcomeFailed);
+	$: validNewTime = /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(newBellTime);
 
 	function nextBellLabel(event: BellEvent) {
-		return new Intl.DateTimeFormat('nl-NL', {
-			weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Amsterdam'
-		}).format(new Date(event.at));
+		return (
+			new Intl.DateTimeFormat('nl-NL', {
+				weekday: 'short',
+				hour: '2-digit',
+				minute: '2-digit',
+				timeZone: 'Europe/Amsterdam'
+			}).format(new Date(event.at)) + (event.count === 2 ? ' · 2×' : '')
+		);
 	}
 
 	function weekdaySummary(days: number[]) {
 		if (days.length === 7) return 'iedere dag';
-		if ([0, 1, 2, 3, 4].every((day) => days.includes(day)) && days.length === 5) return 'maandag t/m vrijdag';
-		return days.map((day) => weekdays.find((item) => item.value === day)?.label).filter(Boolean).join(', ');
+		if ([0, 1, 2, 3, 4].every((day) => days.includes(day)) && days.length === 5)
+			return 'maandag t/m vrijdag';
+		return days
+			.map((day) => weekdays.find((item) => item.value === day)?.label)
+			.filter(Boolean)
+			.join(', ');
 	}
 
-	function parseTimeEntry(value: string): TimeEntry {
+	function parseTimeEntry(value: string | { time: string; count?: number }): TimeEntry {
+		if (typeof value !== 'string') return { time: value.time, count: value.count === 2 ? 2 : 1 };
 		const match = /^(\d{2}:\d{2})(?:x([12]))?$/.exec(value);
 		return { time: match?.[1] ?? '08:00', count: match?.[2] === '2' ? 2 : 1 };
 	}
@@ -130,26 +148,29 @@
 		setProfileEntries(entries);
 	}
 
-	function addTimeEntry() {
-		if (editingEntries.length >= 200) {
-			message = 'Dit rooster kan maximaal 200 belmomenten bevatten.';
+	async function addTimeEntry() {
+		if (!validNewTime || editingEntries.length >= 200) return;
+		if (editingEntries.some((entry) => entry.time === newBellTime)) {
+			message = 'Deze tijd staat al in het rooster.';
 			return;
 		}
-		let minuteOfDay = editingEntries.length
-			? Number(editingEntries[editingEntries.length - 1].time.slice(0, 2)) * 60 +
-				Number(editingEntries[editingEntries.length - 1].time.slice(3)) +
-				10
-			: 8 * 60;
-		const existingTimes = new Set(editingEntries.map((entry) => entry.time));
-		while (minuteOfDay < 24 * 60) {
-			const time = `${String(Math.floor(minuteOfDay / 60)).padStart(2, '0')}:${String(minuteOfDay % 60).padStart(2, '0')}`;
-			if (!existingTimes.has(time)) {
-				setProfileEntries([...editingEntries, { time, count: 1 }]);
-				return;
-			}
-			minuteOfDay += 10;
-		}
-		message = 'Geen vrije tijd meer vandaag.';
+		const hour = newBellTime.slice(0, 2);
+		setProfileEntries(
+			[...editingEntries, { time: newBellTime, count: newBellCount }].sort((a, b) =>
+				a.time.localeCompare(b.time)
+			)
+		);
+		openHours = new Set([...openHours, hour]);
+		newBellTime = '';
+		await tick();
+		document.getElementById(`bell-hour-${hour}`)?.scrollIntoView({ block: 'nearest' });
+	}
+
+	function setHourOpen(hour: string, open: boolean) {
+		const next = new Set(openHours);
+		if (open) next.add(hour);
+		else next.delete(hour);
+		openHours = next;
 	}
 
 	function toggleWeekday(day: number) {
@@ -277,16 +298,11 @@
 		void verifyPin();
 	}
 
-	function outcomeCount(relayId: string) {
-		return (outcome?.pulses ?? []).filter((pulse) =>
-			pulse.relays?.some((relay) => relay.relay === relayId && relay.ok)
-		).length;
-	}
-
 	async function read(operation: string) {
 		const response = await fetch(`/api/bells/${operation}`);
 		const result = await response.json();
-		if (!response.ok) throw new Error(result.error ?? result.message ?? 'Belservice niet bereikbaar.');
+		if (!response.ok)
+			throw new Error(result.error ?? result.message ?? 'Belservice niet bereikbaar.');
 		return result;
 	}
 
@@ -294,26 +310,17 @@
 		try {
 			status = await read('status');
 			preview = status?.preview === true;
-			const last = status?.last_outcome as { outcome?: string; status?: string; created?: string } | undefined;
-			lastEvent = last ?? null;
-			try { outcome = last?.outcome ? JSON.parse(last.outcome) : null; }
-			catch { outcome = { error: 'Uitkomst niet leesbaar' }; }
-			if (message === 'Bel gestart.' && last?.outcome) message = '';
-			relayHealth = (status?.relay_health as RelayHealth[]) ?? [];
-			const clockReady = (status?.clock as Record<string, unknown> | undefined)?.synchronized === true;
-			const serviceReady = Boolean((status?.scheduler as Record<string, unknown> | undefined)?.last_scan);
-			const relaysReady = relayHealth.length === 2 && relayHealth.every((relay) =>
-				relay.reachable && relay.identity_ok && relay.initial_state_off && relay.output_off && Number(relay.auto_off_seconds) === config?.bell_duration_seconds
-			);
-			healthFailureStreak = clockReady && serviceReady && relaysReady ? 0 : healthFailureStreak + 1;
+			if (message === 'Bel gestart.' && status?.last_outcome) message = '';
 			if (load || !config) {
 				const result = await read('config');
+				const firstLoad = !config;
 				const loadedConfig = result.config as Config;
 				config = loadedConfig;
 				draftConfig = JSON.parse(JSON.stringify(loadedConfig)) as Config;
 				revision = result.revision;
 				selectedMode = loadedConfig.paused ? 'off' : loadedConfig.active_profile;
-				if (loadedConfig.active_profile in profileNames) editingProfile = loadedConfig.active_profile as ProfileId;
+				if (firstLoad && loadedConfig.active_profile in profileNames)
+					editingProfile = loadedConfig.active_profile as ProfileId;
 			}
 			if (connectionError) message = '';
 			connectionError = false;
@@ -326,7 +333,10 @@
 	}
 
 	async function mutate(operation: string, data: unknown) {
-		if (!pin.trim()) { message = 'Vul de configuratie-PIN in.'; return false; }
+		if (!pin.trim()) {
+			message = 'Vul de configuratie-PIN in.';
+			return false;
+		}
 		busy = true;
 		message = '';
 		try {
@@ -370,7 +380,9 @@
 	}
 
 	function download() {
-		const blob = new Blob([JSON.stringify(draftConfig ?? config, null, 2)], { type: 'application/json' });
+		const blob = new Blob([JSON.stringify(draftConfig ?? config, null, 2)], {
+			type: 'application/json'
+		});
 		const link = document.createElement('a');
 		link.href = URL.createObjectURL(blob);
 		link.download = 'belrooster.json';
@@ -389,7 +401,8 @@
 			imported.paused = config.paused;
 			imported.active_profile = config.active_profile;
 			draftConfig = imported;
-			if (imported.active_profile in profileNames) editingProfile = imported.active_profile as ProfileId;
+			if (imported.active_profile in profileNames)
+				editingProfile = imported.active_profile as ProfileId;
 			editing = true;
 			message = 'Import geladen. Controleer het rooster en sla op met PIN.';
 		} catch {
@@ -400,7 +413,9 @@
 	onMount(() => {
 		void refresh(true);
 		window.addEventListener('pointerdown', handleOutsidePinPad, true);
-		const timer = setInterval(() => { if (!document.hidden && Date.now() >= retryAfter) void refresh(); }, 3000);
+		const timer = setInterval(() => {
+			if (!document.hidden && Date.now() >= retryAfter) void refresh();
+		}, 3000);
 		return () => {
 			clearInterval(timer);
 			window.removeEventListener('pointerdown', handleOutsidePinPad, true);
@@ -412,12 +427,12 @@
 	<div class="mb-2 flex min-h-11 items-start justify-between gap-2">
 		<h3 id="bell-manager-title" class="text-base font-semibold text-slate-900">Schoolbel</h3>
 		<div class="ml-auto w-52 shrink-0 text-right text-sm leading-5 sm:w-64">
-			<div class="truncate text-slate-600">Volgende bel: {config?.paused ? 'Uit' : nextBell ? nextBellLabel(nextBell) : 'onbekend'}</div>
+			<div class="truncate text-slate-600">
+				Volgende bel: {config?.paused ? 'Uit' : nextBell ? nextBellLabel(nextBell) : 'onbekend'}
+			</div>
 			<div class="h-5 truncate">
 				{#if preview}
 					<span class="text-slate-600">Lokaal voorbeeld</span>
-				{:else if fault}
-					<span class="font-medium text-red-700">Belservice controleren</span>
 				{/if}
 			</div>
 		</div>
@@ -426,8 +441,20 @@
 	{#if config}
 		<div class="grid grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Belrooster">
 			{#each Object.entries(names) as [id, label]}
-				<label class={`flex min-h-14 items-center gap-2 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-900 ${(pinEntered && !busy && !preview) ? '' : 'opacity-50'}`}>
-					<input type="radio" name="bell-mode" value={id} checked={selectedMode === id} disabled={busy || preview || !pinEntered} on:change={() => { selectedMode = id; message = ''; }} />
+				<label
+					class={`flex min-h-14 items-center gap-2 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-900 ${pinEntered && !busy && !preview ? '' : 'opacity-50'}`}
+				>
+					<input
+						type="radio"
+						name="bell-mode"
+						value={id}
+						checked={selectedMode === id}
+						disabled={busy || preview || !pinEntered}
+						on:change={() => {
+							selectedMode = id;
+							message = '';
+						}}
+					/>
 					{label}
 				</label>
 			{/each}
@@ -436,202 +463,373 @@
 		<div class="mt-2 flex flex-wrap items-center gap-2">
 			{#if !preview}
 				<div class="bell-pin-entry relative flex items-center gap-2" data-bell-pin-entry>
-					<input bind:this={bellPinInput} class={`min-h-12 w-28 rounded-md border px-3 ${pinVerified ? 'border-emerald-600 bg-emerald-50' : 'border-slate-300'}`} type="text" inputmode="none" autocomplete="off" autocapitalize="off" maxlength="10" placeholder="PIN" aria-label="Configuratie-PIN" value={maskedPin(pin)} on:input={handlePinInput} on:focus={() => { bellPinPadOpen = true; }} on:click={movePinCaretToEnd} on:blur={handlePinBlur} />
-					{#if pinVerified}<span class="text-sm font-medium text-emerald-700" role="status" aria-label="PIN gecontroleerd">✓ PIN klopt</span>{/if}
+					<input
+						bind:this={bellPinInput}
+						class={`min-h-12 w-28 rounded-md border px-3 ${pinVerified ? 'border-emerald-600 bg-emerald-50' : 'border-slate-300'}`}
+						type="text"
+						inputmode="none"
+						autocomplete="off"
+						autocapitalize="off"
+						maxlength="10"
+						placeholder="PIN"
+						aria-label="Configuratie-PIN"
+						value={maskedPin(pin)}
+						on:input={handlePinInput}
+						on:focus={() => {
+							bellPinPadOpen = true;
+						}}
+						on:click={movePinCaretToEnd}
+						on:blur={handlePinBlur}
+					/>
 					{#if !pinEntered}<span class="text-xs text-slate-500">PIN nodig</span>{/if}
 					{#if bellPinPadOpen}
-						<div class="bell-pin-pad absolute top-full left-0 z-30 mt-2 grid grid-cols-3 gap-1 rounded-md border border-slate-300 bg-white p-2 shadow-lg" data-bell-pin-pad role="group" aria-label="PIN-toetsenbord">
+						<div
+							class="bell-pin-pad absolute top-full left-0 z-30 mt-2 grid grid-cols-3 gap-1 rounded-md border border-slate-300 bg-white p-2 shadow-lg"
+							data-bell-pin-pad
+							role="group"
+							aria-label="PIN-toetsenbord"
+						>
 							{#each bellPinNodes as digit (digit)}
-								<button type="button" aria-label={`PIN ${digit}`} on:click={() => appendBellPinDigit(digit)}>{digit}</button>
+								<button
+									type="button"
+									aria-label={`PIN ${digit}`}
+									on:click={() => appendBellPinDigit(digit)}>{digit}</button
+								>
 							{/each}
-							<button type="button" aria-label="Laatste cijfer wissen" on:click={removeBellPinDigit}>⌫</button>
+							<button type="button" aria-label="Laatste cijfer wissen" on:click={removeBellPinDigit}
+								>⌫</button
+							>
 							<button type="button" on:click={() => appendBellPinDigit(0)}>0</button>
-							<button type="button" on:click={() => { bellPinPadOpen = false; void verifyPin(); }}>Gereed</button>
+							<button
+								type="button"
+								on:click={() => {
+									bellPinPadOpen = false;
+									void verifyPin();
+								}}>Gereed</button
+							>
 						</div>
 					{/if}
 				</div>
 			{/if}
-			<button disabled={busy || preview || !pinEntered || !modeDirty} on:click={saveMode}>Opslaan</button>
-			<button disabled={busy || preview || !pinEntered} on:click={() => mutate('demo', { request_id: requestId(), count: 1 })}>Bel nu 1×</button>
-			<button disabled={busy || preview || !pinEntered} on:click={() => mutate('demo', { request_id: requestId(), count: 2 })}>Bel nu 2×</button>
-			<button disabled={busy || preview || !pinEntered} on:click={() => editing = true}>Rooster bewerken</button>
-			{#if status && !preview}
-				<details class="ml-auto text-sm text-slate-700">
-					<summary class="cursor-pointer">Belstatus</summary>
-					<div class="mt-2 space-y-1">
-						<p>Klok: {clockOk ? 'goed' : 'niet gesynchroniseerd'} · Service: {serviceOk ? 'actief' : 'niet actief'}</p>
-						{#each relayHealth as relay}
-							<p>Bel school {relay.id === 'a8032abc4264' ? '1' : '2'}: {relay.reachable && relay.identity_ok && relay.initial_state_off && relay.output_off && Number(relay.auto_off_seconds) === config?.bell_duration_seconds ? 'gereed' : 'storing'}</p>
-						{/each}
-						{#if lastEvent}
-							<p>Laatste bel: {lastEvent.status === 'claimed' ? 'bezig' : outcome?.skipped ? 'overgeslagen' : outcome?.ok ? 'gelukt' : 'mislukt'}{#if outcome?.pulses?.length} · {outcome.pulses.length}×{/if}</p>
-							{#if outcome?.pulses?.length}
-								<p>School 1: {outcomeCount('a8032abc4264')}/{outcome.pulses.length} · School 2: {outcomeCount('08b61fd8993c')}/{outcome.pulses.length}</p>
-							{:else if outcome?.error}<p>{outcome.error}</p>{/if}
-						{/if}
-					</div>
-				</details>
-			{/if}
+			<button
+				class:save-dirty={modeDirty}
+				disabled={busy || preview || !pinEntered || !modeDirty}
+				on:click={saveMode}>Opslaan</button
+			>
+			<button
+				disabled={busy || preview || !pinEntered}
+				on:click={() => mutate('demo', { request_id: requestId(), count: 1 })}>Bel nu 1×</button
+			>
+			<button
+				disabled={busy || preview || !pinEntered}
+				on:click={() => mutate('demo', { request_id: requestId(), count: 2 })}>Bel nu 2×</button
+			>
+			<button disabled={busy || preview || !pinEntered} on:click={() => (editing = true)}
+				>Rooster bewerken</button
+			>
 		</div>
 
 		{#if editing}
-			<div class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6" role="presentation">
-				<button type="button" class="absolute inset-0 bg-slate-900/60" aria-label="Sluit belrooster bewerken" on:click={() => (editing = false)}></button>
-				<div class="relative flex max-h-[calc(100vh-1.5rem)] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-slate-300 bg-white shadow-xl sm:max-h-[calc(100vh-3rem)]" role="dialog" aria-modal="true" aria-labelledby="bell-editor-title" tabindex="-1" on:click|stopPropagation on:keydown={(event) => { if (event.key === 'Escape') editing = false; event.stopPropagation(); }}>
-					<header class="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 px-4 py-3 sm:px-6">
+			<div
+				class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
+				role="presentation"
+			>
+				<div class="absolute inset-0 bg-white" aria-hidden="true"></div>
+				<div
+					class="relative flex max-h-[calc(100vh-1.5rem)] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-slate-300 bg-white shadow-xl sm:max-h-[calc(100vh-3rem)]"
+					role="dialog"
+					aria-modal="true"
+					aria-labelledby="bell-editor-title"
+					tabindex="-1"
+					on:click|stopPropagation
+					on:keydown|stopPropagation
+				>
+					<header
+						class="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 px-4 py-3 sm:px-6"
+					>
 						<div>
-							<h2 id="bell-editor-title" class="text-xl font-semibold text-slate-900">Belrooster bewerken</h2>
-							<p class="text-sm text-slate-600">Pas dagen, tijden en belduur aan.</p>
+							<h2 id="bell-editor-title" class="text-xl font-semibold text-slate-900">
+								Belrooster bewerken
+							</h2>
+							<p class="text-sm text-slate-600">
+								Actief rooster: {runningProfile
+									? (profileNames[runningProfile as ProfileId] ?? runningProfile)
+									: 'Uit'}
+							</p>
 						</div>
 						<button type="button" on:click={() => (editing = false)}>Sluiten</button>
 					</header>
 					<div class="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
-					<div class="space-y-3">
-				{#if draftConfig}
-					<div role="tablist" aria-label="Rooster kiezen" class="grid grid-cols-3 gap-2 border-b border-slate-200 pb-2">
-						{#each Object.entries(profileNames) as [profile, label]}
-							<button
-								type="button"
-								role="tab"
-								aria-selected={editingProfile === profile}
-								class={`relative -mb-px flex min-h-14 flex-col items-start justify-center rounded-t-md border px-3 text-left text-sm ${editingProfile === profile ? 'z-10 border-slate-300 border-b-white bg-white font-semibold text-slate-900' : 'border-transparent bg-slate-100 font-medium text-slate-600 hover:bg-slate-200 hover:text-slate-900'}`}
-								on:click={() => { editingProfile = profile as ProfileId; message = ''; }}
-							>
-								{label}
-								<span class="text-xs font-normal text-slate-500">{profileCounts[profile] ?? 0} belmomenten</span>
-							</button>
-						{/each}
-					</div>
-					{#if editingEntries.length}
-						<p class="text-sm text-slate-600">
-							{editingEntries.length} belmomenten · {editingEntries[0].time}–{editingEntries[editingEntries.length - 1].time}
-							· {weekdaySummary(draftConfig.weekdays)}
-						</p>
-					{/if}
+						<div class="space-y-3">
+							{#if draftConfig}
+								<div
+									role="tablist"
+									aria-label="Rooster kiezen"
+									class="grid grid-cols-3 gap-2 border-b border-slate-200 pb-2"
+								>
+									{#each Object.entries(profileNames) as [profile, label]}
+										<button
+											type="button"
+											role="tab"
+											aria-selected={editingProfile === profile}
+											class={`bell-schedule-tab relative -mb-px flex min-h-14 flex-col items-start justify-center rounded-t-md border px-3 text-left text-sm ${editingProfile === profile ? 'z-10 border-slate-300 border-b-white bg-white font-semibold text-slate-900' : 'border-transparent bg-slate-100 font-medium text-slate-600 hover:bg-slate-200 hover:text-slate-900'}`}
+											on:click={() => {
+												editingProfile = profile as ProfileId;
+												openHours = new Set();
+												message = '';
+											}}
+										>
+											{label}
+											<span class="text-xs font-normal text-slate-500"
+												>{profileCounts[profile] ?? 0} belmomenten</span
+											>
+											{#if runningProfile === profile}<span class="live-profile">Loopt nu</span
+												>{/if}
+										</button>
+									{/each}
+								</div>
+								{#if editingEntries.length}
+									<p class="text-sm text-slate-600">
+										{editingEntries.length} belmomenten · {editingEntries[0].time}–{editingEntries[
+											editingEntries.length - 1
+										].time}
+										· {weekdaySummary(draftConfig.weekdays)}
+									</p>
+								{/if}
 
-					<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-						<fieldset class="min-w-0">
-							<legend class="mb-1 text-sm font-semibold text-slate-800">Dagen waarop de bel gaat</legend>
-							<div class="flex flex-wrap gap-2">
-								{#each weekdays as day}
-									<label class={`flex min-h-11 min-w-14 items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium ${draftConfig.weekdays.includes(day.value) ? 'border-slate-700 bg-slate-100 text-slate-900' : 'border-slate-300 text-slate-600'}`}>
-										<input
-											type="checkbox"
-											checked={draftConfig.weekdays.includes(day.value)}
-											disabled={draftConfig.weekdays.includes(day.value) && draftConfig.weekdays.length === 1}
-											on:change={() => toggleWeekday(day.value)}
-											class="sr-only"
-										/>
-										{day.label}
-									</label>
-								{/each}
-							</div>
-						</fieldset>
-
-						<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-							<label class="block text-sm font-semibold text-slate-800" for="bell-gap">
-								Tussen eerste en tweede bel
-								<span class="mt-1 flex items-center gap-2 font-normal">
-									<input
-										id="bell-gap"
-										class="min-h-10 w-24 rounded-md border border-slate-300 px-3 text-slate-900"
-										type="number"
-										min="0"
-										max="30"
-										step="1"
-										value={draftConfig.gap_seconds}
-										on:change={(event) => updateGap(event.currentTarget.value)}
-									/>
-									seconden
-								</span>
-								<span class="mt-1 block text-xs font-normal text-slate-500">Alleen gebruikt bij een dubbele bel.</span>
-							</label>
-							<div class="text-sm font-semibold text-slate-800">
-								Duur per bel
-								<span class="mt-1 flex items-center gap-2 font-normal">
-									<input
-										class="min-h-10 w-24 rounded-md border border-slate-300 px-3 text-slate-900"
-										type="number"
-										min="1"
-										max="30"
-										step="1"
-										value={draftConfig.bell_duration_seconds}
-										on:change={(event) => updateBellDuration(event.currentTarget.value)}
-									/>
-									seconden
-								</span>
-								<p class="text-xs font-normal text-slate-500">Stel auto-off op beide relais gelijk in op de belduur.</p>
-							</div>
-						</div>
-					</div>
-
-					<div class="flex items-end justify-between gap-3 border-t border-slate-200 pt-3">
-						<div>
-							<h4 class="text-base font-semibold text-slate-900">Beltijden</h4>
-							<p class="text-sm text-slate-600">Pas het tijdstip aan, kies 1× of 2×, of verwijder het moment.</p>
-						</div>
-						<span class="shrink-0 text-sm text-slate-600">{editingEntries.length}</span>
-					</div>
-					{#if editingEntries.length}
-						<div class="grid grid-cols-1 gap-2">
-							{#each entryHours as hour}
-								<details class="min-w-0 rounded-md border border-slate-200">
-									<summary class="cursor-pointer px-3 py-3 text-sm font-semibold text-slate-700">
-										{hour}:00 uur <span class="ml-1 font-normal text-slate-500">· {hourEntryCount(hour)} belmomenten</span>
-									</summary>
-									<div class="grid grid-cols-1 gap-1">
-										{#each editingEntries as entry, index (index)}
-											{#if entry.time.slice(0, 2) === hour}
-												<div class="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1 rounded bg-slate-50 px-2">
+								<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+									<fieldset class="min-w-0">
+										<legend class="mb-1 text-sm font-semibold text-slate-800"
+											>Dagen waarop de bel gaat</legend
+										>
+										<div class="flex flex-wrap gap-2">
+											{#each weekdays as day}
+												<label
+													class={`flex min-h-11 min-w-14 items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium ${draftConfig.weekdays.includes(day.value) ? 'border-slate-700 bg-slate-100 text-slate-900' : 'border-slate-300 text-slate-600'}`}
+												>
 													<input
-														class="min-h-11 min-w-0 rounded-md border-0 bg-transparent px-1 text-base font-medium text-slate-900 focus:outline-2 focus:outline-blue-600"
-														type="time"
-														aria-label={`Tijd ${index + 1}`}
-														value={entry.time}
-														on:change={(event) => updateTimeEntry(index, { time: event.currentTarget.value })}
+														type="checkbox"
+														checked={draftConfig.weekdays.includes(day.value)}
+														disabled={draftConfig.weekdays.includes(day.value) &&
+															draftConfig.weekdays.length === 1}
+														on:change={() => toggleWeekday(day.value)}
+														class="sr-only"
 													/>
-													<select
-														class="min-h-10 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-800"
-														aria-label={`Aantal bellen bij ${entry.time}`}
-														value={entry.count}
-														on:change={(event) => updateTimeEntry(index, { count: Number(event.currentTarget.value) === 2 ? 2 : 1 })}
+													{day.label}
+												</label>
+											{/each}
+										</div>
+									</fieldset>
+
+									<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+										<label class="block text-sm font-semibold text-slate-800" for="bell-gap">
+											Tussen eerste en tweede bel
+											<span class="mt-1 flex items-center gap-1 font-normal">
+												<button
+													type="button"
+													class="timing-step"
+													aria-label="Kortere pauze"
+													disabled={draftConfig.gap_seconds <= 0 || busy}
+													on:click={() =>
+														updateGap(String(Math.max(0, draftConfig!.gap_seconds - 1)))}>−</button
+												>
+												<input
+													id="bell-gap"
+													aria-label="Tussen eerste en tweede bel"
+													class="min-h-10 w-16 rounded-md border border-slate-300 px-2 text-slate-900"
+													type="number"
+													min="0"
+													max="30"
+													step="1"
+													value={draftConfig.gap_seconds}
+													on:input={(event) => updateGap(event.currentTarget.value)}
+												/>
+												<button
+													type="button"
+													class="timing-step"
+													aria-label="Langere pauze"
+													disabled={draftConfig.gap_seconds >= 30 || busy}
+													on:click={() =>
+														updateGap(String(Math.min(30, draftConfig!.gap_seconds + 1)))}>+</button
+												>
+												seconden
+											</span>
+										</label>
+										<div class="text-sm font-semibold text-slate-800">
+											Duur per bel
+											<span class="mt-1 flex items-center gap-1 font-normal">
+												<button
+													type="button"
+													class="timing-step"
+													aria-label="Kortere belduur"
+													disabled={draftConfig.bell_duration_seconds <= 1 || busy}
+													on:click={() =>
+														updateBellDuration(
+															String(Math.max(1, draftConfig!.bell_duration_seconds - 1))
+														)}>−</button
+												>
+												<input
+													class="min-h-10 w-16 rounded-md border border-slate-300 px-2 text-slate-900"
+													type="number"
+													min="1"
+													max="30"
+													step="1"
+													value={draftConfig.bell_duration_seconds}
+													on:input={(event) => updateBellDuration(event.currentTarget.value)}
+													aria-label="Duur per bel"
+												/>
+												<button
+													type="button"
+													class="timing-step"
+													aria-label="Langere belduur"
+													disabled={draftConfig.bell_duration_seconds >= 30 || busy}
+													on:click={() =>
+														updateBellDuration(
+															String(Math.min(30, draftConfig!.bell_duration_seconds + 1))
+														)}>+</button
+												>
+												seconden
+											</span>
+										</div>
+									</div>
+								</div>
+
+								<div class="flex items-end justify-between gap-3 border-t border-slate-200 pt-3">
+									<div>
+										<h4 class="text-base font-semibold text-slate-900">Beltijden</h4>
+										<p class="text-sm text-slate-600">
+											Pas het tijdstip aan, kies 1× of 2×, of verwijder het moment.
+										</p>
+									</div>
+									<span class="shrink-0 text-sm text-slate-600">{editingEntries.length}</span>
+								</div>
+								{#if editingEntries.length}
+									<div class="grid grid-cols-1 gap-2">
+										{#each entryHours as hour}
+											<details
+												id={`bell-hour-${hour}`}
+												class="min-w-0 rounded-md border border-slate-200"
+												open={openHours.has(hour)}
+												on:toggle={(event) => setHourOpen(hour, event.currentTarget.open)}
+											>
+												<summary
+													class="cursor-pointer px-3 py-3 text-sm font-semibold text-slate-700"
+												>
+													{hour}:00 uur
+													<span class="ml-1 font-normal text-slate-500"
+														>· {hourEntryCount(hour)} belmomenten</span
 													>
-														<option value="1">1×</option>
-														<option value="2">2×</option>
-													</select>
-													<button
-														type="button"
-														class="min-h-10 px-2 text-sm text-slate-600 hover:text-red-700 disabled:opacity-40"
-														aria-label={`Verwijder tijd ${entry.time}`}
-														disabled={busy || preview}
-														on:click={() => setProfileEntries(editingEntries.filter((_, entryIndex) => entryIndex !== index))}
-													>
-														Verwijder
-													</button>
+												</summary>
+												<div class="grid grid-cols-1 gap-1">
+													{#each editingEntries as entry, index (index)}
+														{#if entry.time.slice(0, 2) === hour}
+															<div
+																class="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1 rounded bg-slate-50 px-2"
+															>
+																<input
+																	class="min-h-11 min-w-0 rounded-md border-0 bg-transparent px-1 text-base font-medium text-slate-900 focus:outline-2 focus:outline-blue-600"
+																	type="time"
+																	aria-label={`Tijd ${index + 1}`}
+																	value={entry.time}
+																	on:change={(event) =>
+																		updateTimeEntry(index, { time: event.currentTarget.value })}
+																/>
+																<select
+																	class="min-h-10 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-800"
+																	aria-label={`Aantal bellen bij ${entry.time}`}
+																	value={entry.count}
+																	on:change={(event) =>
+																		updateTimeEntry(index, {
+																			count: Number(event.currentTarget.value) === 2 ? 2 : 1
+																		})}
+																>
+																	<option value={1}>1×</option>
+																	<option value={2}>2×</option>
+																</select>
+																<button
+																	type="button"
+																	class="min-h-10 px-2 text-sm text-slate-600 hover:text-red-700 disabled:opacity-40"
+																	aria-label={`Verwijder tijd ${entry.time}`}
+																	disabled={busy || preview}
+																	on:click={() =>
+																		setProfileEntries(
+																			editingEntries.filter((_, entryIndex) => entryIndex !== index)
+																		)}
+																>
+																	Verwijder
+																</button>
+															</div>
+														{/if}
+													{/each}
 												</div>
-											{/if}
+											</details>
 										{/each}
 									</div>
-								</details>
-							{/each}
-						</div>
-					{:else}
-						<p class="text-sm text-slate-600">Geen belmomenten in dit rooster.</p>
-					{/if}
-					<button type="button" disabled={busy || preview} on:click={addTimeEntry}>Tijd toevoegen</button>
-				{:else}
-					<p class="text-sm text-slate-600">Rooster laden…</p>
-				{/if}
+								{:else}
+									<p class="text-sm text-slate-600">Geen belmomenten in dit rooster.</p>
+								{/if}
+								<div class="flex flex-wrap items-end gap-2 border-t border-slate-200 pt-3">
+									<label class="text-sm font-medium"
+										>Nieuwe tijd<input
+											class="mt-1 block min-h-12 w-28 rounded-md border border-slate-300 px-3"
+											type="text"
+											placeholder="HH:MM"
+											maxlength="5"
+											bind:value={newBellTime}
+											aria-label="Nieuwe beltijd"
+										/></label
+									>
+									<label class="text-sm font-medium"
+										>Tijdkiezer<input
+											class="mt-1 block min-h-12 rounded-md border border-slate-300 px-3"
+											type="time"
+											bind:value={newBellTime}
+											aria-label="Kies nieuwe beltijd"
+										/></label
+									>
+									<select
+										class="min-h-12 rounded-md border border-slate-300 px-3"
+										bind:value={newBellCount}
+										aria-label="Aantal bellen voor nieuwe tijd"
+										><option value={1}>1×</option><option value={2}>2×</option></select
+									>
+									<button
+										type="button"
+										disabled={busy || preview || !pinEntered || !validNewTime}
+										on:click={addTimeEntry}>Tijd toevoegen</button
+									>
+								</div>
+							{:else}
+								<p class="text-sm text-slate-600">Rooster laden…</p>
+							{/if}
 
-				{#if message}<p class="text-sm" role="status">{message}</p>{/if}
+							{#if message}<p class="text-sm" role="status">{message}</p>{/if}
+						</div>
 					</div>
-					</div>
-					<footer class="flex shrink-0 flex-wrap items-center gap-2 border-t border-slate-200 px-4 py-3 sm:px-6">
-						<button disabled={busy || preview || !pinEntered || !draftConfig} on:click={save}>Opslaan</button>
+					<footer
+						class="flex shrink-0 flex-wrap items-center gap-2 border-t border-slate-200 px-4 py-3 sm:px-6"
+					>
+						<button
+							class:save-dirty={rosterDirty}
+							disabled={busy || preview || !pinEntered || !rosterDirty}
+							on:click={save}>Opslaan{rosterDirty ? ' · wijzigingen' : ''}</button
+						>
 						<button disabled={busy} on:click={() => refresh(true)}>Opnieuw laden</button>
 						<button type="button" on:click={download}>Exporteren</button>
-						<button disabled={busy || preview || !pinEntered} on:click={() => { if (confirm('Vorig rooster herstellen?')) void mutate('restore', { revision }); }}>Herstellen</button>
-						<label class="file-button">Importeren <input class="sr-only" type="file" accept="application/json,.json" on:change={importFile} /></label>
+						<button
+							disabled={busy || preview || !pinEntered}
+							on:click={() => {
+								if (confirm('Vorig rooster herstellen?')) void mutate('restore', { revision });
+							}}>Herstellen</button
+						>
+						<label class="file-button"
+							>Importeren <input
+								class="sr-only"
+								type="file"
+								accept="application/json,.json"
+								on:change={importFile}
+							/></label
+						>
 					</footer>
 				</div>
 			</div>
@@ -641,9 +839,60 @@
 </section>
 
 <style>
-	button, .file-button { display: inline-flex; align-items: center; min-height: 48px; padding: 8px 14px; border: 1px solid #94a3b8; border-radius: 6px; background: white; color: #0f172a; cursor: pointer; }
-	button:disabled { opacity: .5; }
-	.file-button:focus-within { outline: 2px solid #2563eb; outline-offset: 2px; }
-	.bell-pin-pad { width: 12rem; }
-	.bell-pin-pad button { justify-content: center; min-height: 2.75rem; padding: 0.5rem; }
+	button,
+	.file-button {
+		display: inline-flex;
+		align-items: center;
+		min-height: 48px;
+		padding: 8px 14px;
+		border: 1px solid #94a3b8;
+		border-radius: 6px;
+		background: white;
+		color: #0f172a;
+		cursor: pointer;
+	}
+	button:disabled {
+		opacity: 0.5;
+	}
+	button.timing-step {
+		min-height: 40px;
+		min-width: 40px;
+		padding: 4px;
+		justify-content: center;
+	}
+	button.bell-schedule-tab {
+		border-radius: 0.5rem 0.5rem 0 0;
+		background: #f1f5f9;
+		border-color: #cbd5e1;
+	}
+	button.bell-schedule-tab[aria-selected='true'] {
+		background: #0284c7;
+		color: white;
+		border-color: #0284c7;
+	}
+	button.bell-schedule-tab[aria-selected='true'] span {
+		color: white;
+	}
+	.live-profile {
+		font-size: 0.75rem;
+		font-weight: 700;
+	}
+	button.save-dirty {
+		background: #0284c7;
+		border-color: #0369a1;
+		color: white;
+		font-weight: 700;
+	}
+	.file-button:focus-within {
+		outline: 2px solid #2563eb;
+		outline-offset: 2px;
+	}
+	.bell-pin-pad {
+		width: 12rem;
+	}
+	.bell-pin-pad button {
+		justify-content: center;
+		min-height: 2.75rem;
+		padding: 0.5rem;
+	}
 </style>

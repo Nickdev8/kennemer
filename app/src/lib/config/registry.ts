@@ -14,25 +14,4 @@ export const inventory: DeviceInventoryEntry[] = [
 		channel: 0
 	}
 ];
-export const controls: DashboardControl[] = [
-	...devices,
-	...advancedControls,
-	...triggers,
-	{
-		id: 'color-spare-051026',
-		label: 'Color spare 051026',
-		controlType: 'device',
-		placement: 'main',
-		tabId: 'devices',
-		pushNumber: 1,
-		type: 'Direct',
-		buttonMode: 'toggle',
-		directDeviceId: '90706948e37c',
-		statusdeviceid: '90706948e37c',
-		enabled: true,
-		commands: {
-			on: { label: 'Aan', color: 'green', configured: true },
-			off: { label: 'Uit', color: 'white', configured: true }
-		}
-	}
-];
+export const controls: DashboardControl[] = [...devices, ...advancedControls, ...triggers];

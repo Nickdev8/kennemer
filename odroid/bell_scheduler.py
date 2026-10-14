@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Durable, fail-closed Shelly bell scheduler and authenticated local API."""
+import ipaddress
 import copy, datetime as dt, fcntl, json, os, re, sqlite3, subprocess, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -10,17 +11,34 @@ from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
 HOST=os.environ.get('KENNEMER_BELL_HOST','0.0.0.0'); PORT=int(os.environ.get('KENNEMER_BELL_PORT','8788')); TOKEN_ENV='KENNEMER_MAINTENANCE_TOKEN'
-RELAYS=({'id':'a8032abc4264','ip':'10.10.80.162'}, {'id':'08b61fd8993c','ip':'10.10.80.161'})
+RELAYS=({'id':'a8032abc4264'}, {'id':'08b61fd8993c'})
 PROFILES=('regular','short','ten-minute'); ZONE='Europe/Amsterdam'; TIMEOUT=2.5
 BASE=Path(__file__).resolve().parent
 DB_PATH=Path(os.environ.get('KENNEMER_BELL_DB','/var/lib/kennemer/bell/bell.sqlite3'))
 DEFAULTS_PATH=Path(os.environ.get('KENNEMER_BELL_DEFAULTS',str(BASE/'bell-defaults.json')))
+IP_CACHE_PATH=Path(os.environ.get('KENNEMER_BELL_IP_CACHE',str(BASE.parent/'runtime/ips.json')))
 
 class BellError(Exception): pass
 
+def validate_relay(relay):
+    if not isinstance(relay,dict) or set(relay)!={'id'} or not re.fullmatch(r'[0-9a-f]{12}',relay.get('id','')): raise ValueError('invalid relay identity')
+
+def relay_ip(device_id):
+    try:
+        cache=json.loads(IP_CACHE_PATH.read_text())
+        devices=cache.get('devices',cache)
+        if isinstance(devices,list):entry=next((device for device in devices if str(device.get('id','')).lower()==device_id),None)
+        else:entry=next((device for key,device in devices.items() if key.lower()==device_id or isinstance(device,dict) and str(device.get('id','')).lower()==device_id),None)
+        ip=entry if isinstance(entry,str) else next((entry.get(key) for key in ('ip','local_ip','lan_ip','address') if entry.get(key)),None) if isinstance(entry,dict) else None
+        address=ipaddress.ip_address(ip)
+        if address.version!=4 or not address.is_private or address.is_loopback or address.is_multicast or address.is_unspecified:raise ValueError('invalid LAN address')
+        return str(address)
+    except (OSError,ValueError,TypeError,AttributeError) as error:raise BellError('Geen geldig LAN-adres in apparaatcache voor '+device_id) from error
+
+
 def rpc(relay, method, params=None):
-    if relay not in RELAYS: raise BellError('unknown relay')
-    url='http://%s/rpc' % relay['ip']
+    validate_relay(relay)
+    url='http://%s/rpc' % relay_ip(relay['id'])
     body=json.dumps({'id':1,'method':method,'params':params or {}}).encode()
     req=Request(url, data=body, headers={'Content-Type':'application/json'}, method='POST')
     try:
@@ -63,20 +81,21 @@ def pulse(relay, bell_duration_seconds=1):
     raise BellError('relay pulse did not complete on then off')
 
 _sequence_lock=threading.Lock()
-def fire(count,gap,simulation=False,bell_duration_seconds=1):
+def fire(count,gap,simulation=False,bell_duration_seconds=1,relays=None):
+    relays=relays or RELAYS
     if count not in (1,2): raise BellError('count must be one or two')
     if not _sequence_lock.acquire(blocking=False): return {'ok':False,'error':'bell sequence already active'}
     outcomes=[]
     try:
       for i in range(count):
-        if simulation: result={'ok':True,'simulated':True,'relays':[{'ok':True,'relay':r['id'],'simulated':True} for r in RELAYS]}
+        if simulation: result={'ok':True,'simulated':True,'relays':[{'ok':True,'relay':r['id'],'simulated':True} for r in relays]}
         else:
             # Both relays receive each pulse concurrently; preserve partial results.
             out=[None,None]
             def run(i,relay):
                 try: out[i]=pulse(relay,bell_duration_seconds)
                 except Exception as exc: out[i]={'ok':False,'error':str(exc)}
-            ts=[threading.Thread(target=run,args=(j,r),daemon=True) for j,r in enumerate(RELAYS)]
+            ts=[threading.Thread(target=run,args=(j,r),daemon=True) for j,r in enumerate(relays)]
             [t.start() for t in ts]; [t.join() for t in ts]
             result={'ok':all(x is not None and x.get('ok') for x in out),'relays':out}
         outcomes.append(result)
@@ -104,6 +123,8 @@ class Store:
         with self.db() as c:r=c.execute('SELECT revision,body FROM config WHERE id=1').fetchone()
         body=json.loads(r['body']);body.pop('holiday_dates',None);body.pop('date_profiles',None)
         body.setdefault('bell_duration_seconds',1)
+        body.setdefault('relays',copy.deepcopy(list(RELAYS)))
+        body['relays']=[{'id':relay['id']} for relay in body['relays']]
         return r['revision'],body
     def set(self,rev,body):
         body=copy.deepcopy(body);body.pop('holiday_dates',None);body.pop('date_profiles',None)
@@ -144,6 +165,11 @@ def validate(c):
     if not isinstance(c.get('paused'),bool) or not isinstance(c.get('weekdays'),list) or not c['weekdays'] or len(set(c['weekdays']))!=len(c['weekdays']) or any(type(x)!=int or x not in range(7) for x in c['weekdays']):raise ValueError('invalid schedule')
     gap=c.get('gap_seconds');
     if type(gap) not in (int,float) or not 0<=gap<=30:raise ValueError('gap_seconds out of range')
+    relays=c.setdefault('relays',copy.deepcopy(list(RELAYS)))
+    if not isinstance(relays,list) or len(relays)!=2 or len({r.get('id') for r in relays if isinstance(r,dict)})!=2: raise ValueError('two distinct bell relays required')
+    for index,relay in enumerate(relays):
+        if isinstance(relay,dict) and set(relay)<={'id','ip'}:relays[index]={'id':relay.get('id')}
+        validate_relay(relays[index])
     duration=c.setdefault('bell_duration_seconds',1)
     if type(duration) is not int or not 1<=duration<=30:raise ValueError('bell_duration_seconds out of range')
     profiles=c.get('profiles')
@@ -206,7 +232,7 @@ class Scheduler:
                 scheduled_at=dt.datetime.fromisoformat(scheduled_date+'T'+scheduled_time).replace(tzinfo=ZoneInfo(ZONE)).timestamp()
                 if scheduled_at < self.started_at:
                     self.store.finish(key,{'ok':False,'skipped':'service started after scheduled time'});self.skipped+=1;continue
-                out=fire(count,gap,simulation=os.environ.get('KENNEMER_BELL_SIMULATION')=='1',bell_duration_seconds=duration);self.store.finish(key,out)
+                out=fire(count,gap,simulation=os.environ.get('KENNEMER_BELL_SIMULATION')=='1',bell_duration_seconds=duration,relays=self.store.get()[1]['relays']);self.store.finish(key,out)
     def next_event(self,now=None):
         now=now or self.now(); _,c=self.store.get()
         if c['paused']:return None
@@ -217,15 +243,49 @@ class Scheduler:
             profile=c['active_profile']
             for entry in c['profiles'][profile]:
                 stamp=(entry if isinstance(entry,str) else entry['time']).split('x')[0]
+                count=int(entry.split('x')[1]) if isinstance(entry,str) and 'x' in entry else (entry.get('count',1) if isinstance(entry,dict) else 1)
                 hour,minute=map(int,stamp.split(':'))
                 target=dt.datetime.combine(day,dt.time(hour,minute),ZoneInfo(ZONE))
-                if target>now:upcoming.append((target,{'at':target.isoformat(),'profile':profile,'time':stamp}))
+                if target>now:upcoming.append((target,{'at':target.isoformat(),'profile':profile,'time':stamp,'count':count}))
         return min(upcoming,key=lambda event:event[0])[1] if upcoming else None
     def loop(self):
         while True:
             try:self.tick()
             except Exception as e:self.store.meta('last_error',str(e)[:240])
             time.sleep(.5)
+
+def save_config(store, revision, config):
+    candidate=copy.deepcopy(config)
+    validate(candidate)
+    with store.lock:
+        current_revision,current=store.get()
+        if revision!=current_revision:raise Conflict()
+        if os.environ.get('KENNEMER_BELL_LIVE')!='1':return store.set(revision,candidate)
+        if not _sequence_lock.acquire(blocking=False):raise BellError('Wacht tot de huidige bel klaar is.')
+        originals=[]
+        changed=[]
+        try:
+            changed_timing=candidate['bell_duration_seconds']!=current['bell_duration_seconds'] or candidate['relays']!=current['relays']
+            if changed_timing:
+                for relay in candidate['relays']:
+                    health=relay_check(relay)
+                    if not health['identity_ok'] or not read_switch(relay):raise BellError('Relais-identiteit of uitstand kon niet worden bevestigd.')
+                    previous=rpc(relay,'Switch.GetConfig',{'id':0})
+                    originals.append((relay,{key:previous[key] for key in ('initial_state','auto_off','auto_off_delay')}))
+                for relay,previous in originals:
+                    changed.append((relay,previous))
+                    rpc(relay,'Switch.SetConfig',{'id':0,'config':{'initial_state':'off','auto_off':True,'auto_off_delay':candidate['bell_duration_seconds']}})
+                    relay_ready(relay,candidate['bell_duration_seconds'])
+            elif not candidate['paused']:
+                for relay in candidate['relays']:relay_ready(relay,candidate['bell_duration_seconds'])
+            return store.set(revision,candidate)
+        except Exception:
+            for relay,previous in reversed(changed):
+                try:rpc(relay,'Switch.SetConfig',{'id':0,'config':previous})
+                except Exception:store.meta('last_error','Relay timer rollback failed: '+relay['id'])
+            raise
+        finally:_sequence_lock.release()
+
 
 class Handler(BaseHTTPRequestHandler):
     server_version='KennemerBell/1'
@@ -254,9 +314,9 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     item=relay_check(relay);item['output_off']=read_switch(relay);return item
                 except Exception as e:return {'id':relay['id'],'reachable':False,'error':str(e)}
-            with ThreadPoolExecutor(max_workers=2) as pool:health=list(pool.map(check_health,RELAYS))
+            with ThreadPoolExecutor(max_workers=2) as pool:health=list(pool.map(check_health,c['relays']))
             now=s.now(); next_event=s.next_event(now)
-            return self.send(200,{'ok':True,'paused':c['paused'],'enabled':not c['paused'],'simulation':os.environ.get('KENNEMER_BELL_SIMULATION')=='1','bell_duration_seconds':c['bell_duration_seconds'],'clock':{'synchronized':s.synchronized(),'timezone':ZONE,'now':now.isoformat()},'config_revision':rev,'next_event':next_event,'last_outcome':s.store.recent(),'relay_health':health,'scheduler':{'last_scan':s.last_scan,'skipped_missed':s.skipped,'error':s.store.meta('last_error')}})
+            return self.send(200,{'ok':True,'paused':c['paused'],'enabled':not c['paused'],'active_profile':c['active_profile'],'simulation':os.environ.get('KENNEMER_BELL_SIMULATION')=='1','bell_duration_seconds':c['bell_duration_seconds'],'clock':{'synchronized':s.synchronized(),'timezone':ZONE,'now':now.isoformat()},'config_revision':rev,'next_event':next_event,'last_outcome':s.store.recent(),'relay_health':health,'scheduler':{'last_scan':s.last_scan,'skipped_missed':s.skipped,'error':s.store.meta('last_error')}})
         return self.send(404,{'ok':False,'error':'not found'})
     def do_POST(self):
         if not self.auth():return self.send(401,{'ok':False,'error':'unauthorized'})
@@ -264,9 +324,7 @@ class Handler(BaseHTTPRequestHandler):
             d=self.body();store=self.server.scheduler.store
             if self.path=='/config':
                 if set(d)!={'revision','config'}:raise ValueError('revision and config required')
-                if not d['config'].get('paused') and os.environ.get('KENNEMER_BELL_LIVE')=='1':
-                    for relay in RELAYS:relay_ready(relay,d['config'].get('bell_duration_seconds',1))
-                rev=store.set(d['revision'],d['config']);return self.send(200,{'ok':True,'revision':rev})
+                rev=save_config(store,d['revision'],d['config']);return self.send(200,{'ok':True,'revision':rev})
             if self.path in ('/pause','/resume','/restore'):
                 rev,c=store.get()
                 if d.get('revision')!=rev:raise Conflict()
@@ -277,9 +335,7 @@ class Handler(BaseHTTPRequestHandler):
                     restored['active_profile']=c['active_profile']
                     c=restored
                 else:c['paused']=self.path=='/pause'
-                if self.path=='/resume' and os.environ.get('KENNEMER_BELL_LIVE')=='1':
-                    for relay in RELAYS:relay_ready(relay,c['bell_duration_seconds'])
-                nxt=store.set(rev,c);return self.send(200,{'ok':True,'revision':nxt,'config':c})
+                nxt=save_config(store,rev,c);return self.send(200,{'ok':True,'revision':nxt,'config':c})
             if self.path=='/demo':
                 rid=d.get('request_id');count=d.get('count',1)
                 if not isinstance(rid,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,80}',rid):raise ValueError('request_id required')
@@ -288,7 +344,7 @@ class Handler(BaseHTTPRequestHandler):
                 def run_demo():
                     try:
                         _,config=store.get()
-                        out=fire(count,config['gap_seconds'],simulation=os.environ.get('KENNEMER_BELL_SIMULATION')=='1',bell_duration_seconds=config['bell_duration_seconds'])
+                        out=fire(count,config['gap_seconds'],simulation=os.environ.get('KENNEMER_BELL_SIMULATION')=='1',bell_duration_seconds=config['bell_duration_seconds'],relays=config['relays'])
                     except Exception as exc:out={'ok':False,'error':str(exc)}
                     store.finish(key,out)
                 threading.Thread(target=run_demo,daemon=True).start();return self.send(202,{'ok':True,'request_id':rid,'status':'running'})

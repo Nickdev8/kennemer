@@ -35,6 +35,14 @@ export function validateConfiguration(
 			occupied.add(key);
 			if (tab === 'home' && position !== undefined) home.add(position);
 		}
+		if (control.placement === 'advanced') {
+			const position = control.pushNumber;
+			if (!Number.isInteger(position) || Number(position) < 1 || Number(position) > 99)
+				errors.push(`Ongeldige geavanceerde positie: ${control.id}`);
+			const key = `advanced:${position}`;
+			if (occupied.has(key)) errors.push(`Dubbele positie: ${key}`);
+			occupied.add(key);
+		}
 		if (
 			'activeDurationMs' in control &&
 			control.activeDurationMs !== undefined &&

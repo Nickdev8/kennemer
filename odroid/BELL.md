@@ -3,14 +3,17 @@
 `kennemer-bell.service` runs independently of Docker and the kiosk. It serves
 an authenticated API on port 8788. Runtime data is SQLite at
 `/var/lib/kennemer/bell/bell.sqlite3`. The service starts with a paused regular
-roster. Select one of four modes in the dashboard: Regulier, Verkort,
+roster. Duration and relay changes verify both outputs are off before applying
+auto-off settings; they never ring the bells. Select one of four modes in the dashboard: Regulier, Verkort,
 10-minutenbel, or Uit. Uit pauses automatic bells.
 
 Regular and short rosters are copied from the school email in `todo.md`.
 A double entry such as `08:10x2` sends a pulse for the configured bell duration,
 waits until both relays are off, then waits the configured silent gap and sends
-the second pulse. Both relays must have hardware auto-off set to the same
-duration; the scheduler refuses a pulse when either relay does not match. The
+the second pulse. Saving a changed duration sets hardware auto-off on both relays to the same
+duration after identity and off-state checks. A failed update restores the
+previous timer settings and leaves the saved roster unchanged. Pulses still
+require matching auto-off timers. The
 temporary ten-minute roster rings at even-minute intervals from 14:00 through
 16:00 inclusive on the selected days. Weekends are available in the editor and
 remain off unless selected.
@@ -84,14 +87,19 @@ ODROID after deployment; local development cannot ring the bells.
    `/etc/kennemer/bell.env`, restart the unit, and confirm the two fixed devices
    by read-only `/status`. Keep the roster paused. Check the observed physical
    outputs and manually configure both devices with `initial_state: off`,
-   `auto_off: true`, and `auto_off_delay` equal to the configured bell duration.
+   `auto_off: true`, and `auto_off_delay` equal to the initial bell duration.
    The service rejects live pulses until identity and configuration match. Use
    **Bel nu 1×**, then **Bel nu 2×** with the site operator present. Confirm that
    both relays turn off after each pulse and that the ledger reports both
    outcomes. Resume the roster only after both tests have been accepted.
 
-The fixed relays are `a8032abc4264` (`10.10.80.162`) and `08b61fd8993c`
-(`10.10.80.161`). The service verifies Shelly Plus 1 identity and safety
+The default relay IDs are `a8032abc4264` and `08b61fd8993c`. Their IDs are editable under **Bediening beheren**; LAN
+addresses are resolved on every request from the shared device cache at
+`/opt/kennemer/runtime/ips.json` (`/runtime/ips.json` in Docker); no IP addresses
+are stored in the roster. `KENNEMER_BELL_IP_CACHE` overrides the host cache path.
+Existing cache data is copied into this shared location during update. Identities are
+verified before saving. Relay selections persist in SQLite and roster-default
+updates preserve them. The service verifies Shelly Plus 1 identity and safety
 configuration before each pulse. It sends `Switch.Set` with `on:true` and
 `toggle_after` set to the configured duration concurrently to both. Any partial failure stops a second
 pulse; the ledger retains both relay outcomes. Network and relay errors do

@@ -185,10 +185,10 @@ that exist in config; clients cannot submit arbitrary URLs.
 Scene IDs may be overridden from the authenticated advanced editor. Overrides
 are stored on the ODROID at `/opt/kennemer/runtime/scene-overrides.json`,
 validated against the checked-in control list. The editor also permits validated
-labels, colors, durations, enabled state, main/advanced placement and
-tab/position changes. Moving an advanced control to a dashboard tab makes it
-available there without a PIN; controls left in advanced placement remain
-PIN-protected. Endpoints, credentials and direct-device identities remain
+labels, colors, durations, enabled state and positions. Normal controls may
+change dashboard tabs; advanced controls may change their advanced position.
+The registered normal/advanced area is fixed and remains PIN-protected where
+applicable. Endpoints, credentials and direct-device identities remain
 server-controlled. Saving an override does not execute a scene.
 
 The advanced editor also permits valid `statusdeviceid` overrides for device

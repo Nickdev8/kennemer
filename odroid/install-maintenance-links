@@ -24,6 +24,9 @@ ln -sfn "$REPO/odroid/kennemer-bell.service" /etc/systemd/system/kennemer-bell.s
 systemctl daemon-reload
 systemctl enable kennemer-maintenance-api.service
 systemctl restart kennemer-maintenance-api.service
+if systemctl is-active --quiet kennemer-bell.service; then
+	systemctl restart kennemer-bell.service
+fi
 
 echo "Installed repository-backed kiosk maintenance commands:"
 readlink -f \

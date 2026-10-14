@@ -144,17 +144,16 @@ Advanced access no longer implicitly requests an update check/Git fetch.
 Bell manager: `src/lib/components/bell-manager.svelte` shows persistent host
 roster/status and offers PIN-protected edits, pause/resume, import/export,
 restore, and single/double demos. Keep the bell controls compact: four
-modes in one row, PIN and actions together, and routine health behind Belstatus. `/api/bells/[operation]` proxies to the
+modes in one row with PIN and actions together. `/api/bells/[operation]` proxies to the
 standalone ODROID scheduler; `npm run dev` and `npm run dev:live` show a disabled bell preview. See `odroid/BELL.md`. Never invoke live demos in tests.
 
-Touch keyboard checkpoint: `src/lib/components/touch-keyboard.svelte` is mounted
-in the root layout. On Linux touch input it opens for text, password, email,
-number and textarea fields; Android/iOS keep their native keyboard. It sends
-normal input events so Svelte editor bindings update. Bell roster selection is
-a draft until PIN-protected Opslaan; manual bell IDs use `getRandomValues` on
-HTTP. Belstatus shows compact outcomes. These local UI changes await deployment.
+PIN entry uses the built-in numeric keypad; the npm keyboard dependency is
+removed. Bell roster editing is a separate popup that closes only through
+Sluiten. Dirty drafts highlight Opslaan. Duration saves configure matching
+relay auto-off timers while both outputs are off; this never pulses a relay.
+Bell relay IDs are editable in Bediening beheren with their own PIN-protected
+save. IP_CACHE_PATH is shared at /runtime/ips.json in Docker.
 
-Bell status UI checkpoint: a missed schedule entry (`skipped: late`) is not a
-relay fault. Require two consecutive health failures before showing the red
-warning. Header reserves two lines so the next bell remains visible beside faults, and Belstatus opens only by touch;
-keep these behaviors when changing polling or layout.
+Bell status UI: the next bell shows 2× for double rings. The operational
+Belstatus dropdown and fault banner are removed; host diagnostics and relay
+verification remain available to the server.

@@ -1,5 +1,6 @@
 declare module 'write-file-atomic' {
 	type WriteFileAtomicOptions = {
+		mode?: number;
 		encoding?: BufferEncoding;
 		fsync?: boolean;
 	};

@@ -8,6 +8,8 @@ class BellTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
         self.defaults=Path(self.tmp.name)/'defaults.json'; self.defaults.write_text(json.dumps(json.loads((Path(__file__).parent/'bell-defaults.json').read_text())))
+        self.cache=Path(self.tmp.name)/'ips.json';self.cache.write_text(json.dumps({'devices':{'a8032abc4264':{'ip':'10.10.80.162'},'08b61fd8993c':{'ip':'10.10.80.161'}}}))
+        cache_patch=patch.object(b,'IP_CACHE_PATH',self.cache);cache_patch.start();self.addCleanup(cache_patch.stop)
         self.store=b.Store(Path(self.tmp.name)/'db.sqlite',self.defaults)
         self.scheduler=b.Scheduler(self.store)
         self.now=dt.datetime(2026,10,12,8,10,tzinfo=b.ZoneInfo(b.ZONE));self.scheduler.clock=lambda:self.now
@@ -56,6 +58,56 @@ class BellTests(unittest.TestCase):
         with self.assertRaises(ValueError):self.store.set(1,config)
         config['bell_duration_seconds']=31
         with self.assertRaises(ValueError):self.store.set(1,config)
+    def test_duration_save_updates_both_hardware_timers_without_pulsing(self):
+        revision,config=self.store.get();config['bell_duration_seconds']=3
+        calls=[]
+        def rpc(relay,method,params=None):
+            calls.append((relay['id'],method,params))
+            if method=='Switch.GetConfig':return {'initial_state':'off','auto_off':True,'auto_off_delay':1}
+            return {}
+        with patch.dict(os.environ,{'KENNEMER_BELL_LIVE':'1'}),patch.object(b,'relay_check',return_value={'identity_ok':True}),patch.object(b,'read_switch',return_value=True),patch.object(b,'rpc',side_effect=rpc),patch.object(b,'relay_ready'):
+            b.save_config(self.store,revision,config)
+        writes=[call for call in calls if call[1]=='Switch.SetConfig']
+        self.assertEqual(len(writes),2)
+        self.assertTrue(all(call[2]['config']['auto_off_delay']==3 for call in writes))
+        self.assertFalse(any(call[1]=='Switch.Set' for call in calls))
+        self.assertTrue(self.store.get()[1]['paused'])
+        self.assertEqual(self.store.get()[1]['bell_duration_seconds'],3)
+
+    def test_failed_timer_update_rolls_back_and_preserves_roster(self):
+        revision,config=self.store.get();config['bell_duration_seconds']=3
+        calls=[]
+        def rpc(relay,method,params=None):
+            calls.append((relay['id'],method,params))
+            if method=='Switch.GetConfig':return {'initial_state':'off','auto_off':True,'auto_off_delay':1}
+            if relay==b.RELAYS[1] and method=='Switch.SetConfig' and params['config']['auto_off_delay']==3:raise b.BellError('unavailable')
+            return {}
+        with patch.dict(os.environ,{'KENNEMER_BELL_LIVE':'1'}),patch.object(b,'relay_check',return_value={'identity_ok':True}),patch.object(b,'read_switch',return_value=True),patch.object(b,'rpc',side_effect=rpc),patch.object(b,'relay_ready'):
+            with self.assertRaises(b.BellError):b.save_config(self.store,revision,config)
+        self.assertEqual(self.store.get()[0],revision)
+        self.assertEqual(self.store.get()[1]['bell_duration_seconds'],1)
+        restored=[call for call in calls if call[1]=='Switch.SetConfig' and call[2]['config']['auto_off_delay']==1]
+        self.assertEqual(len(restored),2)
+
+    def test_relay_identity_and_address_validation(self):
+        _,config=self.store.get()
+        config['relays'][0]['id']='invalid'
+        with self.assertRaises(ValueError):b.validate(config)
+        config['relays']=list(b.RELAYS);config['relays'][1]=dict(config['relays'][0])
+        with self.assertRaises(ValueError):b.validate(config)
+
+    def test_relay_address_follows_cache_changes(self):
+        self.assertEqual(b.relay_ip('a8032abc4264'),'10.10.80.162')
+        self.cache.write_text(json.dumps({'devices':{'a8032abc4264':{'ip':'10.10.80.200'}}}))
+        self.assertEqual(b.relay_ip('a8032abc4264'),'10.10.80.200')
+        self.cache.write_text(json.dumps({'devices':{'a8032abc4264':{'ip':'127.0.0.1'}}}))
+        with self.assertRaises(b.BellError):b.relay_ip('a8032abc4264')
+
+    def test_legacy_relay_ips_are_removed_from_saved_config(self):
+        revision,config=self.store.get();config['relays'][0]['ip']='10.10.80.1'
+        self.store.set(revision,config)
+        self.assertEqual(self.store.get()[1]['relays'][0],{'id':'a8032abc4264'})
+
     def test_clock_resynchronization_does_not_disable_future_bells(self):
         _,config=self.store.get();config['paused']=False;self.store.set(1,config)
         self.scheduler.started_at=dt.datetime(2030,1,1,tzinfo=b.ZoneInfo(b.ZONE)).timestamp()
@@ -80,6 +132,13 @@ class BellTests(unittest.TestCase):
         self.store.set(1,config)
         self.now=dt.datetime(2026,10,12,8,0,tzinfo=b.ZoneInfo(b.ZONE))
         self.assertEqual(self.scheduler.next_event()['time'],'08:15')
+
+    def test_next_event_reports_double_for_both_entry_formats(self):
+        self.now=dt.datetime(2026,10,12,8,0,tzinfo=b.ZoneInfo(b.ZONE))
+        for entry in ['08:10x2', {'time':'08:10','count':2}]:
+            revision,config=self.store.get();config['paused']=False;config['profiles']['regular']=[entry]
+            self.store.set(revision,config)
+            self.assertEqual(self.scheduler.next_event()['count'],2)
     def test_clock_jump_skips_scan(self):
         self.scheduler.prev_wall=self.now.timestamp()-10;self.scheduler.prev_mono=time.monotonic()-1
         self.scheduler.tick();self.assertEqual(self.scheduler.skipped,1)

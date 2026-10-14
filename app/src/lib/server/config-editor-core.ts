@@ -40,6 +40,7 @@ export function controlMetadata(control: DashboardControl): ControlOverride {
 		...(control.placement === 'main' || control.placement === 'advanced'
 			? {
 					placement: control.placement,
+					...(control.placement === 'advanced' ? { pushNumber: control.pushNumber } : {}),
 					...(control.placement === 'main'
 						? { tabId: control.tabId ?? 'home', pushNumber: control.pushNumber }
 						: {})
@@ -88,22 +89,19 @@ export function applyConfiguration(
 		if (!control) throw new ConfigValidationError(`Onbekend bedieningselement: ${id}`);
 		if (values.label !== undefined) control.label = values.label;
 		if (values.enabled !== undefined) control.enabled = values.enabled;
-		if (values.placement !== undefined) {
-			if (control.placement !== 'main' && control.placement !== 'advanced')
-				throw new ConfigValidationError('Deze losse actie kan niet worden verplaatst.');
-			control.placement = values.placement;
-			if (values.placement === 'advanced') {
-				delete control.tabId;
-				delete control.pushNumber;
-			}
-		}
-		if (values.tabId !== undefined || values.pushNumber !== undefined) {
+		if (values.placement !== undefined && values.placement !== control.placement)
+			throw new ConfigValidationError(
+				'Normale en geavanceerde bedieningen kunnen niet worden verplaatst naar elkaars scherm.'
+			);
+		if (values.tabId !== undefined) {
 			if (control.placement !== 'main')
-				throw new ConfigValidationError(
-					'Alleen hoofdknoppen kunnen van tab of positie veranderen.'
-				);
-			if (values.tabId !== undefined) control.tabId = values.tabId;
-			if (values.pushNumber !== undefined) control.pushNumber = values.pushNumber;
+				throw new ConfigValidationError('Alleen normale bedieningen kunnen van tab veranderen.');
+			control.tabId = values.tabId;
+		}
+		if (values.pushNumber !== undefined) {
+			if (control.placement !== 'main' && control.placement !== 'advanced')
+				throw new ConfigValidationError('Deze actie heeft geen positie.');
+			control.pushNumber = values.pushNumber;
 		}
 		if (control.controlType === 'device') {
 			if (values.color !== undefined)
@@ -164,6 +162,28 @@ export function normalizeHomeNumbering(
 			values.pushNumber <= 9
 		)
 			values.pushNumber = rowNumberToColumn(values.pushNumber);
+	}
+	return next;
+}
+
+export function normalizeFixedPlacements(
+	base: DashboardControl[],
+	snapshot: ConfigurationSnapshot
+): ConfigurationSnapshot {
+	const next = structuredClone(snapshot);
+	for (const [id, values] of Object.entries(next.metadata)) {
+		const control = base.find((entry) => entry.id === id);
+		if (!control || values.placement === undefined || values.placement === control.placement)
+			continue;
+		if (control.placement === 'main') {
+			values.placement = 'main';
+			values.tabId = control.tabId ?? 'home';
+			values.pushNumber = control.pushNumber;
+		} else if (control.placement === 'advanced') {
+			values.placement = 'advanced';
+			delete values.tabId;
+			values.pushNumber = control.pushNumber;
+		}
 	}
 	return next;
 }

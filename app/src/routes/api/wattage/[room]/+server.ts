@@ -1,4 +1,5 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import writeFileAtomic from 'write-file-atomic';
+import { readFile } from 'node:fs/promises';
 import { resolve as resolvePath } from 'node:path';
 
 import type { RequestHandler } from './$types';
@@ -252,7 +253,10 @@ async function writeDeviceListCache(payload: ShellyDeviceListPayload): Promise<v
 	};
 
 	try {
-		await writeFile(IP_CACHE_PATH, JSON.stringify(cachePayload, null, 2), 'utf-8');
+		await writeFileAtomic(IP_CACHE_PATH, JSON.stringify(cachePayload, null, 2), {
+			encoding: 'utf8',
+			mode: 0o644
+		});
 	} catch {}
 }
 

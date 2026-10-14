@@ -117,9 +117,9 @@ tab, at positions 1–3; the tab label is configured in `tabs.ts`.
 Runtime scene-ID overrides are stored separately from these source files. The
 advanced editor can change only scene IDs and valid status-device IDs for an
 registered control. It also permits labels, colors, duration, enabled state,
-main/advanced placement and main-tab positions. Moving a control to a dashboard
-tab makes it available there without a PIN; controls left in advanced placement
-remain PIN-protected. Endpoints, credentials, direct identities and button
+main-tab and advanced positions. Normal controls can change their dashboard
+tab; advanced controls can change position only. Controls cannot cross between
+normal and advanced areas. Advanced controls remain PIN-protected. Endpoints, credentials, direct identities and button
 types remain source-controlled.
 
 ## Validation checklist
@@ -139,8 +139,14 @@ Use sceneToggle/sceneButton factories to avoid repeated HTTP configuration.
 Registry defaults also include Home/Apparaten tabs and verified direct inventory.
 All control types accept tabId/pushNumber/enabled; Home remains positions 1–9.
 Explicitly disabled winter/summer controls have empty scenes. Never use 0000.
-Runtime editor permits presentation/tab overrides for registered controls only;
+Runtime editor permits presentation/tab/position overrides for registered controls only; normal and advanced areas stay fixed;
 transport and direct-device identity remain server-owned. Run validate:config.
 
 Keep the main source array sorted by pushNumber (1–9) for editing. Runtime
 layout still uses pushNumber; reordering source must not change mappings.
+
+Apparaten controls belong in devices.ts, including direct controls and scene
+triggers. Color spare's physical inventory stays in registry.ts. The commented
+apparaten-scene-1 entry is a fill-in template: set label/sceneId/enabled,
+uncomment it, and copy it with a unique ID and devices-tab position. Apparaten displays nine
+controls per page ordered by pushNumber; its pager never executes a scene.

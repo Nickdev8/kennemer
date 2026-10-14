@@ -17,6 +17,7 @@ import {
 } from '$lib/config/scene-config-schema';
 import {
 	normalizeHomeNumbering,
+	normalizeFixedPlacements,
 	applyConfiguration,
 	baseSceneId,
 	controlMetadata,
@@ -81,11 +82,18 @@ async function parseFile(
 		const json: unknown = JSON.parse(raw);
 		const parsed = sceneOverridesFileSchema.safeParse(json);
 		if (parsed.success) {
-			let normalized = normalizeHomeNumbering(baseControls, parsed.data);
+			let normalized = normalizeFixedPlacements(
+				baseControls,
+				normalizeHomeNumbering(baseControls, parsed.data)
+			);
 			if (parsed.data.placementDefaultsVersion !== 1)
 				normalized = migrateOverworkTimerPlacements(normalized);
 			applyConfiguration(baseControls, baseTabs, normalized);
-			if (!parsed.data.homeNumbering || parsed.data.placementDefaultsVersion !== 1) {
+			if (
+				!parsed.data.homeNumbering ||
+				parsed.data.placementDefaultsVersion !== 1 ||
+				JSON.stringify(normalized.metadata) !== JSON.stringify(parsed.data.metadata)
+			) {
 				legacySource = raw;
 				return freshFile(normalized);
 			}
@@ -222,10 +230,6 @@ export async function saveSceneOverrides(input: unknown) {
 		}
 		for (const change of request.metadata ?? []) {
 			const values = { ...next.metadata[change.controlId], ...change.values };
-			if (values.placement === 'advanced') {
-				delete values.tabId;
-				delete values.pushNumber;
-			}
 			next.metadata[change.controlId] = values;
 		}
 		if (request.tabs) next.tabs = request.tabs;

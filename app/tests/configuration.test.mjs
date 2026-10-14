@@ -133,7 +133,7 @@ test('column numbering preserves physical layout and migrates old overrides once
 	assert.equal(migrated.metadata['color-spare-051026'].pushNumber, 2);
 	assert.deepEqual(normalizeHomeNumbering(controls, migrated), migrated);
 });
-test('overwork timers default to their dashboard tab and can be moved back behind PIN access', () => {
+test('normal cards change tabs while normal and advanced areas remain fixed', () => {
 	const timers = ['Overwerktimer-1', 'Overwerktimer-2', 'Overwerktimer-3'].map((id) =>
 		controls.find((control) => control.id === id)
 	);
@@ -166,20 +166,45 @@ test('overwork timers default to their dashboard tab and can be moved back behin
 	assert.equal(placedOnDevices?.tabId, 'devices');
 	assert.equal(placedOnDevices?.pushNumber, 2);
 
-	const backBehindPin = applyConfiguration(controls, tabs, {
-		version: 2,
-		overrides: {},
-		metadata: {
-			[timer.id]: { placement: 'advanced' }
-		}
-	}).controls.find((control) => control.id === timer.id);
-	assert.equal(backBehindPin?.placement, 'advanced');
 	assert.throws(
 		() =>
 			applyConfiguration(controls, tabs, {
 				version: 2,
 				overrides: {},
-				metadata: { [timer.id]: { placement: 'main', tabId: 'devices' } }
+				metadata: { [timer.id]: { placement: 'advanced' } }
+			}),
+		/elkaars scherm/
+	);
+	const advanced = controls.find((control) => control.placement === 'advanced');
+	assert.throws(
+		() =>
+			applyConfiguration(controls, tabs, {
+				version: 2,
+				overrides: {},
+				metadata: { [advanced.id]: { placement: 'main', tabId: 'devices', pushNumber: 2 } }
+			}),
+		/elkaars scherm/
+	);
+	const advancedControls = controls.filter((control) => control.placement === 'advanced');
+	const reordered = applyConfiguration(controls, tabs, {
+		version: 2,
+		overrides: {},
+		metadata: {
+			[advancedControls[0].id]: { pushNumber: advancedControls[1].pushNumber },
+			[advancedControls[1].id]: { pushNumber: advancedControls[0].pushNumber }
+		}
+	});
+	assert.equal(
+		reordered.controls.find((control) => control.id === advancedControls[0].id).pushNumber,
+		2
+	);
+
+	assert.throws(
+		() =>
+			applyConfiguration(controls, tabs, {
+				version: 2,
+				overrides: {},
+				metadata: { [timer.id]: { placement: 'main', tabId: 'devices', pushNumber: 1 } }
 			}),
 		/positie/
 	);

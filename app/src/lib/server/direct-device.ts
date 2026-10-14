@@ -11,7 +11,8 @@ async function target(id: string, method: 'GetStatus' | 'Set', command?: DeviceC
 	let ip = device.ip;
 	try {
 		const cache = JSON.parse(await readFile(env.IP_CACHE_PATH ?? 'ips.json', 'utf8'));
-		const cached = cache[id];
+		const devices = cache.devices ?? cache;
+		const cached = Array.isArray(devices) ? devices.find((entry) => entry.id === id) : devices[id];
 		const candidate = typeof cached === 'string' ? cached : cached?.ip;
 		if (typeof candidate === 'string' && /^(?:\d{1,3}\.){3}\d{1,3}$/.test(candidate))
 			ip = candidate;

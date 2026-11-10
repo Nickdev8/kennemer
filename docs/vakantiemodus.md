@@ -30,8 +30,9 @@ ODROID verified MAC `ECE334F7B214`, model, generation, authentication disabled,
 and channel 2 physically **on** at observation time. This Wi-Fi address is a
 snapshot, not a fixed application target.
 
-The working Wi-Fi path was verified through read-only SSH requests. No application
-LAN status feature or replacement scene execution was installed.
+The working Wi-Fi path was verified through read-only SSH during the earlier
+investigation. It was not switched or reconfigured. The current implementation
+was verified with mocked transport only; it has not been deployed.
 
 The independently commissioned bell relays are `a8032abc4264` and `08b61fd8993c`.
 The first was separately identity-checked over LAN and read off; the second was
@@ -39,17 +40,40 @@ unreachable from the workstation. The vacation scenes do not pause or resume the
 ODROID bell scheduler. The transformer name alone does not establish the wiring
 or prove whether a particular bell can sound.
 
-## Limits and deferred work
+## Current implementation and limits
 
-At discovery, the cloud flags were mixed: `gang aan` enabled, summer-screen
-disabled, alarm enabled. The transformer reading alone cannot prove a complete
-vacation mode: cloud automation flags and queued delays are separate facts.
+`GET /api/modes/vacation` reads the registered control's effective Begin/Einde
+scene IDs, including runtime configuration. Its checklist follows those actual
+scene definitions, rather than a hardcoded three-rule list. Fixed output on/off
+and cloud scene enabled/disabled actions are supported; unsupported, conflicting,
+missing or incomplete actions make the aggregate **Onbekend**.
 
-The user deferred vacation implementation. Existing mode rendering, remembered
-action behavior and configured Shelly Cloud scene execution remain unchanged.
-No checklist API, aggregate mode reader, LAN replacement action or new schedule
-was added. The findings above are investigation evidence only.
+A complete observation matching Begin is **Actief**; one matching Einde is
+**Niet actief**. Fully observed but mismatching combinations are **Gedeeltelijk**.
+Physical outputs and enabled flags display their actual value: green for on or
+enabled, red for off or disabled, grey for unknown. Action memory and successful
+command HTTP responses never supply checklist state.
 
-Sources: [Shelly identity/status](https://shelly-api-docs.shelly.cloud/gen2/ComponentsAndServices/Shelly/),
+The server prefers identity-checked LAN reads using cached/discovered device
+interfaces. If LAN is unavailable, it may use a fresh online cloud status report,
+explicitly marked **Cloud**. If neither provides a valid observation, the value
+remains unknown. Credentials, addresses and raw cloud metadata stay server-side.
+Definitions and inventory are cached for at most five minutes; status snapshots
+for thirty seconds. In-flight reads coalesce, cloud reads are serialized, and
+bounded explicit refreshes respect a minimum interval.
+
+The card retains **Begin vakantie** and **Einde vakantie** as two explicit actions
+through the existing registered control ID and validated action route. Offline
+status does not disable configured scene buttons. It creates no replacement
+holiday actions, scene-enable calls, timer jobs or bell-scheduler changes. A
+configured delay is displayed as a duration, never as an invented live countdown.
+The current checklist cannot inspect already queued cloud delay jobs.
+
+All verification for this implementation used unit fixtures or a local mocked
+browser with external requests blocked. No live test, SSH, scene execution,
+setting change or deployment was performed for the implementation.
+
+Sources for the earlier investigation:
+[Shelly identity/status](https://shelly-api-docs.shelly.cloud/gen2/ComponentsAndServices/Shelly/),
 [Switch status](https://shelly-api-docs.shelly.cloud/gen2/ComponentsAndServices/Switch/),
-plus the credential-redacted live scene and inventory inspection described above.
+plus the credential-redacted scene and inventory inspection described above.

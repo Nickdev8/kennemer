@@ -15,6 +15,7 @@
 	import { controlPages } from '$lib/dashboard/control-layout';
 	import AdvancedPanel from '$lib/components/advanced-panel.svelte';
 	import ControlCard from '$lib/components/control-card.svelte';
+	import VacationStatus from '$lib/components/vacation-status.svelte';
 	import SceneIdEditor from '$lib/components/scene-id-editor.svelte';
 	import { devices } from '$lib/config/devices';
 	import { home } from '$lib/config/home';
@@ -183,7 +184,8 @@
 	let devicesPage = 0;
 	let controlGrid: HTMLDivElement;
 	let showAdvancedInformation = false;
-	let advancedRoom: string | null = null;
+	let advancedRoom: 'modes' | 'domotica' | null = null;
+	let domoticaRoomOpen = false;
 	$: navigationTabs = [
 		...dashboardTabs.filter((tab) => !['devices', 'shelly', 'advanced'].includes(tab.id)),
 		{ id: 'schoolbel', label: 'Schoolbel', order: 90 },
@@ -202,9 +204,16 @@
 	let configurationDiagnostics: DiagnosticEntry[] = [];
 	let triggerConfigurationDiagnostics: DiagnosticEntry[] = [];
 	let advancedControlCount = 0;
+	let vacationControl: Extract<DashboardControl, { controlType: 'device' }> | undefined;
+	let vacationBeginDisabled = true;
+	let vacationEndDisabled = true;
 
 	$: mainControls = [...sceneControls]
-		.filter((control) => control.placement === 'main' && (control.tabId ?? 'home') === (selectedTab === 'advanced' ? 'devices' : selectedTab))
+		.filter(
+			(control) =>
+				control.placement === 'main' &&
+				(control.tabId ?? 'home') === (selectedTab === 'advanced' ? 'devices' : selectedTab)
+		)
 		.sort((left, right) => {
 			const leftPosition = left.pushNumber;
 			const rightPosition = right.pushNumber;
@@ -214,7 +223,8 @@
 	$: devicesPageCount = layoutPages.length;
 	$: if (selectedTab !== 'devices' && selectedTab !== 'advanced') devicesPage = 0;
 	$: if (devicesPage >= devicesPageCount) devicesPage = devicesPageCount - 1;
-	$: visibleGroups = layoutPages[selectedTab === 'devices' || selectedTab === 'advanced' ? devicesPage : 0] ?? [];
+	$: visibleGroups =
+		layoutPages[selectedTab === 'devices' || selectedTab === 'advanced' ? devicesPage : 0] ?? [];
 
 	function changeDevicesPage(direction: number) {
 		devicesPage = Math.max(0, Math.min(devicesPageCount - 1, devicesPage + direction));
@@ -266,6 +276,18 @@
 			detail: 'Scène-ID ontbreekt'
 		}));
 	$: advancedControlCount = advancedControls.length;
+	$: vacationControl = advancedControls.find(
+		(control): control is Extract<DashboardControl, { controlType: 'device' }> =>
+			control.controlType === 'device' && control.id === 'advanced-vacantie-begin'
+	);
+	$: vacationBeginDisabled =
+		!vacationControl ||
+		vacationControl.enabled === false ||
+		!isDeviceCommandConfigured(vacationControl, 'on');
+	$: vacationEndDisabled =
+		!vacationControl ||
+		vacationControl.enabled === false ||
+		!isDeviceCommandConfigured(vacationControl, 'off');
 
 	const wattageRoomId = -1;
 	let wattageLabel = `Room ${wattageRoomId}`;
@@ -497,6 +519,7 @@
 
 	function revokeProtectedAccess() {
 		advancedRoom = null;
+		domoticaRoomOpen = false;
 		advancedUnlocked = false;
 		showAdvancedPanel = false;
 		showSceneIdEditor = false;
@@ -1757,12 +1780,107 @@
 						>{selectedTab === 'advanced' ? advancedControlCount : primaryDeviceCount} knoppen</span
 					>{/if}
 			</header>
-			{#if selectedTab === 'advanced' && advancedUnlocked && advancedRoom === null}
-				<ShellyBrowser active={!displayDimmed} includeOwnRoom on:own={({ detail }) => (advancedRoom = detail)} />
+			{#if selectedTab === 'advanced' && advancedUnlocked && showAdvancedPanel && (advancedRoom === null || advancedRoom === 'modes')}
+				<AdvancedPanel
+					informationOpen={showAdvancedInformation}
+					activity={markAdvancedActivity}
+					toggleInformation={() => (showAdvancedInformation = !showAdvancedInformation)}
+					showFooter={advancedRoom === null}
+				>
+					{#if advancedRoom === null}
+						<div
+							class="grid min-h-0 flex-1 grid-cols-1 content-start gap-4 lg:grid-cols-2"
+							aria-label="Geavanceerde ruimtes"
+						>
+							<button
+								type="button"
+								class="flex min-h-44 flex-col items-start justify-center gap-3 rounded-lg border border-slate-300 bg-white p-6 text-left hover:border-sky-500 hover:bg-sky-50"
+								on:click={() => (advancedRoom = 'modes')}
+							>
+								<span class="text-2xl font-semibold text-slate-900">Vakantiemodi</span>
+							</button>
+							<button
+								type="button"
+								class="flex min-h-44 flex-col items-start justify-center gap-3 rounded-lg border border-slate-300 bg-white p-6 text-left hover:border-sky-500 hover:bg-sky-50"
+								on:click={() => (advancedRoom = 'domotica')}
+							>
+								<span class="text-2xl font-semibold text-slate-900">Domotica</span>
+							</button>
+						</div>
+					{:else}
+						<button
+							type="button"
+							class="mb-4 inline-flex min-h-12 items-center gap-2 self-start rounded-md border border-slate-300 px-4 py-2 font-semibold"
+							on:click={() => (advancedRoom = null)}
+							><ArrowLeft size={20} aria-hidden="true" /><span>Terug naar Geavanceerd</span></button
+						>
+						<h3 class="mb-3 text-xl font-semibold">Vakantiemodi</h3>
+						<div class="flex min-h-0 flex-1 flex-col gap-6 px-6 py-6 lg:flex-row">
+							<section class="flex min-h-0 flex-1 flex-col">
+								{#if vacationControl}
+									<VacationStatus
+										active={selectedTab === 'advanced' &&
+											advancedUnlocked &&
+											showAdvancedPanel &&
+											advancedRoom === 'modes' &&
+											!displayDimmed}
+										label={vacationControl.label}
+										begin={() => handlePress('advanced-vacantie-begin', 'on')}
+										end={() => handlePress('advanced-vacantie-begin', 'off')}
+										busy={loadingCommandKeys.has(commandKey('advanced-vacantie-begin', 'on')) ||
+											loadingCommandKeys.has(commandKey('advanced-vacantie-begin', 'off'))}
+										error={deviceActionErrors.get('advanced-vacantie-begin') ?? null}
+										beginDisabled={vacationBeginDisabled}
+										endDisabled={vacationEndDisabled}
+									/>
+								{/if}
+								{#if advancedErrorMsg}<p
+										class="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700"
+									>
+										{advancedErrorMsg}
+									</p>{/if}
+								{#if advancedStatusMsg}<p
+										class="mb-3 rounded-lg border border-green-300 bg-green-50 px-4 py-3 text-base font-semibold text-green-900"
+										role="status"
+										aria-live="polite"
+									>
+										{advancedStatusMsg}
+									</p>{/if}
+							</section>
+						</div>
+					{/if}
+					<svelte:fragment slot="actions">
+						{#if advancedRoom === null}<button
+								type="button"
+								class="inline-flex min-h-12 items-center justify-center gap-3 rounded-md border border-slate-300 bg-white px-4 py-3 text-left text-sm font-semibold text-slate-800 hover:bg-slate-100"
+								aria-expanded={showSceneIdEditor}
+								on:click={() => {
+									editorVisited = true;
+									showSceneIdEditor = !showSceneIdEditor;
+									markAdvancedActivity();
+								}}
+							>
+								<span>Bediening beheren</span>
+								<span aria-hidden="true">{showSceneIdEditor ? '−' : '+'}</span>
+							</button>{/if}
+					</svelte:fragment>
+				</AdvancedPanel>
 			{/if}
-			{#if selectedTab === 'advanced' && advancedUnlocked && advancedRoom !== null}
-				<button type="button" class="mb-4 inline-flex min-h-12 items-center gap-2 self-start rounded-md border border-slate-300 px-4 py-2 font-semibold" on:click={() => (advancedRoom = null)}><ArrowLeft size={20} aria-hidden="true" /><span>Terug naar ruimtes</span></button>
-				<h3 class="mb-3 text-xl font-semibold">{advancedRoom === 'modes' ? 'Vakantiemodi' : 'Eigen apparaten'}</h3>
+			{#if selectedTab === 'advanced' && advancedUnlocked && advancedRoom === 'domotica'}
+				{#if !domoticaRoomOpen}<button
+						type="button"
+						class="mb-4 inline-flex min-h-12 items-center gap-2 self-start rounded-md border border-slate-300 px-4 py-2 font-semibold"
+						on:click={() => (advancedRoom = null)}
+						><ArrowLeft size={20} aria-hidden="true" /><span>Terug naar Geavanceerd</span></button
+					>
+					<h3 class="mb-3 text-xl font-semibold">Domotica</h3>{/if}
+				<ShellyBrowser
+					active={selectedTab === 'advanced' &&
+						advancedUnlocked &&
+						advancedRoom === 'domotica' &&
+						!displayDimmed}
+					on:roomchange={({ detail }) => (domoticaRoomOpen = detail)}
+				/>
 			{/if}
 			{#if bellVisited}
 				<div
@@ -1774,175 +1892,6 @@
 						on:editing={({ detail }) => setBellEditorOpen(detail)}
 					/>
 				</div>
-			{/if}
-			{#if selectedTab === 'advanced' && advancedUnlocked && showAdvancedPanel && advancedRoom !== null}
-				<AdvancedPanel
-					informationOpen={showAdvancedInformation}
-					activity={markAdvancedActivity}
-					toggleInformation={() => (showAdvancedInformation = !showAdvancedInformation)}
-				>
-					{#if advancedRoom === 'modes'}
-<div class="flex min-h-0 flex-1 flex-col gap-6 px-6 py-6 lg:flex-row">
-						<section class="flex min-h-0 flex-1 flex-col">
-							{#if advancedErrorMsg}
-								<p
-									class="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700"
-								>
-									{advancedErrorMsg}
-								</p>
-							{/if}
-							{#if advancedStatusMsg}
-								<p
-									class="mb-3 rounded-lg border border-green-300 bg-green-50 px-4 py-3 text-base font-semibold text-green-900"
-									role="status"
-									aria-live="polite"
-								>
-									{advancedStatusMsg}
-								</p>
-							{/if}
-							<div
-								class="min-h-0 flex-1 overflow-y-auto pr-2"
-								role="presentation"
-								on:scroll={markAdvancedActivity}
-								on:wheel|passive={markAdvancedActivity}
-								on:touchmove|passive={markAdvancedActivity}
-								on:pointerdown={markAdvancedActivity}
-								on:mousedown={markAdvancedActivity}
-							>
-								{#if advancedControlCount === 0}
-									<p class="text-sm text-slate-600">Geen tijdelijke knoppen ingesteld.</p>
-								{:else}
-									<div class="grid auto-rows-fr grid-cols-1 gap-4 pb-4 md:grid-cols-2">
-										{#each advancedControls as control (control.id)}
-											<ControlCard
-												{control}
-												statusOffline={offlineStatusByDeviceId.get(control.id) ?? false}
-												actionError={deviceActionErrors.get(control.id) ?? null}
-												{commandOrder}
-												{commandKey}
-												{commandLabel}
-												{resolveToggleCommand}
-												{loadingCommandKeys}
-												{loadingTriggerIds}
-												transientActive={control.controlType === 'device' &&
-													isTransientDeviceActive(control.id)}
-												initialStatus={control.controlType === 'device'
-													? resolveCardStatus(control, deviceStates, statusDeviceStates)
-													: null}
-												activeUntil={triggerActiveUntilById.get(control.id) ?? null}
-												on:command={({ detail }) =>
-													handlePress(detail.deviceId, detail.command, {
-														stateless: deviceById.get(detail.deviceId)?.stateless
-													})}
-												on:trigger={({ detail }) => handleTriggerPress(detail.triggerId)}
-											/>
-										{/each}
-									</div>
-								{/if}
-							</div>
-						</section>
-					</div>
-					{:else}
-<div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
-				<div
-					bind:this={controlGrid}
-					class="grid min-h-0 flex-1 auto-rows-[minmax(160px,1fr)] grid-cols-3 gap-6 overflow-y-auto pr-1 pb-2"
-				>
-					{#each visibleGroups as group (group.id)}
-						<div
-							class={group.wide
-								? 'gang-control-group col-span-3 flex min-h-0 flex-col gap-3 rounded-[var(--control-radius)] border border-slate-300 bg-white p-[var(--control-padding)]'
-								: 'contents'}
-						>
-							{#if group.wide}<h3
-									class="text-[length:var(--control-label-size)] font-semibold text-slate-800"
-								>
-									{group.controls[0].label}
-								</h3>{/if}
-							<div
-								class={group.wide ? 'gang-control-options grid min-h-0 flex-1 gap-4' : 'contents'}
-							>
-								{#each group.controls as control (control.id)}
-									<div
-										class="relative flex min-h-0 flex-col"
-									>
-										<ControlCard
-											cardNumber={undefined}
-											embedded={group.wide}
-											compactLabel={group.wide
-												? control.label.replace(/^Gang Color\s*/, '')
-												: undefined}
-											{control}
-											statusOffline={offlineStatusByDeviceId.get(control.id) ?? false}
-											actionError={deviceActionErrors.get(control.id) ?? null}
-											{commandOrder}
-											{commandKey}
-											{commandLabel}
-											{resolveToggleCommand}
-											{loadingCommandKeys}
-											{loadingTriggerIds}
-											transientActive={control.controlType === 'device' &&
-												isTransientDeviceActive(control.id)}
-											initialStatus={control.controlType === 'device'
-												? resolveCardStatus(control, deviceStates, statusDeviceStates)
-												: null}
-											activeUntil={triggerActiveUntilById.get(control.id) ?? null}
-											on:command={({ detail }) =>
-												handlePress(detail.deviceId, detail.command, {
-													stateless: deviceById.get(detail.deviceId)?.stateless
-												})}
-											on:trigger={({ detail }) => handleTriggerPress(detail.triggerId)}
-										/>
-									</div>
-								{/each}
-							</div>
-						</div>
-					{/each}
-				</div>
-				{#if selectedTab === 'advanced' && devicesPageCount > 1}
-					<nav
-						class="mt-3 flex shrink-0 items-center justify-between gap-3 border-t border-slate-200 pt-3"
-						aria-label="Pagina’s apparaten"
-					>
-						<button
-							type="button"
-							class="flex min-h-12 items-center gap-2 rounded-md border border-slate-300 px-4 py-2 font-semibold text-slate-700 disabled:opacity-40"
-							aria-label="Vorige pagina apparaten"
-							disabled={devicesPage === 0}
-							on:click={() => changeDevicesPage(-1)}
-							><ChevronLeft size={22} /><span class="hidden sm:inline">Vorige</span></button
-						>
-						<span class="text-sm font-semibold text-slate-700" aria-live="polite"
-							>Pagina {devicesPage + 1} van {devicesPageCount}</span
-						>
-						<button
-							type="button"
-							class="flex min-h-12 items-center gap-2 rounded-md border border-slate-300 px-4 py-2 font-semibold text-slate-700 disabled:opacity-40"
-							aria-label="Volgende pagina apparaten"
-							disabled={devicesPage === devicesPageCount - 1}
-							on:click={() => changeDevicesPage(1)}
-							><span class="hidden sm:inline">Volgende</span><ChevronRight size={22} /></button
-						>
-					</nav>
-				{/if}
-</div>
-					{/if}
-<svelte:fragment slot="actions">
-						<button
-							type="button"
-							class="inline-flex min-h-12 items-center justify-center gap-3 rounded-md border border-slate-300 bg-white px-4 py-3 text-left text-sm font-semibold text-slate-800 hover:bg-slate-100"
-							aria-expanded={showSceneIdEditor}
-							on:click={() => {
-								editorVisited = true;
-								showSceneIdEditor = !showSceneIdEditor;
-								markAdvancedActivity();
-							}}
-						>
-							<span>Bediening beheren</span>
-							<span aria-hidden="true">{showSceneIdEditor ? '−' : '+'}</span>
-						</button>
-					</svelte:fragment>
-				</AdvancedPanel>
 			{/if}
 
 			{#if !isProtectedTab(selectedTab) && selectedTab !== 'shelly'}

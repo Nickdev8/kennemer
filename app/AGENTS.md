@@ -206,8 +206,8 @@ selectTab(), independently of any Sluiten button. Keep explicit selectedTab
 guards on advanced content/info/editor rendering. `test:layout` checks every
 destination, repeated PIN entry, cancelled protected switches, and draft retention.
 
-Shelly account browser: a fixed public tab, separate from editable equipment
-tabs. Two room cards resolve server-side to verified Nieuwbouw (21) and Light
+Shelly account browser: Geavanceerd → Domotica, separate from editable
+equipment-tab assignments. Two room cards resolve server-side to verified Nieuwbouw (21) and Light
 Hfd (2). Each named room-assigned channel keeps its own name and physical status;
 sensors/unsupported data remain read-only/unknown. Explicit Aan/Uit uses the
 allowlisted v2 cloud switch/light API once, never scene triggers or auto retries.
@@ -228,3 +228,22 @@ Eigen bediening: Vakantiemodi (advanced modes) and Eigen apparaten (Apparaten
 controls). Each custom room has a management/info footer. Leaving revokes access;
 internal room navigation does not request another PIN. Original vacation scenes
 and their rendering are unchanged. Focused smoke: scripts/test-merged-rooms.mjs.
+
+Vacation card: Geavanceerd → Vakantiemodi uses explicit Begin/Einde callbacks
+through the existing control/action route. GET /api/modes/vacation supplies an
+adaptive checklist from effective scene definitions and observed LAN/cloud state;
+never use action memory as mode proof. Unsupported/incomplete state is unknown.
+Read polling/follow-ups pause outside the active awake room. See
+../docs/vakantiemodus.md; all implementation verification uses blocked external
+traffic and fixtures, never live scene/device/SSH calls.
+
+Geavanceerd hierarchy: root offers Vakantiemodi and Domotica, independently of
+cloud inventory. Domotica contains only configured Shelly rooms. The former Eigen
+apparaten/Apparaten list is removed from navigation/rendering; registered config
+and saved IDs remain intact for compatibility/editor use. The shared info/manage
+footer lives at the protected root. Internal backs do not reprompt; leaving locks
+access. Schoolbel keeps its own protected entry with the shared accepted PIN.
+Shelly action feedback: no success banner. An affected component stays busy through
+its command and one bounded physical-status refresh, shown as a power-button ring
+or accessible busy feedback for unknown-state explicit buttons. Errors remain
+visible; no optimistic state or automatic command retry.

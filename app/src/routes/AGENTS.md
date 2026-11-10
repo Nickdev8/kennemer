@@ -11,6 +11,7 @@ These instructions cover Svelte pages and server endpoints below
 | `/actions`                   | POST     | Execute a configured device command       |
 | `/triggers`                  | POST     | Execute a configured scene trigger        |
 | `/api/bells/[operation]`      | GET/POST | Proxy host bell status, config, demo and edits |
+| `/api/modes/vacation`        | GET      | Read-only adaptive vacation checklist; no actions |
 | `/api/shelly`                | GET/POST | Allowlisted room inventory/status and explicit output on/off |
 | `/api/connectivity`          | GET      | Probe Shelly Cloud reachability           |
 | `/api/config/scenes`         | GET/POST | Read or save validated scene-ID overrides |
@@ -103,3 +104,8 @@ command on/off only; server resolves all transport and channel identity from
 account inventory. Reject arbitrary fields/targets. No automatic mutation
 retry. Read-only live discovery verified rooms 21/2 and thirteen assigned
 outputs; all control-path tests use simulation/fixtures.
+
+Vacation status GET resolves command scene IDs from effective registered config;
+clients cannot submit scene/device targets. It never mutates scenes/devices or
+schedules. Public DTOs contain interpreted values/sources/durations only, without
+credentials, network addresses or raw cloud action data.

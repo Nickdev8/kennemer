@@ -19,7 +19,8 @@
 		"test:ui": "node scripts/test-ui.mjs",
 		"test:layout": "node scripts/test-protected-layout.mjs",
 		"test:bell-ui": "node scripts/test-bell-page.mjs",
-		"test:shelly-ui": "node scripts/test-shelly-ui.mjs"
+		"test:shelly-ui": "node scripts/test-shelly-ui.mjs",
+		"test:vacation-ui": "node scripts/test-vacation-ui.mjs"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.64.0",

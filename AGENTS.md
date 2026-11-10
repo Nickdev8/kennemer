@@ -400,8 +400,10 @@ popup suspends navigation/sleep. Drafts survive closing/locking in memory and
 expire after ten idle minutes outside protected tabs, or on reload. No Git
 operations or deployment. See app/AGENTS.md for implementation details.
 
-Shelly browser checkpoint: fixed public Shelly tab shows Nieuwbouw (account
-room21, eight named outputs) and Light Hfd (room2, five). Live read-only discovery
-verified all thirteen channel mappings. Direct explicit on/off is server-
-allowlisted and single-attempt; tests use mocks only. Check/build, all eleven
-logic files and focused Shelly UI tests pass. No Git operations or deployment.
+Protected room navigation checkpoint: Geavanceerd contains Vakantiemodi and
+Domotica. Domotica contains only configured Shelly rooms. The former Eigen apparaten list
+is no longer rendered; registered controls and stored IDs remain intact. Internal navigation stays unlocked; leaving requires
+a new PIN. Schoolbel remains protected. Vacation uses explicit original Begin/Einde
+scene actions plus an adaptive read-only checklist; no replacement schedules or
+device actions. Current verification is mock-only with external traffic blocked.
+See docs/vakantiemodus.md for earlier investigation and status semantics.

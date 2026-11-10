@@ -16,7 +16,7 @@ export type ShellyRoomView = {
 	name: string;
 	found: boolean;
 	count: number;
-	onlineCount: number;
+	onlineCount: number | null;
 };
 export type ShellyBrowserView = {
 	ok: boolean;
@@ -26,4 +26,5 @@ export type ShellyBrowserView = {
 	updatedAt: number | null;
 	stale: boolean;
 	message?: string;
+	failure?: 'rate-limit' | 'timeout' | 'auth' | 'unavailable' | 'malformed';
 };

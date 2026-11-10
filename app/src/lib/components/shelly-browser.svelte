@@ -3,24 +3,24 @@
 	import ArrowLeft from 'lucide-svelte/icons/arrow-left';
 	import RefreshCw from 'lucide-svelte/icons/refresh-cw';
 	import Power from 'lucide-svelte/icons/power';
+	import { SHELLY_ROOMS } from '../../../config/shelly';
 	import type {
 		ShellyBrowserView,
 		ShellyRoomDevice,
 		ShellyComponentView
 	} from '$lib/dashboard/shelly-browser';
 	export let active = true;
-	export let includeOwnRoom = false;
-	const dispatch = createEventDispatcher<{ own: 'modes' | 'devices' }>();
+	const dispatch = createEventDispatcher<{ roomchange: boolean }>();
 	let mounted = false,
 		selectedRoom: string | null = null,
 		loading = false;
 	let snapshot: ShellyBrowserView | null = null,
 		error = '',
-		actionMessage = '';
+		actionError = '';
 	let pending = new Set<string>();
 	let timer: ReturnType<typeof setInterval> | null = null;
 	let controller: AbortController | null = null;
-	const followups = new Set<ReturnType<typeof setTimeout>>();
+	const followups = new Map<ReturnType<typeof setTimeout>, () => void>();
 	$: if (mounted) {
 		if (active) start();
 		else stop();
@@ -35,8 +35,12 @@
 		if (timer) clearInterval(timer);
 		timer = null;
 		cancelRead();
-		for (const timeout of followups) clearTimeout(timeout);
+		for (const [timeout, resolve] of followups) {
+			clearTimeout(timeout);
+			resolve();
+		}
 		followups.clear();
+		pending = new Set();
 	}
 	function start() {
 		if (timer || document.hidden) return;
@@ -47,26 +51,32 @@
 		if (document.hidden) stop();
 		else if (active) start();
 	}
-	async function refresh(force = false) {
-		if (!active || !mounted || document.hidden || controller) return;
+	async function refresh(force = false, roomId = selectedRoom): Promise<boolean> {
+		if (!active || !mounted || document.hidden || controller) return false;
 		const request = new AbortController();
 		controller = request;
 		const timeout = setTimeout(() => request.abort(), 15_000);
 		loading = true;
+		let failureMessage = 'Shelly-status is momenteel niet beschikbaar.';
 		try {
 			const query = new URLSearchParams();
-			if (selectedRoom) query.set('room', selectedRoom);
+			if (roomId) query.set('room', roomId);
 			if (force) query.set('refresh', '1');
 			const response = await fetch(`/api/shelly${query.size ? '?' + query : ''}`, {
 				signal: request.signal
 			});
 			const result = await response.json();
-			if (controller !== request) return;
-			if (!response.ok) throw new Error('Shelly Cloud niet bereikbaar. Probeer later opnieuw.');
-			snapshot = result;
+			if (controller !== request) return false;
+			if (!response.ok) {
+				failureMessage = typeof result.message === 'string' ? result.message : failureMessage;
+				throw new Error('Status unavailable');
+			}
+			if (selectedRoom === roomId) snapshot = result;
 			error = '';
+			return true;
 		} catch (cause) {
-			if (controller === request) error = 'Shelly Cloud niet bereikbaar. Probeer later opnieuw.';
+			if (controller === request) error = failureMessage;
+			return false;
 		} finally {
 			clearTimeout(timeout);
 			if (controller === request) {
@@ -79,9 +89,19 @@
 		cancelRead();
 		if (snapshot) snapshot = { ...snapshot, devices: undefined, room: undefined };
 		selectedRoom = id;
-		actionMessage = '';
+		actionError = '';
 		error = '';
+		dispatch('roomchange', id !== null);
 		void refresh();
+	}
+	function waitForFollowup(delay: number) {
+		return new Promise<void>((resolve) => {
+			const timeout = setTimeout(() => {
+				followups.delete(timeout);
+				resolve();
+			}, delay);
+			followups.set(timeout, resolve);
+		});
 	}
 	async function command(
 		device: ShellyRoomDevice,
@@ -90,8 +110,9 @@
 	) {
 		const key = `${device.id}:${component.id}`;
 		if (pending.has(key) || !selectedRoom) return;
+		const roomId = selectedRoom;
 		pending = new Set([...pending, key]);
-		actionMessage = '';
+		actionError = '';
 		try {
 			const response = await fetch('/api/shelly', {
 				method: 'POST',
@@ -107,17 +128,15 @@
 			const result = await response.json();
 			if (!response.ok)
 				throw new Error(result.error ?? 'Opdracht mislukt. Controleer de werkelijke status.');
-			actionMessage = result.message;
-			if (active && mounted)
-				for (const delay of [1500, 5000]) {
-					const timeout = setTimeout(() => {
-						followups.delete(timeout);
-						if (active && mounted) void refresh(true);
-					}, delay);
-					followups.add(timeout);
+			if (active && mounted && !document.hidden) {
+				await waitForFollowup(1500);
+				if (active && mounted && !document.hidden) {
+					cancelRead();
+					await refresh(true, roomId);
 				}
+			}
 		} catch (cause) {
-			actionMessage =
+			actionError =
 				cause instanceof Error
 					? cause.message
 					: 'Opdracht mislukt. Controleer de werkelijke status.';
@@ -164,38 +183,30 @@
 				snapshot.updatedAt
 			).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
 		</p>{/if}
-	{#if actionMessage}<p
-			class="mb-3 border-l-4 border-sky-600 bg-sky-50 px-4 py-3 text-sm text-slate-800"
-			role="status"
+	{#if actionError}<p
+			class="mb-3 border-l-4 border-rose-600 bg-rose-50 px-4 py-3 text-sm text-rose-900"
+			role="alert"
 		>
-			{actionMessage}
+			{actionError}
 		</p>{/if}
 	<div class="min-h-0 flex-1 overflow-y-auto pb-2">
-		{#if includeOwnRoom && !selectedRoom}
-			<h3 class="mb-3 text-sm font-semibold text-slate-500">Eigen bediening</h3>
-			<div class="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-				{#each [{ id: 'modes', label: 'Vakantiemodi' }, { id: 'devices', label: 'Eigen apparaten' }] as entry (entry.id)}
-					<button type="button" class="flex min-h-36 flex-col items-start justify-center gap-3 rounded-lg border border-slate-300 bg-white p-6 text-left hover:border-sky-500 hover:bg-sky-50" on:click={() => dispatch('own', entry.id === 'modes' ? 'modes' : 'devices')}><span class="text-2xl font-semibold text-slate-900">{entry.label}</span></button>
-				{/each}
-			</div>
-			<h3 class="mb-3 text-sm font-semibold text-slate-500">Shelly ruimtes</h3>
-		{/if}
 		{#if !snapshot}<p class="py-6 text-slate-600">
 				{loading ? 'Ruimtes laden…' : 'Ruimtes niet beschikbaar.'}
 			</p>
 		{:else if !selectedRoom}
 			<div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-				{#each snapshot.rooms as entry (entry.id)}
+				{#each SHELLY_ROOMS as configured (configured.id)}
+					{@const entry = snapshot.rooms.find((room) => room.id === configured.id)}
 					<button
 						type="button"
 						class="flex min-h-44 flex-col items-start justify-center gap-3 rounded-lg border border-slate-300 bg-white p-6 text-left hover:border-sky-500 hover:bg-sky-50 disabled:opacity-60"
-						disabled={!entry.found}
-						on:click={() => chooseRoom(entry.id)}
+						disabled={!entry?.found}
+						on:click={() => chooseRoom(configured.id)}
 					>
-						<span class="text-2xl font-semibold text-slate-900">{entry.name}</span>
+						<span class="text-2xl font-semibold text-slate-900">{configured.name}</span>
 						<span class="text-sm text-slate-600"
-							>{entry.found
-								? `${entry.count} apparaten ${entry.onlineCount} online`
+							>{entry?.found
+								? `${entry.count ?? 0} apparaten · ${snapshot.stale || error || entry.onlineCount === null ? 'Status onbekend' : `${entry.onlineCount} online`}`
 								: 'Ruimte niet gevonden in Shelly-account'}</span
 						>
 					</button>
@@ -254,14 +265,28 @@
 												Boolean(error)}
 											on:click={() =>
 												void command(device, component, component.output ? 'off' : 'on')}
-											><Power size={26} aria-hidden="true" /></button
 										>
+											<Power size={26} aria-hidden="true" />
+											{#if pending.has(`${device.id}:${component.id}`)}<span
+													class="sr-only"
+													role="status">Opdracht wordt uitgevoerd</span
+												>{/if}
+										</button>
 									{:else}
-										<div class="flex gap-2" aria-label={`${device.name}: kies Aan of Uit`}>
+										<div
+											class="flex gap-2"
+											aria-label={`${device.name}: kies Aan of Uit`}
+											aria-busy={pending.has(`${device.id}:${component.id}`)}
+										>
+											{#if pending.has(`${device.id}:${component.id}`)}<span
+													class="sr-only"
+													role="status">Bezig met uitvoeren</span
+												>{/if}
 											<button
 												type="button"
 												class="shelly-explicit"
 												aria-label={`${device.name} ${component.label}: Aan`}
+												aria-busy={pending.has(`${device.id}:${component.id}`)}
 												disabled={pending.has(`${device.id}:${component.id}`) ||
 													snapshot.stale ||
 													Boolean(error)}
@@ -271,6 +296,7 @@
 												type="button"
 												class="shelly-explicit"
 												aria-label={`${device.name} ${component.label}: Uit`}
+												aria-busy={pending.has(`${device.id}:${component.id}`)}
 												disabled={pending.has(`${device.id}:${component.id}`) ||
 													snapshot.stale ||
 													Boolean(error)}
@@ -307,6 +333,7 @@
 		background: white;
 	}
 	.shelly-power {
+		position: relative;
 		display: inline-flex;
 		width: 52px;
 		height: 52px;
@@ -322,6 +349,21 @@
 		border-color: #15803d;
 		background: #15803d;
 		color: white;
+	}
+	.shelly-power[aria-busy='true']::after {
+		position: absolute;
+		inset: 2px;
+		border: 2px solid transparent;
+		border-top-color: currentColor;
+		border-right-color: currentColor;
+		border-radius: 9999px;
+		content: '';
+		animation: shelly-spin 0.8s linear infinite;
+	}
+	@keyframes shelly-spin {
+		to {
+			transform: rotate(360deg);
+		}
 	}
 	.shelly-explicit {
 		min-width: 48px;

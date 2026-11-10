@@ -74,3 +74,10 @@ The dedicated v2 switch/light transport is serialized and single-attempt;
 controls validate current room/channel/component membership before sending.
 Audit only resolved identity, command and outcome. See shelly-inventory-core
 for pure parsing and validation, and shelly-inventory for cache/transport.
+
+Vacation reader: parse current configured Begin/Einde definitions, supporting
+fixed outputs and cloud enabled flags only. Definitions/inventory cache five
+minutes; observations thirty seconds. Verify LAN identity before status, use
+only fresh online cloud fallback, and treat unsupported/missing proof as unknown.
+Transport is sealed to read-only cloud list/status and LAN identity/status paths;
+no holiday execution, enable/update or delayed writes belong here.

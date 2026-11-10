@@ -28,6 +28,7 @@
 	const buttonToggleNeutralClass = 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100';
 	const buttonCustomClass = 'text-white';
 
+	export let embedded = false;
 	export let device: ShellyDevice;
 	export let commandOrder: DeviceCommandKey[];
 	export let commandKey: (deviceId: string, command: DeviceCommandKey) => string;
@@ -301,34 +302,41 @@
 	}
 </script>
 
-<section class={cardClassName} style={cardStyle}>
-	<div class="flex items-center justify-between gap-4">
-		<div class="min-w-0">
-			<h3 class="truncate text-[length:var(--control-label-size)] font-semibold text-slate-800">
-				{device.label}
-			</h3>
-			{#if statusOffline}
-				<p class="text-sm font-semibold text-amber-800" role="status">Apparaat offline</p>
-			{/if}
-			{#if actionError}
-				<p class="text-sm font-semibold text-red-700" role="alert">{actionError}</p>
-			{/if}
-			{#if showType}
-				<p class="text-xs tracking-wide text-slate-400 uppercase">{device.type}</p>
+<section
+	class={embedded ? 'flex h-full min-h-0 flex-col gap-3' : cardClassName}
+	style={embedded ? undefined : cardStyle}
+>
+	{#if !embedded || statusOffline || actionError}<div
+			class="flex items-center justify-between gap-4"
+		>
+			<div class="min-w-0">
+				{#if !embedded}<h3
+						class="truncate text-[length:var(--control-label-size)] font-semibold text-slate-800"
+					>
+						{device.label}
+					</h3>{/if}
+				{#if statusOffline}
+					<p class="text-sm font-semibold text-amber-800" role="status">Apparaat offline</p>
+				{/if}
+				{#if actionError}
+					<p class="text-sm font-semibold text-red-700" role="alert">{actionError}</p>
+				{/if}
+				{#if showType}
+					<p class="text-xs tracking-wide text-slate-400 uppercase">{device.type}</p>
+				{/if}
+			</div>
+			{#if cardNumber !== undefined}
+				<div class="min-w-0">
+					<h3
+						class="truncate text-[length:var(--control-label-size)] font-normal text-slate-400"
+						aria-label={`Knop ${cardNumber}`}
+					>
+						{cardNumber}
+					</h3>
+				</div>
 			{/if}
 		</div>
-		{#if cardNumber !== undefined}
-			<div class="min-w-0">
-				<h3
-					class="truncate text-[length:var(--control-label-size)] font-normal text-slate-400"
-					aria-label={`Knop ${cardNumber}`}
-				>
-					{cardNumber}
-				</h3>
-			</div>
-		{/if}
-	</div>
-
+	{/if}
 	<div class={`grid flex-1 ${commandGridClass} gap-4`}>
 		{#if isSingle}
 			{#if singleState}
@@ -378,7 +386,7 @@
 				</button>
 			{/if}
 		{:else}
-			{#each commandOrder as cmd}
+			{#each commandOrder as cmd (cmd)}
 				{#if device.commands[cmd]}
 					{@const state = commandVisualStates[cmd]}
 					{#if state}

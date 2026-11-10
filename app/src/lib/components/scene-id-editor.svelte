@@ -24,6 +24,9 @@
 		error?: string;
 		conflict?: boolean;
 	};
+	export let visible = true;
+	let mounted = false;
+	$: if (mounted && visible) void tick().then(() => dialog?.focus());
 	export let activity: () => void = () => {};
 	const dispatch = createEventDispatcher<{
 		controls: DashboardControl[];
@@ -75,7 +78,8 @@
 
 	onMount(() => {
 		const previousFocus = document.activeElement as HTMLElement | null;
-		dialog.focus();
+		mounted = true;
+		dialog?.focus();
 		void load();
 		return () => previousFocus?.focus();
 	});
@@ -335,7 +339,8 @@
 		}
 	}
 	function close() {
-		if (saving || (dirty && !window.confirm('Niet-opgeslagen wijzigingen verwijderen?'))) return;
+		if (saving) return;
+		pendingOperation = null;
 		dispatch('close');
 	}
 	async function reload() {
@@ -344,346 +349,353 @@
 	}
 </script>
 
-<div
-	class="editor-overlay"
-	role="presentation"
-	on:pointerdown={activity}
-	on:wheel|passive={activity}
-	on:touchmove|passive={activity}
->
-	<button type="button" class="editor-backdrop" aria-label="Sluiten" on:click={close}></button>
+{#if visible}
 	<div
-		bind:this={dialog}
-		on:keydown={handleKeydown}
-		class="editor"
-		role="dialog"
-		aria-modal="true"
-		aria-labelledby="config-editor-title"
-		tabindex="-1"
+		class="editor-overlay"
+		role="presentation"
+		on:pointerdown={activity}
+		on:wheel|passive={activity}
+		on:touchmove|passive={activity}
 	>
-		<header>
-			<h2 id="config-editor-title">Bediening en tabs beheren</h2>
-			<button type="button" on:click={close} disabled={saving}>Sluiten</button>
-		</header>
-		<div class="editor-body">
-			{#if loading}<p>Configuratie lezen…</p>
-			{:else if !editable}<p>Bewerken is niet ingeschakeld.</p>
-			{:else}
-				<p>Wijzigingen worden pas actief na opslaan. Opslaan schakelt geen apparaten.</p>
-				{#if importedSnapshot}
-					<h3>Import controleren</h3>
-					<p>Deze import vervangt alle opgeslagen wijzigingen, inclusief tabs.</p>
-					<pre>{JSON.stringify(importedSnapshot, null, 2)}</pre>
-					<button
-						type="button"
-						on:click={() => {
-							importedSnapshot = null;
-						}}>Import annuleren</button
-					>
+		<button type="button" class="editor-backdrop" aria-label="Sluiten" on:click={close}></button>
+		<div
+			bind:this={dialog}
+			on:keydown={handleKeydown}
+			class="editor"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="config-editor-title"
+			tabindex="-1"
+		>
+			<header>
+				<h2 id="config-editor-title">Bediening en tabs beheren</h2>
+				<button type="button" on:click={close} disabled={saving}>Sluiten</button>
+			</header>
+			<div class="editor-body">
+				{#if loading}<p>Configuratie lezen…</p>
+				{:else if !editable}<p>Bewerken is niet ingeschakeld.</p>
 				{:else}
-					<h3>Schoolbel relais</h3>
-					{#if bellRelayIds.length === 2}
-						<div class="tab-row">
-							{#each bellRelayIds as id, index}
+					<p>Wijzigingen worden pas actief na opslaan. Opslaan schakelt geen apparaten.</p>
+					{#if importedSnapshot}
+						<h3>Import controleren</h3>
+						<p>Deze import vervangt alle opgeslagen wijzigingen, inclusief tabs.</p>
+						<pre>{JSON.stringify(importedSnapshot, null, 2)}</pre>
+						<button
+							type="button"
+							on:click={() => {
+								importedSnapshot = null;
+							}}>Import annuleren</button
+						>
+					{:else}
+						<h3>Schoolbel relais</h3>
+						{#if bellRelayIds.length === 2}
+							<div class="tab-row">
+								{#each bellRelayIds as id, index (index)}
+									<label
+										>Belrelais {index + 1} · Shelly-ID<input
+											value={id}
+											maxlength="12"
+											disabled={saving || !bellRelaysEditable}
+											on:input={(event) => {
+												bellRelayIds = bellRelayIds.map((value, position) =>
+													position === index ? inputValue(event).trim().toLowerCase() : value
+												);
+											}}
+										/></label
+									>
+								{/each}
+							</div>
+							<button
+								type="button"
+								class="primary"
+								disabled={saving || !bellRelaysEditable || !bellRelaysDirty || !bellRelayIdsValid}
+								on:click={() => requestOperation('bell-relays')}>Belrelais opslaan</button
+							>
+						{:else}
+							<p>Belrelais konden niet worden geladen.</p>
+							<button type="button" on:click={loadBellRelays}>Opnieuw laden</button>
+						{/if}
+						<h3>Tabs</h3>
+						{#each tabs as tab, index (tab.id)}
+							<div class="tab-row">
 								<label
-									>Belrelais {index + 1} · Shelly-ID<input
-										value={id}
-										maxlength="12"
-										disabled={saving || !bellRelaysEditable}
+									>Naam<input
+										value={tab.label}
+										maxlength="80"
 										on:input={(event) => {
-											bellRelayIds = bellRelayIds.map((value, position) =>
-												position === index ? inputValue(event).trim().toLowerCase() : value
+											tabs = tabs.map((value) =>
+												value.id === tab.id ? { ...value, label: inputValue(event) } : value
 											);
 										}}
 									/></label
 								>
-							{/each}
-						</div>
-						<button
-							type="button"
-							class="primary"
-							disabled={saving || !bellRelaysEditable || !bellRelaysDirty || !bellRelayIdsValid}
-							on:click={() => requestOperation('bell-relays')}>Belrelais opslaan</button
+								<button
+									type="button"
+									aria-label={`${tab.label} omhoog`}
+									on:click={() => moveTab(index, -1)}
+									disabled={index === 0}>↑</button
+								>
+								<button
+									type="button"
+									aria-label={`${tab.label} omlaag`}
+									on:click={() => moveTab(index, 1)}
+									disabled={index === tabs.length - 1}>↓</button
+								>
+								<button
+									type="button"
+									on:click={() => removeTab(tab.id)}
+									disabled={tab.id === 'home'}>Verwijderen</button
+								>
+							</div>
+						{/each}
+						<button type="button" on:click={addTab} disabled={tabs.length >= 30}
+							>Tab toevoegen</button
 						>
-					{:else}
-						<p>Belrelais konden niet worden geladen.</p>
-						<button type="button" on:click={loadBellRelays}>Opnieuw laden</button>
-					{/if}
-					<h3>Tabs</h3>
-					{#each tabs as tab, index (tab.id)}
-						<div class="tab-row">
-							<label
-								>Naam<input
-									value={tab.label}
-									maxlength="80"
-									on:input={(event) => {
-										tabs = tabs.map((value) =>
-											value.id === tab.id ? { ...value, label: inputValue(event) } : value
-										);
-									}}
-								/></label
-							>
-							<button
-								type="button"
-								aria-label={`${tab.label} omhoog`}
-								on:click={() => moveTab(index, -1)}
-								disabled={index === 0}>↑</button
-							>
-							<button
-								type="button"
-								aria-label={`${tab.label} omlaag`}
-								on:click={() => moveTab(index, 1)}
-								disabled={index === tabs.length - 1}>↓</button
-							>
-							<button type="button" on:click={() => removeTab(tab.id)} disabled={tab.id === 'home'}
-								>Verwijderen</button
-							>
-						</div>
-					{/each}
-					<button type="button" on:click={addTab} disabled={tabs.length >= 30}>Tab toevoegen</button
-					>
-					<h3>Concept bewerken</h3>
-					<div class="control-table" role="region" aria-label="Knoppen bewerken">
-						<table>
-							<thead
-								><tr
-									><th scope="col">Knop</th><th scope="col">Tab / positie</th><th scope="col"
-										>Ingeschakeld</th
-									><th scope="col">Kleuren</th><th scope="col">Scènes / status</th><th scope="col"
-										>Tijdsduur</th
-									><th scope="col">Herstellen</th></tr
-								></thead
-							>
-							<tbody>
-								{#each entries as entry (entry.controlId)}
-									<tr data-control-id={entry.controlId}>
-										<td class="label-cell" data-label="Knop"
-											><input
-												aria-label={`Label ${entry.label}`}
-												value={metadata[entry.controlId].label}
-												maxlength="120"
-												disabled={saving}
-												on:input={(event) => field(entry.controlId, 'label', inputValue(event))}
-											/></td
-										>
-										<td class="position-cell" data-label="Tab / positie">
-											{#if entry.placement === 'main'}
-												<label
-													>Tab<select
-														aria-label={`Tab ${entry.label}`}
-														value={metadata[entry.controlId].tabId ?? 'home'}
+						<h3>Concept bewerken</h3>
+						<div class="control-table" role="region" aria-label="Knoppen bewerken">
+							<table>
+								<thead
+									><tr
+										><th scope="col">Knop</th><th scope="col">Tab / positie</th><th scope="col"
+											>Ingeschakeld</th
+										><th scope="col">Kleuren</th><th scope="col">Scènes / status</th><th scope="col"
+											>Tijdsduur</th
+										><th scope="col">Herstellen</th></tr
+									></thead
+								>
+								<tbody>
+									{#each entries as entry (entry.controlId)}
+										<tr data-control-id={entry.controlId}>
+											<td class="label-cell" data-label="Knop"
+												><input
+													aria-label={`Label ${entry.label}`}
+													value={metadata[entry.controlId].label}
+													maxlength="120"
+													disabled={saving}
+													on:input={(event) => field(entry.controlId, 'label', inputValue(event))}
+												/></td
+											>
+											<td class="position-cell" data-label="Tab / positie">
+												{#if entry.placement === 'main'}
+													<label
+														>Tab<select
+															aria-label={`Tab ${entry.label}`}
+															value={metadata[entry.controlId].tabId ?? 'home'}
+															disabled={saving}
+															on:change={(event) =>
+																field(entry.controlId, 'tabId', inputValue(event))}
+															>{#each tabs as tab (tab.id)}<option value={tab.id}
+																	>{tab.label}</option
+																>{/each}</select
+														></label
+													>
+													<label
+														>Positie<input
+															aria-label={`Positie ${entry.label}`}
+															type="number"
+															min="1"
+															max="99"
+															value={metadata[entry.controlId].pushNumber}
+															disabled={saving}
+															on:input={(event) =>
+																field(entry.controlId, 'pushNumber', Number(inputValue(event)))}
+														/></label
+													>
+												{:else if entry.placement === 'advanced'}
+													<span>Geavanceerde bediening</span>
+													<label
+														>Positie<input
+															aria-label={`Positie ${entry.label}`}
+															type="number"
+															min="1"
+															max="99"
+															value={metadata[entry.controlId].pushNumber}
+															disabled={saving}
+															on:input={(event) =>
+																field(entry.controlId, 'pushNumber', Number(inputValue(event)))}
+														/></label
+													>
+												{:else if entry.placement === 'energy'}<span>Losse actie</span>{/if}
+											</td>
+											<td class="enabled-cell" data-label="Ingeschakeld"
+												><label class="checkbox"
+													><input
+														type="checkbox"
+														aria-label={`Ingeschakeld ${entry.label}`}
+														checked={metadata[entry.controlId].enabled !== false}
 														disabled={saving}
 														on:change={(event) =>
-															field(entry.controlId, 'tabId', inputValue(event))}
-														>{#each tabs as tab (tab.id)}<option value={tab.id}>{tab.label}</option
-															>{/each}</select
+															field(
+																entry.controlId,
+																'enabled',
+																(event.currentTarget as HTMLInputElement).checked
+															)}
+													/><span>{metadata[entry.controlId].enabled !== false ? 'Ja' : 'Nee'}</span
 													></label
-												>
-												<label
-													>Positie<input
-														aria-label={`Positie ${entry.label}`}
-														type="number"
-														min="1"
-														max="99"
-														value={metadata[entry.controlId].pushNumber}
-														disabled={saving}
-														on:input={(event) =>
-															field(entry.controlId, 'pushNumber', Number(inputValue(event)))}
-													/></label
-												>
-											{:else if entry.placement === 'advanced'}
-												<span>Geavanceerde bediening</span>
-												<label
-													>Positie<input
-														aria-label={`Positie ${entry.label}`}
-														type="number"
-														min="1"
-														max="99"
-														value={metadata[entry.controlId].pushNumber}
-														disabled={saving}
-														on:input={(event) =>
-															field(entry.controlId, 'pushNumber', Number(inputValue(event)))}
-													/></label
-												>
-											{:else if entry.placement === 'energy'}<span>Losse actie</span>{/if}
-										</td>
-										<td class="enabled-cell" data-label="Ingeschakeld"
-											><label class="checkbox"
-												><input
-													type="checkbox"
-													aria-label={`Ingeschakeld ${entry.label}`}
-													checked={metadata[entry.controlId].enabled !== false}
-													disabled={saving}
-													on:change={(event) =>
-														field(
-															entry.controlId,
-															'enabled',
-															(event.currentTarget as HTMLInputElement).checked
-														)}
-												/><span>{metadata[entry.controlId].enabled !== false ? 'Ja' : 'Nee'}</span
-												></label
-											></td
-										>
-										<td class="color-cell" data-label="Kleuren">
-											{#each entry.controlType === 'device' ? ['onColor', 'offColor'] : ['color'] as colorField}
-												{@const value =
-													metadata[entry.controlId][colorField as keyof ControlOverride]}
-												{@const color = resolveControlColor(
-													typeof value === 'string' ? value : undefined
-												)}
-												<label class="color-field"
-													>{colorField === 'onColor'
-														? 'Aan'
-														: colorField === 'offColor'
-															? 'Uit'
-															: 'Actie'}<span class="color-input"
-														><span
-															class="color-swatch"
-															style:background-color={color?.background ?? '#f1f5f9'}
-															aria-hidden="true"
-														></span><input
-															aria-label={`${colorField === 'onColor' ? 'Kleur Aan' : colorField === 'offColor' ? 'Kleur Uit' : 'Kleur'} ${entry.label}`}
-															value={value ?? ''}
-															placeholder="Standaard"
+												></td
+											>
+											<td class="color-cell" data-label="Kleuren">
+												{#each entry.controlType === 'device' ? ['onColor', 'offColor'] : ['color'] as colorField (colorField)}
+													{@const value =
+														metadata[entry.controlId][colorField as keyof ControlOverride]}
+													{@const color = resolveControlColor(
+														typeof value === 'string' ? value : undefined
+													)}
+													<label class="color-field"
+														>{colorField === 'onColor'
+															? 'Aan'
+															: colorField === 'offColor'
+																? 'Uit'
+																: 'Actie'}<span class="color-input"
+															><span
+																class="color-swatch"
+																style:background-color={color?.background ?? '#f1f5f9'}
+																aria-hidden="true"
+															></span><input
+																aria-label={`${colorField === 'onColor' ? 'Kleur Aan' : colorField === 'offColor' ? 'Kleur Uit' : 'Kleur'} ${entry.label}`}
+																value={value ?? ''}
+																placeholder="Standaard"
+																disabled={saving}
+																on:input={(event) =>
+																	field(
+																		entry.controlId,
+																		colorField as keyof ControlOverride,
+																		inputValue(event).trim() || null
+																	)}
+															/></span
+														></label
+													>
+												{/each}
+											</td>
+											<td class="scene-cell" data-label="Scènes / status">
+												{#each Object.keys(entry.slots) as slot (slot)}
+													<label
+														>{slot === 'on'
+															? 'Aan'
+															: slot === 'off'
+																? 'Uit'
+																: slot === 'status'
+																	? 'Status-ID'
+																	: 'Scène'}<input
+															aria-label={`${slotLabel(slot)} ${entry.label}`}
+															value={values[key(entry.controlId, slot)] ?? ''}
+															inputmode={slot === 'status' ? 'text' : 'numeric'}
+															placeholder="Niet ingesteld"
+															disabled={saving}
+															on:input={(event) => {
+																values = {
+																	...values,
+																	[key(entry.controlId, slot)]: inputValue(event)
+																};
+																successMessage = '';
+															}}
+														/></label
+													>
+												{:else}<span>Geen scène-ID</span>{/each}
+											</td>
+											<td class="duration-cell" data-label="Tijdsduur">
+												{#if 'activeDurationMs' in entry.metadata}<label
+														>Seconden<input
+															aria-label={`Tijdsduur ${entry.label}`}
+															type="number"
+															min="0.001"
+															max="86400"
+															step="0.001"
+															value={metadata[entry.controlId].activeDurationMs
+																? Number(metadata[entry.controlId].activeDurationMs) / 1000
+																: ''}
 															disabled={saving}
 															on:input={(event) =>
 																field(
 																	entry.controlId,
-																	colorField as keyof ControlOverride,
-																	inputValue(event).trim() || null
+																	'activeDurationMs',
+																	inputValue(event)
+																		? Math.round(Number(inputValue(event)) * 1000)
+																		: null
 																)}
-														/></span
-													></label
-												>
-											{/each}
-										</td>
-										<td class="scene-cell" data-label="Scènes / status">
-											{#each Object.keys(entry.slots) as slot (slot)}
-												<label
-													>{slot === 'on'
-														? 'Aan'
-														: slot === 'off'
-															? 'Uit'
-															: slot === 'status'
-																? 'Status-ID'
-																: 'Scène'}<input
-														aria-label={`${slotLabel(slot)} ${entry.label}`}
-														value={values[key(entry.controlId, slot)] ?? ''}
-														inputmode={slot === 'status' ? 'text' : 'numeric'}
-														placeholder="Niet ingesteld"
-														disabled={saving}
-														on:input={(event) => {
-															values = {
-																...values,
-																[key(entry.controlId, slot)]: inputValue(event)
-															};
-															successMessage = '';
-														}}
-													/></label
-												>
-											{:else}<span>Geen scène-ID</span>{/each}
-										</td>
-										<td class="duration-cell" data-label="Tijdsduur">
-											{#if 'activeDurationMs' in entry.metadata}<label
-													>Seconden<input
-														aria-label={`Tijdsduur ${entry.label}`}
-														type="number"
-														min="0.001"
-														max="86400"
-														step="0.001"
-														value={metadata[entry.controlId].activeDurationMs
-															? Number(metadata[entry.controlId].activeDurationMs) / 1000
-															: ''}
-														disabled={saving}
-														on:input={(event) =>
-															field(
-																entry.controlId,
-																'activeDurationMs',
-																inputValue(event)
-																	? Math.round(Number(inputValue(event)) * 1000)
-																	: null
-															)}
-													/></label
-												>{:else}<span>—</span>{/if}
-										</td>
-										<td class="reset-cell" data-label="Herstellen"
-											><button
-												type="button"
-												aria-label={`Standaardwaarden ${entry.label}`}
-												title={`Standaardlabel: ${entry.defaultMetadata.label}`}
-												disabled={saving}
-												on:click={() => resetControl(entry)}>Standaard</button
-											></td
-										>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
-				{/if}
-				<details>
-					<summary>Configuratie importeren en exporteren</summary>
-					<div class="transfer">
-						<button type="button" on:click={exportSaved}>Opgeslagen configuratie exporteren</button
-						><label
-							>Configuratiebestand<input
-								type="file"
-								accept="application/json,.json"
-								on:change={importFile}
-							/></label
-						><label>Of plak de JSON<textarea bind:value={importText} rows="5"></textarea></label
-						><button type="button" on:click={stageImport}>Import controleren</button>
-					</div>
-				</details>
-				{#if pendingOperation}
-					<form bind:this={pinForm} class="pin" on:submit|preventDefault={submit}>
-						<p>
-							{pendingOperation === 'reset'
-								? 'Alle instellingen terugzetten naar standaardwaarden?'
-								: pendingOperation === 'restore'
-									? 'De vorige opgeslagen configuratie herstellen?'
-									: 'Deze configuratie opslaan?'}
-						</p>
-						<div class="actions">
-							<button class="primary" type="submit" disabled={saving}
-								>{saving ? 'Opslaan…' : 'Bevestigen'}</button
-							><button
-								type="button"
-								on:click={() => {
-									pendingOperation = null;
-													}}
-								disabled={saving}>Annuleren</button
-							>
+														/></label
+													>{:else}<span>—</span>{/if}
+											</td>
+											<td class="reset-cell" data-label="Herstellen"
+												><button
+													type="button"
+													aria-label={`Standaardwaarden ${entry.label}`}
+													title={`Standaardlabel: ${entry.defaultMetadata.label}`}
+													disabled={saving}
+													on:click={() => resetControl(entry)}>Standaard</button
+												></td
+											>
+										</tr>
+									{/each}
+								</tbody>
+							</table>
 						</div>
-					</form>
+					{/if}
+					<details>
+						<summary>Configuratie importeren en exporteren</summary>
+						<div class="transfer">
+							<button type="button" on:click={exportSaved}
+								>Opgeslagen configuratie exporteren</button
+							><label
+								>Configuratiebestand<input
+									type="file"
+									accept="application/json,.json"
+									on:change={importFile}
+								/></label
+							><label>Of plak de JSON<textarea bind:value={importText} rows="5"></textarea></label
+							><button type="button" on:click={stageImport}>Import controleren</button>
+						</div>
+					</details>
+					{#if pendingOperation}
+						<form bind:this={pinForm} class="pin" on:submit|preventDefault={submit}>
+							<p>
+								{pendingOperation === 'reset'
+									? 'Alle instellingen terugzetten naar standaardwaarden?'
+									: pendingOperation === 'restore'
+										? 'De vorige opgeslagen configuratie herstellen?'
+										: 'Deze configuratie opslaan?'}
+							</p>
+							<div class="actions">
+								<button class="primary" type="submit" disabled={saving}
+									>{saving ? 'Opslaan…' : 'Bevestigen'}</button
+								><button
+									type="button"
+									on:click={() => {
+										pendingOperation = null;
+									}}
+									disabled={saving}>Annuleren</button
+								>
+							</div>
+						</form>
+					{/if}
 				{/if}
-			{/if}
-			{#if errorMessage}<p class="error" role="alert">{errorMessage}</p>{/if}
-			{#if successMessage}<p class="success" role="status">{successMessage}</p>{/if}
+				{#if errorMessage}<p class="error" role="alert">{errorMessage}</p>{/if}
+				{#if successMessage}<p class="success" role="status">{successMessage}</p>{/if}
+			</div>
+			{#if !loading && editable}<footer class="editor-actions">
+					<div class="actions">
+						<button
+							type="button"
+							class="primary"
+							on:click={() => requestOperation('save')}
+							disabled={saving || !dirty || conflict}>Wijzigingen opslaan</button
+						>
+						<button type="button" on:click={reload} disabled={saving}>Concept verwijderen</button>
+						<button
+							type="button"
+							on:click={() => requestOperation('restore')}
+							disabled={saving || !canRestore || conflict}>Vorige opslag herstellen</button
+						>
+						<button
+							type="button"
+							on:click={() => requestOperation('reset')}
+							disabled={saving || conflict}>Alles naar standaardwaarden</button
+						>
+					</div>
+				</footer>{/if}
 		</div>
-		{#if !loading && editable}<footer class="editor-actions">
-				<div class="actions">
-					<button
-						type="button"
-						class="primary"
-						on:click={() => requestOperation('save')}
-						disabled={saving || !dirty || conflict}>Wijzigingen opslaan</button
-					>
-					<button type="button" on:click={reload} disabled={saving}>Concept verwijderen</button>
-					<button
-						type="button"
-						on:click={() => requestOperation('restore')}
-						disabled={saving || !canRestore || conflict}>Vorige opslag herstellen</button
-					>
-					<button
-						type="button"
-						on:click={() => requestOperation('reset')}
-						disabled={saving || conflict}>Alles naar standaardwaarden</button
-					>
-				</div>
-			</footer>{/if}
 	</div>
-</div>
+{/if}
 
 <style>
 	.editor-overlay {

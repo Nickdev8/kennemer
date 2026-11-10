@@ -98,7 +98,9 @@ try {
 	const advancedBox = await page
 		.getByRole('button', { name: 'Geavanceerde bediening', exact: true })
 		.boundingBox();
-	assert.ok(navBox.y + navBox.height <= advancedBox.y);
+	assert.ok(
+		advancedBox.y >= navBox.y && advancedBox.y + advancedBox.height <= navBox.y + navBox.height + 1
+	);
 	assert.equal(
 		await page
 			.getByLabel('Knop 1', { exact: true })
@@ -120,11 +122,11 @@ try {
 	assert.equal(left[0].x, left[1].x);
 	assert.equal(left[1].x, left[2].x);
 	await page.getByRole('button', { name: 'Apparaten', exact: true }).click();
-	await page.getByText('Color spare 051026', { exact: true }).waitFor();
+	await page.getByRole('heading', { name: 'Gang Color', exact: true }).waitFor();
 	assert.equal(actions.length, 0);
-	await page.getByRole('button', { name: 'Uit', exact: true }).click();
-	await page.getByRole('button', { name: 'Aan', exact: true }).waitFor();
-	await expect(page.getByRole('button', { name: 'Aan', exact: true })).toHaveCSS(
+	await page.getByRole('button', { name: 'Uit', exact: true }).first().click();
+	await page.getByRole('button', { name: 'Aan', exact: true }).first().waitFor();
+	await expect(page.getByRole('button', { name: 'Aan', exact: true }).first()).toHaveCSS(
 		'background-color',
 		'rgb(22, 163, 74)'
 	);
@@ -152,7 +154,7 @@ try {
 	await page.getByRole('button', { name: 'PIN 4', exact: true }).click();
 	await page.getByRole('button', { name: 'Ontgrendel', exact: true }).click();
 	await page
-		.getByRole('dialog', { name: 'Geavanceerde bediening', exact: true })
+		.locator('[aria-label="Geavanceerde bediening"]')
 		.getByRole('button', { name: 'Sluiten', exact: true })
 		.click();
 	await page.getByRole('button', { name: 'Overwerk timers', exact: true }).click();
@@ -165,7 +167,7 @@ try {
 	await page.getByRole('button', { name: 'Overwerktimer Hoofdgebouw: Start timer' }).click();
 	await page.getByRole('button', { name: /Overwerktimer Hoofdgebouw: timer gestart/ }).waitFor();
 	assert.equal(actions.length, 4);
-	await page.getByRole('button', { name: 'Geavanceerde bediening', exact: true }).click();
+	await page.getByRole('button', { name: 'Schoolbel', exact: true }).click();
 	for (const digit of [1, 2, 3, 4])
 		await page.getByRole('button', { name: `PIN ${digit}`, exact: true }).click();
 	await page.getByRole('button', { name: 'Ontgrendel', exact: true }).click();
@@ -173,14 +175,11 @@ try {
 	await rosters.getByRole('radio', { name: 'Uit', exact: true }).waitFor();
 	await expect(rosters.getByRole('radio', { name: 'Uit', exact: true })).toBeChecked();
 	for (const label of ['Regulier', 'Verkort', '10-minutenbel', 'Uit'])
-		await expect(rosters.getByRole('radio', { name: label, exact: true })).toBeDisabled();
-	await expect(page.getByRole('button', { name: 'Bel nu 1×', exact: true })).toBeDisabled();
-	await expect(page.getByRole('button', { name: 'Bel nu 2×', exact: true })).toBeDisabled();
+		await expect(rosters.getByRole('radio', { name: label, exact: true })).toBeEnabled();
+	await expect(page.getByRole('button', { name: 'Bel nu 1×', exact: true })).toBeEnabled();
+	await expect(page.getByRole('button', { name: 'Bel nu 2×', exact: true })).toBeEnabled();
 	assert.equal(actions.length, 4);
-	await page
-		.getByRole('dialog', { name: 'Geavanceerde bediening', exact: true })
-		.getByRole('button', { name: 'Sluiten', exact: true })
-		.click();
+	await page.getByRole('button', { name: 'Home', exact: true }).click();
 	await page.getByRole('button', { name: 'Overwerk timers', exact: true }).click();
 	await page.getByRole('button', { name: /Overwerktimer Hoofdgebouw: timer gestart/ }).waitFor();
 	await page.getByRole('button', { name: 'Geavanceerde bediening', exact: true }).click();
@@ -188,10 +187,7 @@ try {
 		await page.getByRole('button', { name: `PIN ${digit}`, exact: true }).click();
 	await page.getByRole('button', { name: 'Ontgrendel', exact: true }).click();
 	const information = page.getByRole('button', { name: 'Systeeminformatie' });
-	assert.equal(
-		(await information.boundingBox()).height,
-		(await page.getByRole('button', { name: 'Paneel vastzetten' }).boundingBox()).height
-	);
+
 	await information.click();
 	const debug = page.getByRole('dialog', { name: 'Debug- en systeeminformatie', exact: true });
 	await debug.getByText('a'.repeat(40), { exact: true }).waitFor();
@@ -200,9 +196,7 @@ try {
 	await debug.getByText('Systeem', { exact: true }).waitFor();
 	await debug.getByRole('button', { name: 'Sluiten', exact: true }).click();
 	await debug.waitFor({ state: 'hidden' });
-	const panelBox = await page
-		.getByRole('dialog', { name: 'Geavanceerde bediening', exact: true })
-		.boundingBox();
+	const panelBox = await page.locator('[aria-label="Geavanceerde bediening"]').boundingBox();
 	const manageBox = await page
 		.getByRole('button', { name: 'Bediening beheren', exact: true })
 		.boundingBox();
@@ -225,9 +219,7 @@ try {
 	await record.getByText('Ja', { exact: true }).waitFor();
 	assert.equal(actions.length, 4);
 	const timerRow = editor.locator('tr[data-control-id="Overwerktimer-1"]');
-	await timerRow
-		.getByRole('combobox', { name: 'Plaatsing Overwerktimer Hoofdgebouw' })
-		.selectOption('main');
+
 	await expect(
 		timerRow.getByRole('combobox', { name: 'Tab Overwerktimer Hoofdgebouw' })
 	).toHaveValue('overwerktimer');
@@ -237,25 +229,23 @@ try {
 	await timerRow
 		.getByRole('combobox', { name: 'Tab Overwerktimer Hoofdgebouw' })
 		.selectOption('devices');
-	await timerRow.getByRole('spinbutton', { name: 'Positie Overwerktimer Hoofdgebouw' }).fill('2');
+	await timerRow.getByRole('spinbutton', { name: 'Positie Overwerktimer Hoofdgebouw' }).fill('19');
 	await dismissTouchKeyboard();
 	await expect(
 		timerRow.getByRole('combobox', { name: 'Tab Overwerktimer Hoofdgebouw' })
 	).toHaveValue('devices');
 	await expect(
 		timerRow.getByRole('spinbutton', { name: 'Positie Overwerktimer Hoofdgebouw' })
-	).toHaveValue('2');
+	).toHaveValue('19');
 	await editor.getByRole('button', { name: 'Wijzigingen opslaan', exact: true }).click();
-	await editor.getByLabel('Configuratie-PIN', { exact: true }).fill('1234');
-	await dismissTouchKeyboard();
-	await editor.getByRole('button', { name: 'Bevestigen', exact: true }).click();
 	await editor.getByText('Configuratie opgeslagen.', { exact: true }).waitFor();
 	await editor.getByRole('button', { name: 'Sluiten', exact: true }).click();
 	await page
-		.getByRole('dialog', { name: 'Geavanceerde bediening', exact: true })
+		.locator('[aria-label="Geavanceerde bediening"]')
 		.getByRole('button', { name: 'Sluiten', exact: true })
 		.click();
 	await page.getByRole('button', { name: 'Apparaten', exact: true }).click();
+	await page.getByRole('button', { name: 'Volgende pagina apparaten', exact: true }).click();
 	await page.getByRole('heading', { name: 'Overwerktimer Hoofdgebouw', exact: true }).waitFor();
 	await page.getByRole('button', { name: 'Geavanceerde bediening', exact: true }).click();
 	for (const digit of [1, 2, 3, 4])
@@ -264,7 +254,6 @@ try {
 	await page.getByRole('button', { name: 'Bediening beheren', exact: true }).click();
 	await editor.getByText('Configuratie lezen…').waitFor({ state: 'hidden' });
 	await editor.getByRole('button', { name: 'Vorige opslag herstellen', exact: true }).click();
-	await editor.getByLabel('Configuratie-PIN', { exact: true }).fill('1234');
 	await dismissTouchKeyboard();
 	await editor.getByRole('button', { name: 'Bevestigen', exact: true }).click();
 	await editor.getByText('Vorige configuratie hersteld.', { exact: true }).waitFor();
@@ -289,7 +278,7 @@ try {
 	await page.setViewportSize({ width: 1280, height: 900 });
 	await editor.getByRole('button', { name: 'Sluiten', exact: true }).click();
 	await page
-		.getByRole('dialog', { name: 'Geavanceerde bediening', exact: true })
+		.locator('[aria-label="Geavanceerde bediening"]')
 		.getByRole('button', { name: 'Sluiten', exact: true })
 		.click();
 	await page.getByRole('button', { name: 'Home', exact: true }).click();
@@ -302,7 +291,7 @@ try {
 	);
 	await offlineCard.getByRole('button').first().click();
 	await page
-		.getByText('Shelly antwoordde niet. Controleer de lampstatus voordat u opnieuw drukt.', {
+		.getByText('Apparaat niet bereikbaar', {
 			exact: true
 		})
 		.first()
@@ -311,8 +300,101 @@ try {
 	assert.equal(actions.length, 5);
 	assert.deepEqual(errors, []);
 	assert.deepEqual(external, []);
+	// Use virtual time for protected navigation and in-memory draft lifecycle.
+	const locked = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+	await locked.addInitScript(() => {
+		const original = window.setTimeout.bind(window);
+		window.setTimeout = (handler, delay, ...args) =>
+			original(handler, delay === 4000 ? 3600000 : delay, ...args);
+	});
+	await locked.goto(origin);
+	await locked.locator('main[data-hydrated="true"]').waitFor();
+	await locked.clock.install();
+	locked.setDefaultTimeout(8000);
+	await locked.evaluate(() => {
+		const original = window.setTimeout.bind(window);
+		window.setTimeout = (handler, delay, ...args) =>
+			original(handler, delay === 4000 ? 3600000 : delay, ...args);
+	});
+	const openProtected = async (name) => {
+		await locked.getByRole('button', { name, exact: true }).click();
+		for (const digit of [1, 2, 3, 4])
+			await locked.getByRole('button', { name: `PIN ${digit}`, exact: true }).click();
+		await locked.getByRole('button', { name: 'Ontgrendel', exact: true }).click();
+	};
+	assert.equal(
+		await locked.getByRole('navigation', { name: "Bedieningspagina's" }).locator('svg').count(),
+		2
+	);
+	await locked.getByRole('button', { name: 'Schoolbel', exact: true }).click();
+	await locked.getByRole('button', { name: 'PIN 9', exact: true }).click();
+	await locked.getByRole('button', { name: 'Ontgrendel', exact: true }).click();
+	await locked.getByText('Onjuiste PIN. Probeer het opnieuw.').waitFor();
+	await locked.getByRole('button', { name: 'Annuleren', exact: true }).click();
+	await openProtected('Schoolbel');
+	await locked.getByRole('button', { name: 'Schoolbel', exact: true }).click();
+	assert.equal(await locked.getByRole('button', { name: 'Ontgrendel', exact: true }).count(), 0);
+	await locked.getByRole('radio', { name: 'Verkort', exact: true }).check();
+	await locked.getByRole('button', { name: 'Rooster bewerken', exact: true }).click();
+	await locked.clock.fastForward(11 * 60 * 1000);
+	await locked.getByRole('dialog', { name: 'Belrooster bewerken' }).waitFor();
+	await locked
+		.getByRole('dialog', { name: 'Belrooster bewerken' })
+		.getByRole('button', { name: 'Sluiten', exact: true })
+		.click();
+	await locked.getByRole('button', { name: 'Geavanceerde bediening', exact: true }).click();
+	await locked.getByRole('button', { name: 'Annuleren', exact: true }).click();
+	assert.equal(await locked.getByRole('radiogroup', { name: 'Belrooster' }).isVisible(), false);
+	await openProtected('Schoolbel');
+	await expect(locked.getByRole('radio', { name: 'Verkort', exact: true })).toBeChecked();
+	await locked.clock.fastForward(119000);
+	await expect(locked.getByRole('button', { name: 'Schoolbel', exact: true })).toHaveAttribute(
+		'aria-current',
+		'page'
+	);
+	await locked.getByRole('button', { name: 'Schoolbel', exact: true }).click();
+	await locked.clock.fastForward(119000);
+	await expect(locked.getByRole('button', { name: 'Schoolbel', exact: true })).toHaveAttribute(
+		'aria-current',
+		'page'
+	);
+	await locked.clock.fastForward(1001);
+	await expect(locked.getByRole('button', { name: 'Home', exact: true })).toHaveAttribute(
+		'aria-current',
+		'page'
+	);
+	await openProtected('Schoolbel');
+	await expect(locked.getByRole('radio', { name: 'Verkort', exact: true })).toBeChecked();
+	await locked.getByRole('button', { name: 'Home', exact: true }).click();
+	await locked.clock.fastForward(600001);
+	await openProtected('Schoolbel');
+	await expect(locked.getByRole('radio', { name: 'Uit', exact: true })).toBeChecked();
+	await openProtected('Geavanceerde bediening');
+	await locked.getByRole('button', { name: 'Bediening beheren', exact: true }).click();
+	const draftEditor = locked.getByRole('dialog', { name: 'Bediening en tabs beheren' });
+	const draftLabel = draftEditor
+		.locator('tr[data-control-id="push-1"]')
+		.getByRole('textbox', { name: 'Label 1ste etage', exact: true });
+	await draftLabel.fill('Bewaard concept');
+	await draftEditor.getByRole('button', { name: 'Sluiten', exact: true }).click();
+	await locked.getByRole('button', { name: 'Home', exact: true }).click();
+	await openProtected('Geavanceerde bediening');
+	await locked.getByRole('button', { name: 'Bediening beheren', exact: true }).click();
+	await expect(draftLabel).toHaveValue('Bewaard concept');
+	await locked.clock.fastForward(120001);
+	await expect(draftEditor).toBeHidden();
+	await openProtected('Geavanceerde bediening');
+	await locked.getByRole('button', { name: 'Bediening beheren', exact: true }).click();
+	await expect(draftLabel).toHaveValue('Bewaard concept');
+	await locked.reload();
+	await locked.locator('main[data-hydrated="true"]').waitFor();
+	await openProtected('Geavanceerde bediening');
+	await locked.getByRole('button', { name: 'Bediening beheren', exact: true }).click();
+	await expect(draftLabel).toHaveValue('1ste etage');
+	await locked.close();
+
 	console.log(
-		'UI passed: tabs, numbering, mock on/off, confirmation, first-touch wake, timer confirmation and persistence after closing/reopening, advanced information, responsive inline editor/save/restore, debug version/commit popup, column numbers, blue navigation, popup placement, no timeout resend, zero external browser calls.'
+		'UI passed: protected tabs/key icons, PIN re-entry/cancel, 2-minute idle/input reset, bell popup timeout suspension, retained/expired/reloaded drafts, tabs, numbering, mock on/off, confirmation, first-touch wake, timer confirmation and persistence after closing/reopening, advanced information, responsive inline editor/save/restore, debug version/commit popup, column numbers, blue navigation, popup placement, no timeout resend, zero external browser calls.'
 	);
 } catch (error) {
 	console.error(log.slice(-4000));

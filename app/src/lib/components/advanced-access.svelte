@@ -1,4 +1,5 @@
 <script lang="ts">
+	export let targetLabel = 'Geavanceerde bediening';
 	export let closeAdvancedPrompt: () => void;
 	export let markAdvancedActivity: () => void;
 	export let advancedPatternConfigured: boolean;
@@ -32,11 +33,11 @@
 	>
 		<div class="space-y-1">
 			<h2 id="advanced-prompt-title" class="text-lg font-semibold text-slate-900">PIN vereist</h2>
-			<p class="text-sm text-slate-600">Vul de PIN in om geavanceerde bediening te ontgrendelen.</p>
+			<p class="text-sm text-slate-600">Vul de PIN in om {targetLabel} te ontgrendelen.</p>
 		</div>
 		{#if !advancedPatternConfigured}
 			<p class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-				Geavanceerde bediening is nog niet ingesteld. Neem contact op met de beheerder.
+				{targetLabel} is nog niet ingesteld. Neem contact op met de beheerder.
 			</p>
 		{/if}
 		{#if advancedAccessError}

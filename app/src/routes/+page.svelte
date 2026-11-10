@@ -3,6 +3,7 @@
 	import { createPollingGroup } from '$lib/dashboard/polling';
 	import { homeGridPosition } from '$lib/config/home-grid';
 	import { onDestroy, onMount } from 'svelte';
+	import ArrowLeft from 'lucide-svelte/icons/arrow-left';
 	import EnergyPanel from '$lib/components/energy-panel.svelte';
 	import DebugInformation from '$lib/components/debug-information.svelte';
 	import AdvancedInformation from '$lib/components/advanced-information.svelte';
@@ -10,6 +11,8 @@
 	import TabSelector from '$lib/components/tab-selector.svelte';
 	import AdvancedAccess from '$lib/components/advanced-access.svelte';
 	import BellManager from '$lib/components/bell-manager.svelte';
+	import ShellyBrowser from '$lib/components/shelly-browser.svelte';
+	import { controlPages } from '$lib/dashboard/control-layout';
 	import AdvancedPanel from '$lib/components/advanced-panel.svelte';
 	import ControlCard from '$lib/components/control-card.svelte';
 	import SceneIdEditor from '$lib/components/scene-id-editor.svelte';
@@ -138,10 +141,8 @@
 		publicEnv.PUBLIC_ADVANCED_PROMPT_IDLE_MS,
 		30 * 1000
 	);
-	const advancedPanelIdleMs = readPositiveNumber(
-		publicEnv.PUBLIC_ADVANCED_PANEL_IDLE_MS,
-		5 * 60 * 1000
-	);
+	const tabIdleMs = 2 * 60 * 1000;
+	const draftIdleMs = 10 * 60 * 1000;
 
 	const acceptedAdvancedPatterns = readAdvancedPatterns(
 		publicEnv.PUBLIC_ADVANCED_PATTERN,
@@ -167,7 +168,12 @@
 	let statusFailureCounts = new Map<string, number>();
 	let offlineStatusByDeviceId = new Map<string, boolean>();
 
-	const baseControls: DashboardControl[] = [...home, ...devices, ...configuredAdvancedControls, ...triggers];
+	const baseControls: DashboardControl[] = [
+		...home,
+		...devices,
+		...configuredAdvancedControls,
+		...triggers
+	];
 	let sceneControls: DashboardControl[] = data?.controls ?? baseControls;
 	let dashboardTabs: DashboardTab[] = data?.tabs ?? [
 		{ id: 'home', label: 'Home', order: 0 },
@@ -176,9 +182,14 @@
 	let selectedTab = 'home';
 	let devicesPage = 0;
 	let controlGrid: HTMLDivElement;
-	const controlsPerPage = 9;
 	let showAdvancedInformation = false;
-	$: if (!dashboardTabs.some((tab) => tab.id === selectedTab))
+	let advancedRoom: string | null = null;
+	$: navigationTabs = [
+		...dashboardTabs.filter((tab) => !['devices', 'shelly', 'advanced'].includes(tab.id)),
+		{ id: 'schoolbel', label: 'Schoolbel', order: 90 },
+		{ id: 'advanced', label: 'Geavanceerd', order: 91 }
+	];
+	$: if (!navigationTabs.some((tab) => tab.id === selectedTab))
 		selectedTab = dashboardTabs[0]?.id ?? 'home';
 	let mainControls: DashboardControl[] = [];
 	let advancedControls: DashboardControl[] = [];
@@ -193,19 +204,17 @@
 	let advancedControlCount = 0;
 
 	$: mainControls = [...sceneControls]
-		.filter((control) => control.placement === 'main' && (control.tabId ?? 'home') === selectedTab)
+		.filter((control) => control.placement === 'main' && (control.tabId ?? 'home') === (selectedTab === 'advanced' ? 'devices' : selectedTab))
 		.sort((left, right) => {
 			const leftPosition = left.pushNumber;
 			const rightPosition = right.pushNumber;
 			return (leftPosition ?? Number.MAX_SAFE_INTEGER) - (rightPosition ?? Number.MAX_SAFE_INTEGER);
 		});
-	$: devicesPageCount = Math.max(1, Math.ceil(mainControls.length / controlsPerPage));
-	$: if (selectedTab !== 'devices') devicesPage = 0;
+	$: layoutPages = controlPages(mainControls, selectedTab === 'advanced' ? 'devices' : selectedTab);
+	$: devicesPageCount = layoutPages.length;
+	$: if (selectedTab !== 'devices' && selectedTab !== 'advanced') devicesPage = 0;
 	$: if (devicesPage >= devicesPageCount) devicesPage = devicesPageCount - 1;
-	$: visibleControls =
-		selectedTab === 'devices'
-			? mainControls.slice(devicesPage * controlsPerPage, (devicesPage + 1) * controlsPerPage)
-			: mainControls;
+	$: visibleGroups = layoutPages[selectedTab === 'devices' || selectedTab === 'advanced' ? devicesPage : 0] ?? [];
 
 	function changeDevicesPage(direction: number) {
 		devicesPage = Math.max(0, Math.min(devicesPageCount - 1, devicesPage + direction));
@@ -307,7 +316,12 @@
 	let advancedAccessError = '';
 	let advancedPin = '';
 	let advancedIdleTimeout: ReturnType<typeof setTimeout> | null = null;
-	let advancedPanelPinned = false;
+	let pendingProtectedTab = 'advanced';
+	let bellVisited = false;
+	let editorVisited = false;
+	let bellEditorOpen = false;
+	let homeIdleTimeout: ReturnType<typeof setTimeout> | null = null;
+	let draftIdleTimeout: ReturnType<typeof setTimeout> | null = null;
 	let displayDimTimeout: ReturnType<typeof setTimeout> | null = null;
 	let displayDimmed = false;
 	let stateStream: EventSource | null = null;
@@ -440,40 +454,70 @@
 		}
 	}
 
-	function startAdvancedIdleTimer(mode: 'prompt' | 'panel') {
-		clearAdvancedIdleTimer();
-		if (mode === 'panel' && (advancedPanelPinned || updateRunning)) return;
-		const timeoutMs = mode === 'panel' ? advancedPanelIdleMs : advancedPromptIdleMs;
-		advancedIdleTimeout = setTimeout(() => {
-			if (mode === 'prompt' && showAdvancedPrompt) {
-				closeAdvancedPrompt();
-			} else if (mode === 'panel' && showAdvancedPanel) {
-				closeAdvancedPanel();
-			}
-		}, timeoutMs);
+	function isProtectedTab(tab = selectedTab) {
+		return tab === 'advanced' || tab === 'schoolbel';
+	}
+
+	function scheduleNavigationIdle() {
+		if (homeIdleTimeout) clearTimeout(homeIdleTimeout);
+		if (draftIdleTimeout) clearTimeout(draftIdleTimeout);
+		homeIdleTimeout = null;
+		draftIdleTimeout = null;
+		if (bellEditorOpen || updateRunning) return;
+		homeIdleTimeout = setTimeout(() => {
+			selectTab('home');
+			cancelEnergyTriggerConfirmation();
+		}, tabIdleMs);
+		if (!isProtectedTab()) {
+			draftIdleTimeout = setTimeout(() => {
+				bellVisited = false;
+				editorVisited = false;
+			}, draftIdleMs);
+		}
 	}
 
 	function markAdvancedActivity() {
-		if (showAdvancedPanel) {
-			startAdvancedIdleTimer('panel');
-		} else if (showAdvancedPrompt) {
-			startAdvancedIdleTimer('prompt');
+		markDisplayActivity();
+		clearAdvancedIdleTimer();
+		if (showAdvancedPrompt) {
+			advancedIdleTimeout = setTimeout(closeAdvancedPrompt, advancedPromptIdleMs);
 		}
 	}
 
 	function resumeAdvancedIdleTimerAfterUpdate() {
-		if (showAdvancedPanel && !advancedPanelPinned) {
-			startAdvancedIdleTimer('panel');
-		}
+		scheduleNavigationIdle();
+		scheduleDisplayDim();
 	}
 
-	function toggleAdvancedPanelPin() {
-		advancedPanelPinned = !advancedPanelPinned;
-		if (advancedPanelPinned) {
-			clearAdvancedIdleTimer();
+	function setBellEditorOpen(open: boolean) {
+		bellEditorOpen = open;
+		scheduleNavigationIdle();
+		scheduleDisplayDim();
+	}
+
+	function revokeProtectedAccess() {
+		advancedRoom = null;
+		advancedUnlocked = false;
+		showAdvancedPanel = false;
+		showSceneIdEditor = false;
+		showAdvancedInformation = false;
+		bellEditorOpen = false;
+		cacheMessage = '';
+		if (isProtectedTab(selectedTab)) selectedTab = 'home';
+	}
+
+	function selectTab(tab: string) {
+		if (tab === selectedTab && !showAdvancedPrompt) return;
+		closeAdvancedPrompt();
+		revokeProtectedAccess();
+		if (isProtectedTab(tab)) {
+			pendingProtectedTab = tab;
+			showAdvancedPrompt = true;
+			markAdvancedActivity();
 		} else {
-			startAdvancedIdleTimer('panel');
+			selectedTab = tab;
 		}
+		scheduleNavigationIdle();
 	}
 
 	function clearDisplayDimTimer() {
@@ -485,11 +529,9 @@
 
 	function scheduleDisplayDim() {
 		clearDisplayDimTimer();
-		if (displayDimTimeoutMs <= 0) return;
+		if (displayDimTimeoutMs <= 0 || bellEditorOpen || updateRunning) return;
 		displayDimTimeout = setTimeout(() => {
-			selectedTab = 'home';
-			closeAdvancedPrompt();
-			closeAdvancedPanel();
+			selectTab('home');
 			cancelEnergyTriggerConfirmation();
 			displayDimmed = true;
 			displayDimTimeout = null;
@@ -501,6 +543,7 @@
 		if (displayDimmed) return;
 		displayDimmed = false;
 		scheduleDisplayDim();
+		scheduleNavigationIdle();
 	}
 
 	function handlePointerDown(event: PointerEvent) {
@@ -511,6 +554,7 @@
 	}
 
 	function handlePointerMove(event: PointerEvent) {
+		markDisplayActivity();
 		if (event.pointerType === 'mouse') {
 			document.documentElement.classList.remove('touch-cursor-hidden');
 		} else if (event.pointerType === 'touch') {
@@ -523,6 +567,7 @@
 		event?.stopPropagation();
 		displayDimmed = false;
 		scheduleDisplayDim();
+		scheduleNavigationIdle();
 		startIdleSensitivePolling(true);
 	}
 
@@ -859,7 +904,7 @@
 				startStatusFollowup(statusDeviceId);
 			}
 			succeeded = true;
-			if (advancedUnlocked && showAdvancedPanel) {
+			if (selectedTab === 'advanced' && advancedUnlocked && showAdvancedPanel) {
 				markAdvancedActivity();
 			}
 		} catch (err) {
@@ -1024,36 +1069,10 @@
 		stateStream = stream;
 	}
 
-	function openAdvancedAccess() {
-		cacheMessage = '';
-		if (advancedUnlocked) {
-			advancedPanelPinned = false;
-			showAdvancedPanel = true;
-			markAdvancedActivity();
-			return;
-		}
-		advancedAccessError = '';
-		clearAdvancedPin();
-		showAdvancedPrompt = true;
-		markAdvancedActivity();
-	}
-
 	function closeAdvancedPrompt() {
 		showAdvancedPrompt = false;
 		clearAdvancedPin();
 		advancedAccessError = '';
-		clearAdvancedIdleTimer();
-	}
-
-	function closeAdvancedPanel() {
-		showAdvancedPanel = false;
-		showSceneIdEditor = false;
-		showAdvancedInformation = false;
-		advancedPanelPinned = false;
-		clearAdvancedPin();
-		advancedAccessError = '';
-		advancedUnlocked = false;
-		cacheMessage = '';
 		clearAdvancedIdleTimer();
 	}
 
@@ -1066,11 +1085,12 @@
 		logAdvancedPinAttempt(accepted);
 		if (accepted) {
 			advancedUnlocked = true;
-			advancedPanelPinned = false;
 			showAdvancedPrompt = false;
 			advancedAccessError = '';
 			advancedPin = '';
-			showAdvancedPanel = true;
+			selectedTab = pendingProtectedTab;
+			showAdvancedPanel = selectedTab === 'advanced';
+			if (selectedTab === 'schoolbel') bellVisited = true;
 			markAdvancedActivity();
 		} else {
 			advancedErrorMsg = '';
@@ -1240,6 +1260,8 @@
 				updatePhase = 'error';
 			} else if (payload.updating) {
 				updateRunning = true;
+				clearDisplayDimTimer();
+				scheduleNavigationIdle();
 				clearAdvancedIdleTimer();
 				updateStartedAt = Date.now();
 				updateWasObservedRunning = true;
@@ -1269,6 +1291,8 @@
 		if (updateRunning) return;
 		clearUpdatePoll();
 		updateRunning = true;
+		clearDisplayDimTimer();
+		scheduleNavigationIdle();
 		clearAdvancedIdleTimer();
 		updateStartedAt = Date.now();
 		updateWasObservedRunning = false;
@@ -1381,7 +1405,7 @@
 				advancedStatusMsg = `${trigger.label}: actie uitgevoerd.`;
 			}
 			succeeded = true;
-			if (advancedUnlocked && showAdvancedPanel) {
+			if (selectedTab === 'advanced' && advancedUnlocked && showAdvancedPanel) {
 				markAdvancedActivity();
 			}
 		} catch (err) {
@@ -1581,9 +1605,12 @@
 		hydrated = true;
 		if (typeof window !== 'undefined') {
 			window.addEventListener('contextmenu', preventContextMenu);
-			window.addEventListener('pointerdown', handlePointerDown, { passive: true });
+			window.addEventListener('pointerdown', handlePointerDown, { passive: true, capture: true });
 			window.addEventListener('pointermove', handlePointerMove, { passive: true });
-			window.addEventListener('keydown', markDisplayActivity);
+			window.addEventListener('keydown', markDisplayActivity, true);
+			window.addEventListener('input', markDisplayActivity, true);
+			window.addEventListener('wheel', markDisplayActivity, { passive: true, capture: true });
+			window.addEventListener('touchmove', markDisplayActivity, { passive: true, capture: true });
 			window.addEventListener('online', handleBrowserOnline);
 			window.addEventListener('offline', handleBrowserOffline);
 			browserOnline = navigator.onLine;
@@ -1591,6 +1618,7 @@
 				handleBrowserOffline();
 			}
 			scheduleDisplayDim();
+			scheduleNavigationIdle();
 			startIdleSensitivePolling(true);
 			void loadDeviceStates();
 			void restoreActiveTriggerTimers();
@@ -1600,9 +1628,12 @@
 	onDestroy(() => {
 		if (typeof window !== 'undefined') {
 			window.removeEventListener('contextmenu', preventContextMenu);
-			window.removeEventListener('pointerdown', handlePointerDown);
+			window.removeEventListener('pointerdown', handlePointerDown, true);
 			window.removeEventListener('pointermove', handlePointerMove);
-			window.removeEventListener('keydown', markDisplayActivity);
+			window.removeEventListener('keydown', markDisplayActivity, true);
+			window.removeEventListener('input', markDisplayActivity, true);
+			window.removeEventListener('wheel', markDisplayActivity, true);
+			window.removeEventListener('touchmove', markDisplayActivity, true);
 			window.removeEventListener('online', handleBrowserOnline);
 			window.removeEventListener('offline', handleBrowserOffline);
 		}
@@ -1616,6 +1647,8 @@
 		clearUpdatePoll();
 		clearAdvancedIdleTimer();
 		clearDisplayDimTimer();
+		if (homeIdleTimeout) clearTimeout(homeIdleTimeout);
+		if (draftIdleTimeout) clearTimeout(draftIdleTimeout);
 	});
 </script>
 
@@ -1702,12 +1735,11 @@
 			{formatWatts}
 			{topWattageMax}
 			{wattageError}
-			{openAdvancedAccess}
 		>
 			<TabSelector
-				tabs={dashboardTabs}
+				tabs={navigationTabs}
 				selected={selectedTab}
-				on:select={({ detail }) => (selectedTab = detail)}
+				on:select={({ detail }) => selectTab(detail)}
 			/>
 		</EnergyPanel>
 
@@ -1717,80 +1749,294 @@
 			<header class="mb-4 flex items-center justify-between">
 				<div>
 					<h2 class="text-2xl font-semibold text-slate-900">
-						{dashboardTabs.find((tab) => tab.id === selectedTab)?.label ?? 'Bediening'}
+						{navigationTabs.find((tab) => tab.id === selectedTab)?.label ?? 'Bediening'}
 					</h2>
 				</div>
-				<span class="text-sm text-slate-500">{primaryDeviceCount} knoppen</span>
+				{#if selectedTab !== 'schoolbel' && selectedTab !== 'advanced'}<span
+						class="text-sm text-slate-500"
+						>{selectedTab === 'advanced' ? advancedControlCount : primaryDeviceCount} knoppen</span
+					>{/if}
 			</header>
-			{#if errorMsg}
-				<p
-					class="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700"
-				>
-					{errorMsg}
-				</p>
+			{#if selectedTab === 'advanced' && advancedUnlocked && advancedRoom === null}
+				<ShellyBrowser active={!displayDimmed} includeOwnRoom on:own={({ detail }) => (advancedRoom = detail)} />
 			{/if}
-			<div
-				bind:this={controlGrid}
-				class={`grid min-h-0 flex-1 gap-6 overflow-y-auto pr-1 pb-2 ${selectedTab === 'home' || selectedTab === 'devices' ? 'grid-cols-3 grid-rows-3' : 'auto-rows-[minmax(160px,1fr)] grid-cols-3'}`}
-			>
-				{#each visibleControls as control (control.id)}
-					<div
-						class="relative flex min-h-0 flex-col"
-						style={selectedTab === 'home' && control.pushNumber
-							? `grid-column: ${homeGridPosition(control.pushNumber).column}; grid-row: ${homeGridPosition(control.pushNumber).row}`
-							: ''}
-					>
-						<ControlCard
-							cardNumber={selectedTab === 'home' ? control.pushNumber : undefined}
-							{control}
-							statusOffline={offlineStatusByDeviceId.get(control.id) ?? false}
-							actionError={deviceActionErrors.get(control.id) ?? null}
-							{commandOrder}
-							{commandKey}
-							{commandLabel}
-							{resolveToggleCommand}
-							{loadingCommandKeys}
-							{loadingTriggerIds}
-							transientActive={control.controlType === 'device' &&
-								isTransientDeviceActive(control.id)}
-							initialStatus={control.controlType === 'device'
-								? resolveCardStatus(control, deviceStates, statusDeviceStates)
-								: null}
-							activeUntil={triggerActiveUntilById.get(control.id) ?? null}
-							on:command={({ detail }) =>
-								handlePress(detail.deviceId, detail.command, {
-									stateless: deviceById.get(detail.deviceId)?.stateless
-								})}
-							on:trigger={({ detail }) => handleTriggerPress(detail.triggerId)}
-						/>
-					</div>
-				{/each}
-			</div>
-			{#if selectedTab === 'devices' && devicesPageCount > 1}
-				<nav
-					class="mt-3 flex shrink-0 items-center justify-between gap-3 border-t border-slate-200 pt-3"
-					aria-label="Pagina’s apparaten"
+			{#if selectedTab === 'advanced' && advancedUnlocked && advancedRoom !== null}
+				<button type="button" class="mb-4 inline-flex min-h-12 items-center gap-2 self-start rounded-md border border-slate-300 px-4 py-2 font-semibold" on:click={() => (advancedRoom = null)}><ArrowLeft size={20} aria-hidden="true" /><span>Terug naar ruimtes</span></button>
+				<h3 class="mb-3 text-xl font-semibold">{advancedRoom === 'modes' ? 'Vakantiemodi' : 'Eigen apparaten'}</h3>
+			{/if}
+			{#if bellVisited}
+				<div
+					hidden={selectedTab !== 'schoolbel' || !advancedUnlocked}
+					class="min-h-0 flex-1 overflow-y-auto"
 				>
-					<button
-						type="button"
-						class="flex min-h-12 items-center gap-2 rounded-md border border-slate-300 px-4 py-2 font-semibold text-slate-700 disabled:opacity-40"
-						aria-label="Vorige pagina apparaten"
-						disabled={devicesPage === 0}
-						on:click={() => changeDevicesPage(-1)}
-						><ChevronLeft size={22} /><span class="hidden sm:inline">Vorige</span></button
+					<BellManager
+						active={selectedTab === 'schoolbel' && advancedUnlocked && !displayDimmed}
+						on:editing={({ detail }) => setBellEditorOpen(detail)}
+					/>
+				</div>
+			{/if}
+			{#if selectedTab === 'advanced' && advancedUnlocked && showAdvancedPanel && advancedRoom !== null}
+				<AdvancedPanel
+					informationOpen={showAdvancedInformation}
+					activity={markAdvancedActivity}
+					toggleInformation={() => (showAdvancedInformation = !showAdvancedInformation)}
+				>
+					{#if advancedRoom === 'modes'}
+<div class="flex min-h-0 flex-1 flex-col gap-6 px-6 py-6 lg:flex-row">
+						<section class="flex min-h-0 flex-1 flex-col">
+							{#if advancedErrorMsg}
+								<p
+									class="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700"
+								>
+									{advancedErrorMsg}
+								</p>
+							{/if}
+							{#if advancedStatusMsg}
+								<p
+									class="mb-3 rounded-lg border border-green-300 bg-green-50 px-4 py-3 text-base font-semibold text-green-900"
+									role="status"
+									aria-live="polite"
+								>
+									{advancedStatusMsg}
+								</p>
+							{/if}
+							<div
+								class="min-h-0 flex-1 overflow-y-auto pr-2"
+								role="presentation"
+								on:scroll={markAdvancedActivity}
+								on:wheel|passive={markAdvancedActivity}
+								on:touchmove|passive={markAdvancedActivity}
+								on:pointerdown={markAdvancedActivity}
+								on:mousedown={markAdvancedActivity}
+							>
+								{#if advancedControlCount === 0}
+									<p class="text-sm text-slate-600">Geen tijdelijke knoppen ingesteld.</p>
+								{:else}
+									<div class="grid auto-rows-fr grid-cols-1 gap-4 pb-4 md:grid-cols-2">
+										{#each advancedControls as control (control.id)}
+											<ControlCard
+												{control}
+												statusOffline={offlineStatusByDeviceId.get(control.id) ?? false}
+												actionError={deviceActionErrors.get(control.id) ?? null}
+												{commandOrder}
+												{commandKey}
+												{commandLabel}
+												{resolveToggleCommand}
+												{loadingCommandKeys}
+												{loadingTriggerIds}
+												transientActive={control.controlType === 'device' &&
+													isTransientDeviceActive(control.id)}
+												initialStatus={control.controlType === 'device'
+													? resolveCardStatus(control, deviceStates, statusDeviceStates)
+													: null}
+												activeUntil={triggerActiveUntilById.get(control.id) ?? null}
+												on:command={({ detail }) =>
+													handlePress(detail.deviceId, detail.command, {
+														stateless: deviceById.get(detail.deviceId)?.stateless
+													})}
+												on:trigger={({ detail }) => handleTriggerPress(detail.triggerId)}
+											/>
+										{/each}
+									</div>
+								{/if}
+							</div>
+						</section>
+					</div>
+					{:else}
+<div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
+				<div
+					bind:this={controlGrid}
+					class="grid min-h-0 flex-1 auto-rows-[minmax(160px,1fr)] grid-cols-3 gap-6 overflow-y-auto pr-1 pb-2"
+				>
+					{#each visibleGroups as group (group.id)}
+						<div
+							class={group.wide
+								? 'gang-control-group col-span-3 flex min-h-0 flex-col gap-3 rounded-[var(--control-radius)] border border-slate-300 bg-white p-[var(--control-padding)]'
+								: 'contents'}
+						>
+							{#if group.wide}<h3
+									class="text-[length:var(--control-label-size)] font-semibold text-slate-800"
+								>
+									{group.controls[0].label}
+								</h3>{/if}
+							<div
+								class={group.wide ? 'gang-control-options grid min-h-0 flex-1 gap-4' : 'contents'}
+							>
+								{#each group.controls as control (control.id)}
+									<div
+										class="relative flex min-h-0 flex-col"
+									>
+										<ControlCard
+											cardNumber={undefined}
+											embedded={group.wide}
+											compactLabel={group.wide
+												? control.label.replace(/^Gang Color\s*/, '')
+												: undefined}
+											{control}
+											statusOffline={offlineStatusByDeviceId.get(control.id) ?? false}
+											actionError={deviceActionErrors.get(control.id) ?? null}
+											{commandOrder}
+											{commandKey}
+											{commandLabel}
+											{resolveToggleCommand}
+											{loadingCommandKeys}
+											{loadingTriggerIds}
+											transientActive={control.controlType === 'device' &&
+												isTransientDeviceActive(control.id)}
+											initialStatus={control.controlType === 'device'
+												? resolveCardStatus(control, deviceStates, statusDeviceStates)
+												: null}
+											activeUntil={triggerActiveUntilById.get(control.id) ?? null}
+											on:command={({ detail }) =>
+												handlePress(detail.deviceId, detail.command, {
+													stateless: deviceById.get(detail.deviceId)?.stateless
+												})}
+											on:trigger={({ detail }) => handleTriggerPress(detail.triggerId)}
+										/>
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/each}
+				</div>
+				{#if selectedTab === 'advanced' && devicesPageCount > 1}
+					<nav
+						class="mt-3 flex shrink-0 items-center justify-between gap-3 border-t border-slate-200 pt-3"
+						aria-label="Pagina’s apparaten"
 					>
-					<span class="text-sm font-semibold text-slate-700" aria-live="polite"
-						>Pagina {devicesPage + 1} van {devicesPageCount}</span
+						<button
+							type="button"
+							class="flex min-h-12 items-center gap-2 rounded-md border border-slate-300 px-4 py-2 font-semibold text-slate-700 disabled:opacity-40"
+							aria-label="Vorige pagina apparaten"
+							disabled={devicesPage === 0}
+							on:click={() => changeDevicesPage(-1)}
+							><ChevronLeft size={22} /><span class="hidden sm:inline">Vorige</span></button
+						>
+						<span class="text-sm font-semibold text-slate-700" aria-live="polite"
+							>Pagina {devicesPage + 1} van {devicesPageCount}</span
+						>
+						<button
+							type="button"
+							class="flex min-h-12 items-center gap-2 rounded-md border border-slate-300 px-4 py-2 font-semibold text-slate-700 disabled:opacity-40"
+							aria-label="Volgende pagina apparaten"
+							disabled={devicesPage === devicesPageCount - 1}
+							on:click={() => changeDevicesPage(1)}
+							><span class="hidden sm:inline">Volgende</span><ChevronRight size={22} /></button
+						>
+					</nav>
+				{/if}
+</div>
+					{/if}
+<svelte:fragment slot="actions">
+						<button
+							type="button"
+							class="inline-flex min-h-12 items-center justify-center gap-3 rounded-md border border-slate-300 bg-white px-4 py-3 text-left text-sm font-semibold text-slate-800 hover:bg-slate-100"
+							aria-expanded={showSceneIdEditor}
+							on:click={() => {
+								editorVisited = true;
+								showSceneIdEditor = !showSceneIdEditor;
+								markAdvancedActivity();
+							}}
+						>
+							<span>Bediening beheren</span>
+							<span aria-hidden="true">{showSceneIdEditor ? '−' : '+'}</span>
+						</button>
+					</svelte:fragment>
+				</AdvancedPanel>
+			{/if}
+
+			{#if !isProtectedTab(selectedTab) && selectedTab !== 'shelly'}
+				{#if errorMsg}
+					<p
+						class="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700"
 					>
-					<button
-						type="button"
-						class="flex min-h-12 items-center gap-2 rounded-md border border-slate-300 px-4 py-2 font-semibold text-slate-700 disabled:opacity-40"
-						aria-label="Volgende pagina apparaten"
-						disabled={devicesPage === devicesPageCount - 1}
-						on:click={() => changeDevicesPage(1)}
-						><span class="hidden sm:inline">Volgende</span><ChevronRight size={22} /></button
+						{errorMsg}
+					</p>
+				{/if}
+				<div
+					bind:this={controlGrid}
+					class={`grid min-h-0 flex-1 gap-6 overflow-y-auto pr-1 pb-2 ${selectedTab === 'home' || selectedTab === 'devices' ? 'grid-cols-3 grid-rows-3' : 'auto-rows-[minmax(160px,1fr)] grid-cols-3'}`}
+				>
+					{#each visibleGroups as group (group.id)}
+						<div
+							class={group.wide
+								? 'gang-control-group col-span-3 flex min-h-0 flex-col gap-3 rounded-[var(--control-radius)] border border-slate-300 bg-white p-[var(--control-padding)]'
+								: 'contents'}
+						>
+							{#if group.wide}<h3
+									class="text-[length:var(--control-label-size)] font-semibold text-slate-800"
+								>
+									{group.controls[0].label}
+								</h3>{/if}
+							<div
+								class={group.wide ? 'gang-control-options grid min-h-0 flex-1 gap-4' : 'contents'}
+							>
+								{#each group.controls as control (control.id)}
+									<div
+										class="relative flex min-h-0 flex-col"
+										style={selectedTab === 'home' && control.pushNumber
+											? `grid-column: ${homeGridPosition(control.pushNumber).column}; grid-row: ${homeGridPosition(control.pushNumber).row}`
+											: ''}
+									>
+										<ControlCard
+											cardNumber={selectedTab === 'home' ? control.pushNumber : undefined}
+											embedded={group.wide}
+											compactLabel={group.wide
+												? control.label.replace(/^Gang Color\s*/, '')
+												: undefined}
+											{control}
+											statusOffline={offlineStatusByDeviceId.get(control.id) ?? false}
+											actionError={deviceActionErrors.get(control.id) ?? null}
+											{commandOrder}
+											{commandKey}
+											{commandLabel}
+											{resolveToggleCommand}
+											{loadingCommandKeys}
+											{loadingTriggerIds}
+											transientActive={control.controlType === 'device' &&
+												isTransientDeviceActive(control.id)}
+											initialStatus={control.controlType === 'device'
+												? resolveCardStatus(control, deviceStates, statusDeviceStates)
+												: null}
+											activeUntil={triggerActiveUntilById.get(control.id) ?? null}
+											on:command={({ detail }) =>
+												handlePress(detail.deviceId, detail.command, {
+													stateless: deviceById.get(detail.deviceId)?.stateless
+												})}
+											on:trigger={({ detail }) => handleTriggerPress(detail.triggerId)}
+										/>
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/each}
+				</div>
+				{#if selectedTab === 'devices' && devicesPageCount > 1}
+					<nav
+						class="mt-3 flex shrink-0 items-center justify-between gap-3 border-t border-slate-200 pt-3"
+						aria-label="Pagina’s apparaten"
 					>
-				</nav>
+						<button
+							type="button"
+							class="flex min-h-12 items-center gap-2 rounded-md border border-slate-300 px-4 py-2 font-semibold text-slate-700 disabled:opacity-40"
+							aria-label="Vorige pagina apparaten"
+							disabled={devicesPage === 0}
+							on:click={() => changeDevicesPage(-1)}
+							><ChevronLeft size={22} /><span class="hidden sm:inline">Vorige</span></button
+						>
+						<span class="text-sm font-semibold text-slate-700" aria-live="polite"
+							>Pagina {devicesPage + 1} van {devicesPageCount}</span
+						>
+						<button
+							type="button"
+							class="flex min-h-12 items-center gap-2 rounded-md border border-slate-300 px-4 py-2 font-semibold text-slate-700 disabled:opacity-40"
+							aria-label="Volgende pagina apparaten"
+							disabled={devicesPage === devicesPageCount - 1}
+							on:click={() => changeDevicesPage(1)}
+							><span class="hidden sm:inline">Volgende</span><ChevronRight size={22} /></button
+						>
+					</nav>
+				{/if}
 			{/if}
 		</section>
 	</div>
@@ -1869,6 +2115,7 @@
 
 {#if showAdvancedPrompt}
 	<AdvancedAccess
+		targetLabel={pendingProtectedTab === 'schoolbel' ? 'Schoolbel' : 'Geavanceerde bediening'}
 		{closeAdvancedPrompt}
 		{markAdvancedActivity}
 		{advancedPatternConfigured}
@@ -1881,91 +2128,7 @@
 	/>
 {/if}
 
-{#if advancedUnlocked && showAdvancedPanel}
-	<AdvancedPanel
-		pinned={advancedPanelPinned}
-		informationOpen={showAdvancedInformation}
-		close={closeAdvancedPanel}
-		activity={markAdvancedActivity}
-		togglePin={toggleAdvancedPanelPin}
-		toggleInformation={() => (showAdvancedInformation = !showAdvancedInformation)}
-	>
-		<div class="flex min-h-0 flex-1 flex-col gap-6 px-6 py-6 lg:flex-row">
-			<section class="flex min-h-0 flex-1 flex-col">
-				{#if advancedErrorMsg}
-					<p
-						class="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700"
-					>
-						{advancedErrorMsg}
-					</p>
-				{/if}
-				{#if advancedStatusMsg}
-					<p
-						class="mb-3 rounded-lg border border-green-300 bg-green-50 px-4 py-3 text-base font-semibold text-green-900"
-						role="status"
-						aria-live="polite"
-					>
-						{advancedStatusMsg}
-					</p>
-				{/if}
-				<div
-					class="min-h-0 flex-1 overflow-y-auto pr-2"
-					role="presentation"
-					on:scroll={markAdvancedActivity}
-					on:wheel|passive={markAdvancedActivity}
-					on:touchmove|passive={markAdvancedActivity}
-					on:pointerdown={markAdvancedActivity}
-					on:mousedown={markAdvancedActivity}
-				>
-					<BellManager />
-					{#if advancedControlCount === 0}
-						<p class="text-sm text-slate-600">Geen tijdelijke knoppen ingesteld.</p>
-					{:else}
-						<div class="grid auto-rows-fr grid-cols-1 gap-4 pb-4 md:grid-cols-2">
-							{#each advancedControls as control (control.id)}
-								<ControlCard
-									{control}
-									statusOffline={offlineStatusByDeviceId.get(control.id) ?? false}
-									actionError={deviceActionErrors.get(control.id) ?? null}
-									{commandOrder}
-									{commandKey}
-									{commandLabel}
-									{resolveToggleCommand}
-									{loadingCommandKeys}
-									{loadingTriggerIds}
-									transientActive={control.controlType === 'device' &&
-										isTransientDeviceActive(control.id)}
-									initialStatus={control.controlType === 'device'
-										? resolveCardStatus(control, deviceStates, statusDeviceStates)
-										: null}
-									activeUntil={triggerActiveUntilById.get(control.id) ?? null}
-									on:command={({ detail }) =>
-										handlePress(detail.deviceId, detail.command, {
-											stateless: deviceById.get(detail.deviceId)?.stateless
-										})}
-									on:trigger={({ detail }) => handleTriggerPress(detail.triggerId)}
-								/>
-							{/each}
-						</div>
-					{/if}
-				</div>
-			</section>
-		</div>
-		<div class="flex shrink-0 justify-end border-t border-slate-200 px-6 py-4">
-			<button
-				type="button"
-				class="inline-flex min-h-12 items-center justify-center gap-3 rounded-md border border-slate-300 bg-white px-4 py-3 text-left text-sm font-semibold text-slate-800 hover:bg-slate-100"
-				aria-expanded={showSceneIdEditor}
-				on:click={() => {
-					showSceneIdEditor = !showSceneIdEditor;
-					markAdvancedActivity();
-				}}
-			>
-				<span>Bediening beheren</span>
-				<span aria-hidden="true">{showSceneIdEditor ? '−' : '+'}</span>
-			</button>
-		</div>
-	</AdvancedPanel>
+{#if selectedTab === 'advanced' && advancedUnlocked && showAdvancedPanel}
 	{#if showAdvancedInformation}
 		<DebugInformation
 			activity={markAdvancedActivity}
@@ -1992,23 +2155,30 @@
 			/>
 		</DebugInformation>
 	{/if}
-
-	{#if showSceneIdEditor}
-		<SceneIdEditor
-			activity={markAdvancedActivity}
-			on:controls={({ detail }) => handleSceneControlsUpdate(detail)}
-			on:configuration={({
-				detail
-			}: CustomEvent<{ controls: DashboardControl[]; tabs: DashboardTab[] }>) => {
-				sceneControls = detail.controls;
-				dashboardTabs = detail.tabs;
-			}}
-			on:close={() => (showSceneIdEditor = false)}
-		/>
-	{/if}
+{/if}
+{#if editorVisited}
+	<SceneIdEditor
+		visible={selectedTab === 'advanced' &&
+			advancedUnlocked &&
+			showAdvancedPanel &&
+			showSceneIdEditor}
+		activity={markAdvancedActivity}
+		on:controls={({ detail }) => handleSceneControlsUpdate(detail)}
+		on:configuration={({
+			detail
+		}: CustomEvent<{ controls: DashboardControl[]; tabs: DashboardTab[] }>) => {
+			sceneControls = detail.controls;
+			dashboardTabs = detail.tabs;
+		}}
+		on:close={() => (showSceneIdEditor = false)}
+	/>
 {/if}
 
 <style>
+	.gang-control-options {
+		grid-template-columns: minmax(0, 1fr) repeat(3, minmax(0, 0.666667fr));
+	}
+
 	@media (max-width: 700px) {
 		.dashboard-content {
 			flex-direction: column;

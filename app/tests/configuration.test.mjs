@@ -158,13 +158,13 @@ test('normal cards change tabs while normal and advanced areas remain fixed', ()
 			[timer.id]: {
 				placement: 'main',
 				tabId: 'devices',
-				pushNumber: 2
+				pushNumber: 19
 			}
 		}
 	}).controls.find((control) => control.id === timer.id);
 	assert.equal(placedOnDevices?.placement, 'main');
 	assert.equal(placedOnDevices?.tabId, 'devices');
-	assert.equal(placedOnDevices?.pushNumber, 2);
+	assert.equal(placedOnDevices?.pushNumber, 19);
 
 	assert.throws(
 		() =>
@@ -181,7 +181,7 @@ test('normal cards change tabs while normal and advanced areas remain fixed', ()
 			applyConfiguration(controls, tabs, {
 				version: 2,
 				overrides: {},
-				metadata: { [advanced.id]: { placement: 'main', tabId: 'devices', pushNumber: 2 } }
+				metadata: { [advanced.id]: { placement: 'main', tabId: 'devices', pushNumber: 19 } }
 			}),
 		/elkaars scherm/
 	);
@@ -208,4 +208,13 @@ test('normal cards change tabs while normal and advanced areas remain fixed', ()
 			}),
 		/positie/
 	);
+});
+
+test('protected navigation IDs cannot be assigned to configurable tabs', () => {
+	for (const id of ['schoolbel', 'advanced', 'shelly'])
+		assert.ok(
+			validateConfiguration(controls, [...tabs, { id, label: id, order: 99 }]).some((error) =>
+				error.includes('gereserveerd')
+			)
+		);
 });

@@ -268,7 +268,6 @@ Main variables:
 | `PUBLIC_DEBUG_WATTAGE`           | Show detailed wattage diagnostics                |
 | `PUBLIC_DISPLAY_DIM_TIMEOUT_MS`  | Idle time before the black wake overlay          |
 | `PUBLIC_ADVANCED_PROMPT_IDLE_MS` | Unlock prompt timeout; default 30 seconds        |
-| `PUBLIC_ADVANCED_PANEL_IDLE_MS`  | Advanced panel timeout; default 5 minutes        |
 | `PUBLIC_SHELLY_SCENE_ENDPOINT`   | Optional Shelly scene endpoint override          |
 | `CONNECTIVITY_CHECK_URL`         | Optional connectivity probe override             |
 
@@ -393,3 +392,16 @@ could resend a prior press; local UI now stops those retries and asks the user
 to verify physical state after a timeout. App check/build and mocked UI pass.
 Actual incidents remain unverified without production audit times and affected
 lights. No Git operations or deployment performed.
+
+Protected navigation checkpoint (10 November 2026): Schoolbel and Geavanceerde
+bediening now have separate PIN-protected homepage tabs with key icons. Leaving
+locks access immediately. Two-minute idle returns Home, except the bell roster
+popup suspends navigation/sleep. Drafts survive closing/locking in memory and
+expire after ten idle minutes outside protected tabs, or on reload. No Git
+operations or deployment. See app/AGENTS.md for implementation details.
+
+Shelly browser checkpoint: fixed public Shelly tab shows Nieuwbouw (account
+room21, eight named outputs) and Light Hfd (room2, five). Live read-only discovery
+verified all thirteen channel mappings. Direct explicit on/off is server-
+allowlisted and single-attempt; tests use mocks only. Check/build, all eleven
+logic files and focused Shelly UI tests pass. No Git operations or deployment.

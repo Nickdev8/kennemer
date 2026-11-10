@@ -20,6 +20,10 @@ trigger types can be used in either page array. Keep `ALLES UIT` in
 
 ## Device contract
 
+`shelly.ts` selects the rooms shown in the Shelly tab. Each entry requires a
+unique dashboard `id`, exact Shelly `name`, and Shelly room `accountId`.
+This list also limits which room devices the server permits controlling.
+
 A `ShellyDevice` needs a stable unique `id`, a Dutch `label`, a descriptive
 `type`, a `buttonMode`, and a `commands` object.
 

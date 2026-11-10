@@ -135,13 +135,13 @@ test('editor reassigns normal tabs and rejects switching to advanced access', as
 		const regular = await store.saveSceneOverrides({
 			revision: initial.revision,
 			metadata: [
-				{ controlId: timerId, values: { placement: 'main', tabId: 'devices', pushNumber: 2 } }
+				{ controlId: timerId, values: { placement: 'main', tabId: 'devices', pushNumber: 19 } }
 			]
 		});
 		let timer = (await store.readEffectiveControls()).find((control) => control.id === timerId);
 		assert.equal(timer.placement, 'main');
 		assert.equal(timer.tabId, 'devices');
-		assert.equal(timer.pushNumber, 2);
+		assert.equal(timer.pushNumber, 19);
 
 		await assert.rejects(
 			store.saveSceneOverrides({
@@ -153,7 +153,7 @@ test('editor reassigns normal tabs and rejects switching to advanced access', as
 		timer = (await store.readEffectiveControls()).find((control) => control.id === timerId);
 		assert.equal(timer.placement, 'main');
 		assert.equal(timer.tabId, 'devices');
-		assert.equal(timer.pushNumber, 2);
+		assert.equal(timer.pushNumber, 19);
 	} finally {
 		await server?.close();
 		if (previousPath === undefined) delete process.env.SCENE_OVERRIDE_PATH;

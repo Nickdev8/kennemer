@@ -16,7 +16,10 @@
 		"dev:live": "node scripts/dev.mjs live",
 		"validate:config": "node scripts/validate-config.mjs",
 		"test": "node --experimental-strip-types --test tests/*.test.mjs",
-		"test:ui": "node scripts/test-ui.mjs"
+		"test:ui": "node scripts/test-ui.mjs",
+		"test:layout": "node scripts/test-protected-layout.mjs",
+		"test:bell-ui": "node scripts/test-bell-page.mjs",
+		"test:shelly-ui": "node scripts/test-shelly-ui.mjs"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.64.0",

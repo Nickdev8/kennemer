@@ -10,6 +10,8 @@ export function validateConfiguration(
 	const ids = new Set<string>();
 	const tabIds = new Set<string>();
 	for (const tab of tabs) {
+		if (tab.id === 'schoolbel' || tab.id === 'advanced' || tab.id === 'shelly')
+			errors.push(`Deze tab is gereserveerd voor vaste dashboardbediening: ${tab.id}`);
 		if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(tab.id) || tabIds.has(tab.id))
 			errors.push(`Ongeldige of dubbele tab: ${tab.id}`);
 		if (!tab.label.trim() || tab.label.length > 80 || !Number.isInteger(tab.order) || tab.order < 0)

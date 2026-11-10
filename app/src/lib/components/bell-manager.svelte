@@ -1,7 +1,12 @@
 <script lang="ts">
-	import { onMount, tick } from 'svelte';
+	import { createEventDispatcher, onMount, tick } from 'svelte';
 	import TimePicker from './time-picker.svelte';
+	import { bellScheduleView, parseBellTime, type BellStatus } from '$lib/dashboard/bell-schedule';
 
+	export let active = true;
+	const dispatch = createEventDispatcher<{ editing: boolean }>();
+	$: dispatch('editing', editing && active);
+	$: if (!active) editing = false;
 	type Config = {
 		paused: boolean;
 		active_profile: string;
@@ -13,7 +18,6 @@
 	};
 	type ProfileId = 'regular' | 'short' | 'ten-minute';
 	type TimeEntry = { time: string; count: 1 | 2 };
-	type BellEvent = { at: string; profile: string; time: string; count?: number };
 
 	let config: Config | null = null;
 	let draftConfig: Config | null = null;
@@ -23,7 +27,27 @@
 	let revision = 0;
 	let busy = false;
 	let message = '';
-	let status: Record<string, unknown> | null = null;
+	let status: BellStatus | null = null;
+	let now = Date.now();
+	let rosterList: HTMLOListElement | undefined;
+	let centerOnEntry = true;
+	$: if (!active) centerOnEntry = true;
+	$: if (active && centerOnEntry && rosterList && schedule.entries.length) {
+		centerOnEntry = false;
+		void tick().then(() => {
+			if (!active || !rosterList) return;
+			const upcoming =
+				rosterList.querySelector<HTMLElement>('[aria-current="true"]') ??
+				rosterList.querySelector<HTMLElement>('[data-upcoming="true"]');
+			if (!upcoming) return;
+			const listBox = rosterList.getBoundingClientRect();
+			const entryBox = upcoming.getBoundingClientRect();
+			rosterList.scrollTop +=
+				entryBox.top - listBox.top - (rosterList.clientHeight - entryBox.height) / 2;
+		});
+	}
+	$: if (active) now = Date.now();
+	$: schedule = bellScheduleView(config, status, selectedMode, now, connectionError);
 	let editing = false;
 	let newBellTime = '';
 	let newBellCount: 1 | 2 = 1;
@@ -56,7 +80,6 @@
 		(status?.paused ?? config?.paused)
 			? null
 			: String(status?.active_profile ?? config?.active_profile ?? '');
-	$: nextBell = status?.next_event as BellEvent | null;
 	$: editingEntries = (draftConfig?.profiles?.[editingProfile] ?? []).map(parseTimeEntry);
 	$: entryHours = Array.from(new Set(editingEntries.map((entry) => entry.time.slice(0, 2))));
 	$: profileCounts = Object.fromEntries(
@@ -82,18 +105,6 @@
 	);
 	$: validNewTime = /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(newBellTime);
 
-	function nextBellLabel(event: BellEvent) {
-		return (
-			new Intl.DateTimeFormat('nl-NL', {
-				weekday: 'short',
-				hour: '2-digit',
-				minute: '2-digit',
-				timeZone: 'Europe/Amsterdam',
-				hourCycle: 'h23'
-			}).format(new Date(event.at)) + (event.count === 2 ? ' · 2×' : '')
-		);
-	}
-
 	function weekdaySummary(days: number[]) {
 		if (days.length === 7) return 'iedere dag';
 		if ([0, 1, 2, 3, 4].every((day) => days.includes(day)) && days.length === 5)
@@ -104,11 +115,7 @@
 			.join(', ');
 	}
 
-	function parseTimeEntry(value: string | { time: string; count?: number }): TimeEntry {
-		if (typeof value !== 'string') return { time: value.time, count: value.count === 2 ? 2 : 1 };
-		const match = /^(\d{2}:\d{2})(?:x([12]))?$/.exec(value);
-		return { time: match?.[1] ?? '08:00', count: match?.[2] === '2' ? 2 : 1 };
-	}
+	const parseTimeEntry = parseBellTime;
 
 	function serializeTimeEntry(entry: TimeEntry) {
 		return entry.count === 2 ? `${entry.time}x2` : entry.time;
@@ -313,35 +320,43 @@
 
 	onMount(() => {
 		void refresh(true);
+		const clock = setInterval(() => {
+			if (active && !document.hidden) now = Date.now();
+		}, 1000);
 		const timer = setInterval(() => {
-			if (!document.hidden && Date.now() >= retryAfter) void refresh();
+			if (active && !document.hidden && Date.now() >= retryAfter) void refresh();
 		}, 3000);
 		return () => {
 			clearInterval(timer);
+			clearInterval(clock);
 		};
 	});
 </script>
 
-<section class="mb-4 border-b border-slate-200 pb-4" aria-labelledby="bell-manager-title">
-	<div class="mb-2 flex min-h-11 items-start justify-between gap-2">
-		<h3 id="bell-manager-title" class="text-base font-semibold text-slate-900">Schoolbel</h3>
-		<div class="ml-auto w-52 shrink-0 text-right text-sm leading-5 sm:w-64">
-			<div class="truncate text-slate-600">
-				Volgende bel: {config?.paused ? 'Uit' : nextBell ? nextBellLabel(nextBell) : 'onbekend'}
-			</div>
-			<div class="h-5 truncate">
-				{#if preview}
-					<span class="text-slate-600">Lokaal voorbeeld</span>
-				{/if}
-			</div>
+<section class="bell-page" aria-labelledby="bell-manager-title">
+	<div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+		<div>
+			<h3 id="bell-manager-title" class="text-lg font-semibold text-slate-900">Belrooster</h3>
+			<p class="mt-1 text-base text-slate-700" aria-label="Actief belrooster">
+				{connectionError ? 'Laatst bekend rooster' : 'Actief rooster'}:
+				<strong
+					>{config
+						? (profileNames[schedule.runningProfile as ProfileId] ?? schedule.runningProfile ?? 'Uit')
+						: 'onbekend'}</strong
+				>
+			</p>
 		</div>
+		{#if preview}<span class="text-sm text-slate-600">Lokaal voorbeeld</span>{/if}
+		{#if config}<button disabled={busy || preview} on:click={() => (editing = true)}
+				>Rooster bewerken</button
+			>{/if}
 	</div>
 
 	{#if config}
 		<div class="grid grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Belrooster">
-			{#each Object.entries(names) as [id, label]}
+			{#each Object.entries(names) as [id, label] (id)}
 				<label
-					class={`flex min-h-14 items-center gap-2 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-900 ${!busy && !preview ? '' : 'opacity-50'}`}
+					class={`flex min-h-14 items-center gap-2 rounded-md border px-3 text-sm font-medium text-slate-900 ${selectedMode === id ? 'border-sky-600 bg-sky-50' : 'border-slate-300'} ${!busy && !preview ? '' : 'opacity-50'}`}
 				>
 					<input
 						type="radio"
@@ -358,25 +373,120 @@
 				</label>
 			{/each}
 		</div>
-
-		<div class="mt-2 flex flex-wrap items-center gap-2">
+		<div class="mt-3 flex min-h-12 flex-wrap items-center gap-3">
 			<button
 				class:save-dirty={modeDirty}
 				disabled={busy || preview || !modeDirty}
 				on:click={saveMode}>Opslaan</button
 			>
-			<button
-				disabled={busy || preview}
-				on:click={() => mutate('demo', { request_id: requestId(), count: 1 })}>Bel nu 1×</button
-			>
-			<button
-				disabled={busy || preview}
-				on:click={() => mutate('demo', { request_id: requestId(), count: 2 })}>Bel nu 2×</button
-			>
-			<button disabled={busy || preview} on:click={() => (editing = true)}
-				>Rooster bewerken</button
-			>
+			{#if modeDirty}<p class="text-sm font-medium text-slate-700">
+					Keuze {names[selectedMode as keyof typeof names]} nog niet opgeslagen.
+				</p>{/if}
 		</div>
+
+		<div class="bell-overview mt-6 border-t border-slate-200 pt-5">
+			<section class="min-w-0" aria-labelledby="selected-roster-title">
+				<h4 id="selected-roster-title" class="text-base font-semibold text-slate-900">
+					Beltijden · {names[selectedMode as keyof typeof names] ?? selectedMode}
+				</h4>
+				{#if modeDirty}<p class="mt-1 text-sm text-slate-600">
+						Dit rooster gaat pas in als je op Opslaan drukt.
+					</p>{/if}
+				{#if schedule.dayState === 'off'}<p class="mt-4 text-slate-600">
+						De automatische bel staat uit.
+					</p>
+				{:else if schedule.dayState === 'empty'}<p class="mt-4 text-slate-600">
+						Dit rooster heeft geen belmomenten.
+					</p>
+				{:else}
+					<p class="mt-1 text-sm text-slate-600">
+						{#if schedule.dayState === 'inactive-day'}De automatische bel gaat vandaag niet. Ingesteld voor {weekdaySummary(
+								config.weekdays
+							)}.
+						{:else if schedule.dayState === 'finished'}Alle tijden van dit rooster zijn vandaag
+							voorbij.
+						{:else}Op {weekdaySummary(config.weekdays)}.{/if}
+					</p>
+					<ol
+						bind:this={rosterList}
+						class="bell-times mt-3"
+						aria-label={`Belmomenten ${names[selectedMode as keyof typeof names] ?? selectedMode}`}
+					>
+						{#each schedule.entries as entry, index (index)}
+							{#if !entry.passed && (index === 0 || schedule.entries[index - 1].passed)}
+								<li class="border-t-2 border-sky-500 px-4 py-2 text-sm font-semibold text-sky-900"></li>
+							{/if}
+							<li
+								class={`flex min-h-16 items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 ${entry.next ? 'border-l-4 border-l-sky-600 bg-sky-100 font-bold text-sky-950' : entry.passed ? 'bg-slate-50 text-slate-500' : 'bg-white font-semibold text-sky-800'}`}
+								aria-current={entry.next ? 'true' : undefined}
+								data-upcoming={!entry.passed ? 'true' : undefined}
+							>
+								<time class="text-2xl tabular-nums" datetime={entry.time}>{entry.time}</time>
+								<span class="flex items-center gap-4 text-sm">
+									{#if entry.count === 2}<span>2x</span>{/if}
+								</span>
+							</li>
+						{/each}
+					</ol>
+				{/if}
+			</section>
+			<aside class="bell-next min-w-0" aria-labelledby="next-bell-title">
+				<h4 id="next-bell-title" class="text-base font-semibold text-slate-900">Volgende bel</h4>
+				{#if connectionError}<p class="mt-4 text-lg font-semibold text-slate-700">
+						Niet beschikbaar
+					</p>
+					<p class="mt-1 text-sm text-slate-600">
+						Belservice niet bereikbaar. De getoonde instellingen zijn laatst bekend.
+					</p>
+				{:else if status?.clock?.synchronized === false}<p
+						class="mt-4 text-lg font-semibold text-slate-700"
+					>
+						Klok niet gesynchroniseerd
+					</p>
+				{:else if !schedule.runningProfile}<p class="mt-4 text-3xl font-semibold text-slate-900">
+						Uit
+					</p>
+					<p class="mt-2 text-sm text-slate-600">De automatische schoolbel staat uit.</p>
+				{:else if schedule.next}
+					<p
+						class="mt-3 text-5xl font-semibold tracking-tight text-slate-900 tabular-nums"
+						aria-label="Volgende beltijd"
+					>
+						{schedule.nextTime}{#if schedule.next.count === 2}<span class="ml-2 text-xl">2×</span
+							>{/if}
+					</p>
+					<p class="mt-2 text-sm text-slate-600">
+						{schedule.nextDate} · {profileNames[schedule.next.profile as ProfileId] ??
+							schedule.next.profile}
+					</p>
+					<p class="mt-5 text-sm text-slate-600">Over</p>
+					<p
+						class="mt-1 text-3xl font-semibold text-slate-900 tabular-nums"
+						aria-label="Tijd tot volgende bel"
+						aria-live="off"
+					>
+						{schedule.countdown}
+					</p>
+				{:else}<p class="mt-4 text-lg font-semibold text-slate-700">Geen volgende bel bekend</p>
+					<p class="mt-1 text-sm text-slate-600">Wachten op de belservice.</p>{/if}
+			</aside>
+		</div>
+
+		<section class="mt-8 border-t border-slate-300 pt-5" aria-labelledby="manual-bell-title">
+			<h4 id="manual-bell-title" class="text-base font-semibold text-slate-900">
+				Handmatig bellen
+			</h4>
+			<div class="mt-3 flex flex-wrap gap-3">
+				<button
+					disabled={busy || preview}
+					on:click={() => mutate('demo', { request_id: requestId(), count: 1 })}>Bel nu 1×</button
+				>
+				<button
+					disabled={busy || preview}
+					on:click={() => mutate('demo', { request_id: requestId(), count: 2 })}>Bel nu 2×</button
+				>
+			</div>
+		</section>
 
 		{#if editing}
 			<div
@@ -416,7 +526,7 @@
 									aria-label="Rooster kiezen"
 									class="grid grid-cols-3 gap-2 border-b border-slate-200 pb-2"
 								>
-									{#each Object.entries(profileNames) as [profile, label]}
+									{#each Object.entries(profileNames) as [profile, label] (profile)}
 										<button
 											type="button"
 											role="tab"
@@ -452,7 +562,7 @@
 											>Dagen waarop de bel gaat</legend
 										>
 										<div class="flex flex-wrap gap-2">
-											{#each weekdays as day}
+											{#each weekdays as day (day.value)}
 												<label
 													class={`flex min-h-11 min-w-14 items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium ${draftConfig.weekdays.includes(day.value) ? 'border-slate-700 bg-slate-100 text-slate-900' : 'border-slate-300 text-slate-600'}`}
 												>
@@ -480,7 +590,8 @@
 													aria-label="Kortere pauze"
 													disabled={draftConfig.gap_seconds <= 0 || busy}
 													on:click={() =>
-														updateGap(String(Math.max(0, draftConfig!.gap_seconds - 0.1)))}>−</button
+														updateGap(String(Math.max(0, draftConfig!.gap_seconds - 0.1)))}
+													>−</button
 												>
 												<input
 													id="bell-gap"
@@ -499,7 +610,8 @@
 													aria-label="Langere pauze"
 													disabled={draftConfig.gap_seconds >= 30 || busy}
 													on:click={() =>
-														updateGap(String(Math.min(30, draftConfig!.gap_seconds + 0.1)))}>+</button
+														updateGap(String(Math.min(30, draftConfig!.gap_seconds + 0.1)))}
+													>+</button
 												>
 												seconden
 											</span>
@@ -544,7 +656,8 @@
 								</div>
 
 								<p class="text-sm text-slate-600">
-									Dubbele bel: {draftConfig.bell_duration_seconds} s bel → {draftConfig.gap_seconds} s stilte → {draftConfig.bell_duration_seconds} s bel.
+									Dubbele bel: {draftConfig.bell_duration_seconds} s bel → {draftConfig.gap_seconds}
+									s stilte → {draftConfig.bell_duration_seconds} s bel.
 								</p>
 
 								<div class="flex items-end justify-between gap-3 border-t border-slate-200 pt-3">
@@ -558,7 +671,7 @@
 								</div>
 								{#if editingEntries.length}
 									<div class="grid grid-cols-1 gap-2">
-										{#each entryHours as hour}
+										{#each entryHours as hour (hour)}
 											<details
 												id={`bell-hour-${hour}`}
 												class="min-w-0 rounded-md border border-slate-200"
@@ -676,11 +789,39 @@
 				</div>
 			</div>
 		{/if}
+	{:else}
+		<p class="py-6 text-slate-600">
+			{connectionError ? 'Rooster niet beschikbaar.' : 'Rooster laden…'}
+		</p>
 	{/if}
 	{#if message && !editing}<p class="mt-2 text-sm" role="status">{message}</p>{/if}
 </section>
 
 <style>
+	.bell-page {
+		min-width: 0;
+		padding-bottom: 1rem;
+	}
+	.bell-overview {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(14rem, 0.8fr);
+		gap: 2rem;
+		align-items: start;
+	}
+	.bell-times {
+		max-height: min(40vh, 22rem);
+		overflow-y: auto;
+	}
+	@media (max-width: 900px) {
+		.bell-overview {
+			grid-template-columns: minmax(0, 1fr);
+			gap: 1.5rem;
+		}
+		.bell-next {
+			grid-row: 1;
+		}
+	}
+
 	button,
 	.file-button {
 		display: inline-flex;

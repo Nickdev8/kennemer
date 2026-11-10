@@ -5,6 +5,8 @@
 	import TriggerCard from '$lib/components/trigger-card.svelte';
 	import type { DashboardControl, DeviceCommandKey, ShellyDevice } from '$lib/config/schema';
 
+	export let embedded = false;
+	export let compactLabel: string | undefined = undefined;
 	export let control: DashboardControl;
 	export let cardNumber: number | undefined = undefined;
 	export let commandOrder: DeviceCommandKey[];
@@ -29,6 +31,7 @@
 
 {#if control.controlType === 'device'}
 	<DeviceCard
+		{embedded}
 		{cardNumber}
 		device={control}
 		{commandOrder}
@@ -52,6 +55,8 @@
 	/>
 {:else}
 	<TriggerCard
+		{compactLabel}
+		{embedded}
 		{cardNumber}
 		trigger={control}
 		{loadingTriggerIds}

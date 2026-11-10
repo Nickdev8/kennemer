@@ -8,6 +8,8 @@
 	const baseButtonClass =
 		'relative flex flex-1 w-full items-center justify-center rounded-lg border border-slate-800 bg-slate-800 px-5 py-6 text-xl font-semibold text-white transition-colors duration-150 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60';
 
+	export let embedded = false;
+	export let compactLabel: string | undefined = undefined;
 	export let trigger: ShellyTrigger;
 	export let cardNumber: number | undefined = undefined;
 	export let loadingTriggerIds: ReadonlySet<string> = new Set();
@@ -36,29 +38,31 @@
 	}
 </script>
 
-<section class={baseCardClass}>
-	<div class="flex items-center justify-between gap-4">
-		<h3
-			class="min-w-0 truncate text-[length:var(--control-label-size)] font-semibold text-slate-800"
-		>
-			{trigger.label}
-		</h3>
-		{#if cardNumber !== undefined}<h3
-				class="text-[length:var(--control-label-size)] font-semibold text-slate-800"
-				aria-label={`Knop ${cardNumber}`}
+<section class={embedded ? 'flex h-full min-h-0 flex-col' : baseCardClass}>
+	{#if !embedded}<div class="flex items-center justify-between gap-4">
+			<h3
+				class="min-w-0 truncate text-[length:var(--control-label-size)] font-semibold text-slate-800"
 			>
-				{cardNumber}
-			</h3>{/if}
-	</div>
+				{trigger.label}
+			</h3>
+			{#if cardNumber !== undefined}<h3
+					class="text-[length:var(--control-label-size)] font-semibold text-slate-800"
+					aria-label={`Knop ${cardNumber}`}
+				>
+					{cardNumber}
+				</h3>{/if}
+		</div>
+	{/if}
 	<button
 		type="button"
 		class={baseButtonClass}
 		style={triggerStyle}
+		aria-label={compactLabel ? trigger.label : undefined}
 		disabled={isLoading || !isConfigured}
 		on:click={handleTrigger}
 	>
 		<span class="pointer-events-none text-center">
-			{isConfigured ? trigger.label : 'Niet ingesteld'}
+			{isConfigured ? (compactLabel ?? trigger.label) : 'Niet ingesteld'}
 		</span>
 		{#if showLoadingFeedback}
 			<span

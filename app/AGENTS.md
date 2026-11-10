@@ -26,7 +26,7 @@ Import aliases are declared in `svelte.config.js`:
 `+page.svelte` currently coordinates:
 
 - the 3-by-3 device grid;
-- advanced pattern entry and the pin-able advanced panel;
+- shared PIN entry for the Schoolbel and Geavanceerde bediening tabs;
 - confirmation and dispatch of **ALLES UIT**;
 - initial state, SSE updates, and repeated device-status polling;
 - wattage summaries and optional diagnostics;
@@ -56,9 +56,10 @@ rate limits before shortening it.
   dashboard request itself fails.
 - Offline status does not disable a configured scene action.
 - Missing command payloads do disable the corresponding action.
-- Advanced controls auto-close after inactivity unless pinned.
-- Pinning is temporary; reopening the panel starts unpinned.
-- An update keeps the advanced panel from disappearing and then covers the
+- Protected tabs lock on every departure. Both use PUBLIC_ADVANCED_PATTERN (existing legacy PIN compatibility remains).
+- All tabs return Home after two minutes without input. The full-screen bell roster popup suspends Home return and sleep until Sluiten.
+- Bell/control-editor drafts remain in browser memory across closing and locking. Ten idle minutes outside protected tabs discard them; reload also discards them. No draft expiry inside protected tabs.
+- An update keeps protected access from timing out and then covers the
   whole page with a clear progress view.
 - When idle, the black overlay shows a small muted sleep marker. The wake touch
   is consumed and cannot press a button beneath it.
@@ -143,15 +144,15 @@ Advanced access no longer implicitly requests an update check/Git fetch.
 
 Bell manager: `src/lib/components/bell-manager.svelte` shows persistent host
 roster/status and offers edits, pause/resume, import/export,
-restore, and single/double demos. Keep the bell controls compact: four
-modes in one row with PIN and actions together. `/api/bells/[operation]` proxies to the
+restore, and single/double demos. Keep four mode choices together with their explicit save. The selected-only
+roster and host-backed next bell/countdown are separate from manual ringing. `/api/bells/[operation]` proxies to the
 standalone ODROID scheduler; `npm run dev` and `npm run dev:live` show a disabled bell preview. See `odroid/BELL.md`. Never invoke live demos in tests.
 
 Advanced unlock uses the built-in numeric keypad; the npm keyboard dependency is
 removed. Bell roster editing is a separate popup that closes only through
 Sluiten. Dirty drafts highlight Opslaan. Duration saves configure matching
 relay auto-off timers while both outputs are off; this never pulses a relay.
-Bell settings and Bediening beheren saves require no extra PIN. Advanced-panel
+Bell settings and Bediening beheren saves require no extra PIN. Protected-tab
 unlock remains. Relay IDs have a separate save. IP_CACHE_PATH is shared at /runtime/ips.json in Docker.
 
 Mock development enables bell editing, saves drafts in bell-roster.json beside
@@ -161,3 +162,69 @@ Live development keeps the host bell preview read-only.
 Bell status UI: the next bell shows 2× for double rings. The operational
 Belstatus dropdown and fault banner are removed; host diagnostics and relay
 verification remain available to the server.
+
+Protected-tab checkpoint (10 November 2026): Schoolbel and Geavanceerde bediening
+are fixed navigation entries with key icons, separate from editable equipment
+tabs. Advanced content is inline; nested editors/info retain their popups.
+Bell and configuration editors stay mounted with hidden inaccessible markup
+while locked to preserve drafts; outside-protected idle expiry unmounts them.
+
+Verified: configuration validation, Svelte check (zero errors/warnings), production
+build, all eight logic test files, and mocked browser suite pass. Browser coverage
+includes PIN re-entry/cancel, protected-tab switching, inactivity reset, bell popup
+suspension, and draft retention/expiry/reload. No deployment performed.
+
+Protected-tab layout: template conditions must pass selectedTab explicitly to
+isProtectedTab; legacy Svelte cannot track its default argument. Otherwise the
+empty public grid stays mounted and steals half the protected pane. Advanced
+counts use advancedControls. `npm run test:layout` verifies full-height geometry,
+last-card scrolling, and Home restoration at two kiosk viewport sizes.
+Verified layout fix: check (zero errors/warnings), production build, and the
+focused mocked layout suite pass. No live actions, Git operations, or deployment.
+
+Advanced footer: one shared row, system-information icon left and Bediening
+beheren right. AdvancedPanel owns the row; the page supplies the editor button
+through its actions slot. The focused layout test checks shared-row alignment.
+
+Gang Color layout: Apparaten groups the four registered Gang controls into one
+full-width first row: on/off occupies one third, color presets share two thirds.
+IDs and transports remain separate; editor moves out of Apparaten dissolve the
+group. Pagination counts the grouped row as three slots. `node
+scripts/test-gang-layout.mjs` verifies proportions, buttons and pagination with
+mock data at two kiosk sizes.
+
+Bell page checkpoint: chronological list shows only the selected mode from the
+saved roster. Unsaved mode choice stays a preview; next bell/countdown comes
+only from current valid host status, with configured timezone and stale/offline
+handling. Past times are grey; upcoming times use sky blue. Entry-only list
+centering preserves manual scrolling and never scrolls the page or resets idle.
+Countdown ticks pause when inactive/hidden. `test:bell-ui` covers mode/save/manual
+semantics, clock/idle behavior, colors/entry scrolling, and kiosk geometry.
+
+Protected departure cleanup belongs to revokeProtectedAccess(), called by
+selectTab(), independently of any Sluiten button. Keep explicit selectedTab
+guards on advanced content/info/editor rendering. `test:layout` checks every
+destination, repeated PIN entry, cancelled protected switches, and draft retention.
+
+Shelly account browser: a fixed public tab, separate from editable equipment
+tabs. Two room cards resolve server-side to verified Nieuwbouw (21) and Light
+Hfd (2). Each named room-assigned channel keeps its own name and physical status;
+sensors/unsupported data remain read-only/unknown. Explicit Aan/Uit uses the
+allowlisted v2 cloud switch/light API once, never scene triggers or auto retries.
+HTTP acceptance never changes displayed state; follow-up reads verify output.
+Inventory cache is five minutes, bulk status thirty seconds (bounded refresh),
+with request coalescing, serialization and failure backoff. Requests stop when
+the tab is inactive/hidden/asleep. `test:shelly-ui` and shelly-inventory tests
+cover navigation, channel isolation, no timeout resend, lifecycle and error cases.
+
+Shelly device cards use compact two-column horizontal rows at kiosk widths. A
+known physical output gets one round power button: green/current Aan sends off,
+current Uit sends on. Unknown/offline outputs keep explicit compact Aan/Uit;
+sensors stay read-only. Keep state confirmed by reads, never HTTP acceptance.
+
+Navigation checkpoint: Geavanceerd is the single PIN-protected room browser.
+It groups configured Shelly rooms under Shelly ruimtes and custom rooms under
+Eigen bediening: Vakantiemodi (advanced modes) and Eigen apparaten (Apparaten
+controls). Each custom room has a management/info footer. Leaving revokes access;
+internal room navigation does not request another PIN. Original vacation scenes
+and their rendering are unchanged. Focused smoke: scripts/test-merged-rooms.mjs.

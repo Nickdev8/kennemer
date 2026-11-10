@@ -11,6 +11,7 @@ These instructions cover Svelte pages and server endpoints below
 | `/actions`                   | POST     | Execute a configured device command       |
 | `/triggers`                  | POST     | Execute a configured scene trigger        |
 | `/api/bells/[operation]`      | GET/POST | Proxy host bell status, config, demo and edits |
+| `/api/shelly`                | GET/POST | Allowlisted room inventory/status and explicit output on/off |
 | `/api/connectivity`          | GET      | Probe Shelly Cloud reachability           |
 | `/api/config/scenes`         | GET/POST | Read or save validated scene-ID overrides |
 | `/api/config/scenes/reset`   | POST     | Reset validated configuration overrides   |
@@ -95,3 +96,10 @@ metadata and host availability. Mock mode uses explicit synthetic diagnostics;
 live development reads local HEAD only and never contacts host maintenance.
 Production proxies authenticated host `/diagnostics`, not update `/status`.
 No browser tokens or raw Git/HTTP errors. Unknown and stale data remain explicit.
+
+Shelly tab: GET /api/shelly accepts only room slugs nieuwbouw/light-hfd, or no
+room for the two-room summary. POST accepts room, deviceId, component and
+command on/off only; server resolves all transport and channel identity from
+account inventory. Reject arbitrary fields/targets. No automatic mutation
+retry. Read-only live discovery verified rooms 21/2 and thirteen assigned
+outputs; all control-path tests use simulation/fixtures.

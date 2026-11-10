@@ -66,3 +66,11 @@ boundary with new direct fetches. IP cache routes honor `IP_CACHE_PATH`.
 Configured direct relay controls resolve their base Shelly ID through the cache;
 the optional channel suffix selects Switch RPC output. Inventory entries retain
 their explicit component (for example RGBCCT). Preserve successful off readings.
+
+Shelly inventory browser uses get_all_lists plus officially documented
+/device/all_status. Only rooms 21/Nieuwbouw and 2/Light Hfd are exposed. Keep
+cloud metadata, credentials, LAN addresses and settings out of public DTOs.
+The dedicated v2 switch/light transport is serialized and single-attempt;
+controls validate current room/channel/component membership before sending.
+Audit only resolved identity, command and outcome. See shelly-inventory-core
+for pure parsing and validation, and shelly-inventory for cache/transport.

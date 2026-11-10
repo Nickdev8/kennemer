@@ -247,3 +247,10 @@ Shelly action feedback: no success banner. An affected component stays busy thro
 its command and one bounded physical-status refresh, shown as a power-button ring
 or accessible busy feedback for unknown-state explicit buttons. Errors remain
 visible; no optimistic state or automatic command retry.
+
+Production origin handling: server.js sets adapter-node's protocol header before
+importing the handler, then overwrites that private header from the HTTP/TLS
+socket. This keeps strict same-origin checks correct on both listeners. Explicit
+ORIGIN/PROTOCOL_HEADER configuration retains adapter-node's configured proxy
+behavior; never infer protocol from arbitrary client forwarding headers. Wrapper
+regression uses a stub adapter/local socket and never contacts equipment.

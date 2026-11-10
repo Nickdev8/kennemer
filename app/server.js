@@ -3,8 +3,14 @@ import http from 'node:http';
 import https from 'node:https';
 import process from 'node:process';
 
-import { handler } from './build/handler.js';
 import { env } from './build/env.js';
+
+// adapter-node defaults to HTTPS, while this wrapper serves both transports.
+// Use only our socket-derived header unless proxy trust is explicitly configured.
+const socketProtocolHeader = 'x-kennemer-socket-protocol';
+const deriveSocketProtocol = !env('ORIGIN', '') && !env('PROTOCOL_HEADER', '');
+if (deriveSocketProtocol) process.env.PROTOCOL_HEADER = socketProtocolHeader;
+const { handler } = await import('./build/handler.js');
 
 function requestHandler(request, response) {
 	if (request.url === '/healthz') {
@@ -16,6 +22,9 @@ function requestHandler(request, response) {
 		return;
 	}
 
+	if (deriveSocketProtocol) {
+		request.headers[socketProtocolHeader] = request.socket.encrypted ? 'https' : 'http';
+	}
 	handler(request, response);
 }
 

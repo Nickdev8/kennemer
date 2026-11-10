@@ -1,3 +1,4 @@
+import { createShellyCloudCache, CloudReadError } from './shelly-cloud-cache';
 import {
 	object,
 	privateIpv4,
@@ -12,45 +13,23 @@ type Options = {
 	authKey: () => string;
 	cachedIps?: (id: string) => Promise<string[]>;
 	now?: () => number;
+	cloudRead?: (kind: Kind, force?: boolean) => Promise<unknown>;
 };
 export function createVacationTransport(options: Options) {
-	const now = options.now ?? Date.now,
-		preferred = new Map<string, string>();
-	let queue = Promise.resolve(),
-		lastCall = 0;
-	async function cloud(kind: Kind) {
-		const task = async () => {
-			const key = options.authKey();
-			if (!key.trim()) throw new Error('Cloud is not configured');
-			const wait = 1100 - (now() - lastCall);
-			if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
-			lastCall = now();
-			const paths = {
-				scenes: '/scene/list',
-				inventory: '/interface/device/get_all_lists',
-				statuses: '/device/all_status'
-			};
-			const url = new URL(paths[kind], 'https://shelly-115-eu.shelly.cloud');
-			const request: RequestInit = { signal: AbortSignal.timeout(2500) };
-			if (kind === 'scenes') {
-				request.method = 'POST';
-				request.body = new URLSearchParams({ auth_key: key });
-			} else {
-				url.searchParams.set('auth_key', key);
-				if (kind === 'statuses') url.searchParams.set('show_info', 'true');
-			}
-			const response = await options.fetch(url, request);
-			if (!response.ok) throw new Error('Cloud read unavailable');
-			const result = await response.json();
-			if (object(result).isok === false) throw new Error('Cloud read unavailable');
-			return result;
-		};
-		const result = queue.then(task);
-		queue = result.then(
-			() => undefined,
-			() => undefined
-		);
-		return result;
+	const preferred = new Map<string, string>();
+	const shared = options.cloudRead
+		? null
+		: createShellyCloudCache({ fetch: options.fetch, authKey: options.authKey, now: options.now });
+	async function cloud(kind: Kind, force = false) {
+		if (options.cloudRead) return options.cloudRead(kind, force);
+		const result = await shared!.read(kind, force);
+		if (result.stale || result.value === null)
+			throw new CloudReadError(
+				result.failure ?? 'unavailable',
+				'Cloud read unavailable',
+				result.retryAt
+			);
+		return result.value;
 	}
 	async function lan(id: string, targets: VacationTarget[], inventory: unknown, status: unknown) {
 		const devices = inventoryDevices(inventory).filter(

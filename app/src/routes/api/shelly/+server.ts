@@ -27,6 +27,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
 			{
 				error: [
 					'Kies Aan of Uit.',
+					'Kies Omhoog, Stop of Omlaag.',
 					'Apparaat hoort niet bij deze ruimte.',
 					'Deze uitgang kan niet worden bediend.',
 					'Ongeldige opdracht.',

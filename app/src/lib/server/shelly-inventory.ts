@@ -1,25 +1,17 @@
 import { env } from '$env/dynamic/private';
 import { runtimeMode } from './runtime-mode';
+import { shellyCloud } from './shelly-cloud';
 import { recordAuditEvent } from './audit-log';
 import {
 	cloudPayload,
 	deviceView,
 	indexStatuses,
-	record,
 	roomTargets,
 	validateRoomCommand,
 	isConfiguredShellyRoom
 } from './shelly-inventory-core';
 import type { ShellyBrowserView } from '$lib/dashboard/shelly-browser';
 type Failure = NonNullable<ShellyBrowserView['failure']>;
-class ShellyReadError extends Error {
-	constructor(
-		public category: Failure,
-		message: string
-	) {
-		super(message);
-	}
-}
 let lastFailure: Failure | null = null;
 const failureMessages: Record<Failure, string> = {
 	'rate-limit': 'Shelly Cloud is tijdelijk bezet (aanvraaglimiet). Status niet beschikbaar.',
@@ -28,17 +20,11 @@ const failureMessages: Record<Failure, string> = {
 	unavailable: 'Shelly-status is momenteel niet beschikbaar.',
 	malformed: 'Shelly Cloud gaf geen bruikbare statusgegevens.'
 };
-const ORIGIN = 'https://shelly-115-eu.shelly.cloud';
-const INVENTORY_TTL = 5 * 60_000,
-	STATUS_TTL = 30_000;
 let inventory: unknown = null,
 	status: unknown = null,
-	inventoryAt = 0,
 	statusAt = 0,
 	failedAt = 0;
-let inFlight: Promise<void> | null = null,
-	queue = Promise.resolve(),
-	lastRequest = 0;
+let inFlight: Promise<void> | null = null;
 const commands = new Set<string>();
 const mockOutputs = new Map<string, boolean>();
 function simulated() {
@@ -77,84 +63,35 @@ function mockStatus() {
 		}
 	};
 }
-async function request(path: string, body?: Record<string, unknown>) {
-	const execute = async () => {
-		const wait = 1100 - (Date.now() - lastRequest);
-		if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
-		lastRequest = Date.now();
-		if (!env.SHELLY_AUTH_KEY?.trim())
-			throw new ShellyReadError('auth', 'Shelly Cloud is niet ingesteld.');
-		const url = new URL(path, ORIGIN);
-		url.searchParams.set('auth_key', env.SHELLY_AUTH_KEY);
-		if (path === '/device/all_status') url.searchParams.set('show_info', 'true');
-		let response: Response;
-		try {
-			response = await fetch(url, {
-				method: body ? 'POST' : 'GET',
-				headers: body ? { 'content-type': 'application/json' } : undefined,
-				body: body ? JSON.stringify(body) : undefined,
-				signal: AbortSignal.timeout(4000)
-			});
-		} catch (error) {
-			if (['TimeoutError', 'AbortError'].includes(error instanceof Error ? error.name : ''))
-				throw new ShellyReadError('timeout', 'TIMEOUT');
-			throw new ShellyReadError('unavailable', 'Shelly Cloud niet bereikbaar.');
-		}
-		const result = await response.json().catch(() => null);
-		const errorText = JSON.stringify(record(result).errors ?? record(result).error ?? '');
-		if (response.status === 429 || /max_req|rate.?limit/i.test(errorText))
-			throw new ShellyReadError('rate-limit', 'Shelly Cloud is tijdelijk bezet.');
-		if ([401, 403].includes(response.status) || /auth|forbidden|access.denied/i.test(errorText))
-			throw new ShellyReadError('auth', 'Shelly Cloud-toegang is geweigerd.');
-		if (!response.ok || record(result).isok === false || record(result).error)
-			throw new ShellyReadError('unavailable', 'Shelly heeft de opdracht geweigerd.');
-		if (result === null && !path.includes('/set/'))
-			throw new ShellyReadError('malformed', 'Ongeldige status.');
-		return result;
-	};
-	const pending = queue.then(execute);
-	queue = pending.then(
-		() => undefined,
-		() => undefined
-	);
-	return pending;
-}
-async function refresh() {
+async function refresh(force = false) {
 	if (simulated()) {
 		inventory = mockInventory;
 		status = mockStatus();
-		inventoryAt = statusAt = Date.now();
+		statusAt = Date.now();
 		failedAt = 0;
 		lastFailure = null;
 		return;
 	}
 	if (inFlight) return inFlight;
-	if (failedAt && Date.now() - failedAt < STATUS_TTL) return;
 	inFlight = (async () => {
-		try {
-			if (!inventory || Date.now() - inventoryAt >= INVENTORY_TTL) {
-				const loaded = await request('/interface/device/get_all_lists');
-				const data = cloudPayload(loaded);
-				if (!data.devices || !data.rooms)
-					throw new ShellyReadError('malformed', 'Ongeldige inventaris.');
-				inventory = loaded;
-				inventoryAt = Date.now();
-			}
-			if (!status || Date.now() - statusAt >= STATUS_TTL) {
-				const loaded = await request('/device/all_status');
-				if (
-					!cloudPayload(loaded).devices_status ||
-					typeof cloudPayload(loaded).devices_status !== 'object'
-				)
-					throw new ShellyReadError('malformed', 'Ongeldige status.');
-				status = loaded;
-				statusAt = Date.now();
-			}
+		const metadata = await shellyCloud.read('inventory', force),
+			readings = await shellyCloud.read('statuses', force);
+		if (metadata.value !== null) inventory = metadata.value;
+		if (readings.value !== null) {
+			status = readings.value;
+			statusAt = readings.updatedAt ?? 0;
+		}
+		const failure = metadata.stale
+			? metadata.failure
+			: readings.stale
+				? readings.failure
+				: undefined;
+		if (metadata.stale || readings.stale) {
+			failedAt = Date.now();
+			lastFailure = failure ?? 'unavailable';
+		} else {
 			failedAt = 0;
 			lastFailure = null;
-		} catch (error) {
-			lastFailure = error instanceof ShellyReadError ? error.category : 'unavailable';
-			failedAt = Date.now();
 		}
 	})().finally(() => {
 		inFlight = null;
@@ -163,8 +100,7 @@ async function refresh() {
 }
 export async function readShellyRooms(room?: string, force = false): Promise<ShellyBrowserView> {
 	if (room && !isConfiguredShellyRoom(room)) throw new Error('Onbekende ruimte.');
-	if (force && Date.now() - statusAt >= 3000) statusAt = 0;
-	await refresh();
+	await refresh(force);
 	const { rooms, targets } = roomTargets(inventory ?? {}),
 		statuses = indexStatuses(status ?? {});
 	const stale = Boolean(failedAt);
@@ -199,7 +135,6 @@ export async function readShellyRooms(room?: string, force = false): Promise<She
 	};
 }
 export async function controlShellyRoom(input: unknown) {
-	if (!simulated() && Date.now() - inventoryAt >= STATUS_TTL) inventoryAt = 0;
 	await refresh();
 	if (failedAt || !inventory)
 		throw new Error('Inventaris niet beschikbaar. Probeer later opnieuw.');
@@ -214,17 +149,18 @@ export async function controlShellyRoom(input: unknown) {
 	let success = false;
 	try {
 		if (simulated()) {
-			mockOutputs.set(`${parsed.target.baseId}:${parsed.target.channel}`, parsed.on);
+			if (parsed.kind !== 'cover')
+				mockOutputs.set(`${parsed.target.baseId}:${parsed.target.channel}`, parsed.on);
 			status = mockStatus();
 			statusAt = Date.now();
 		} else
-			await request(`/v2/devices/api/set/${parsed.kind}`, {
+			await shellyCloud.control(parsed.kind, {
 				id: parsed.target.baseId,
 				channel: parsed.target.channel,
-				on: parsed.on
+				...(parsed.kind === 'cover' ? { position: parsed.position } : { on: parsed.on })
 			});
 		success = true;
-		statusAt = 0;
+		if (!simulated()) shellyCloud.invalidate('statuses');
 		return { ok: true, message: 'Opdracht verstuurd. De actuele status wordt opnieuw opgehaald.' };
 	} finally {
 		commands.delete(key);
@@ -233,7 +169,7 @@ export async function controlShellyRoom(input: unknown) {
 			deviceId: parsed.target.id,
 			component: parsed.kind,
 			channel: parsed.target.channel,
-			command: parsed.on ? 'on' : 'off',
+			command: parsed.kind === 'cover' ? parsed.position : parsed.on ? 'on' : 'off',
 			success
 		});
 	}

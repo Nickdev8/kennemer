@@ -2,6 +2,7 @@ import { env } from '$env/dynamic/private';
 import { readFile } from 'node:fs/promises';
 import { readEffectiveControls } from './scene-config-store';
 import { runtimeMode } from './runtime-mode';
+import { requireShellyCloudRead } from './shelly-cloud';
 import { createVacationReader } from './vacation-reader';
 import { createVacationTransport } from './vacation-transport';
 import { object, privateIpv4, type ModeScenes } from './vacation-core';
@@ -52,6 +53,7 @@ async function cachedIps(id: string) {
 const transport = createVacationTransport({
 	fetch: (...args) => fetch(...args),
 	authKey: () => env.SHELLY_AUTH_KEY ?? '',
+	cloudRead: requireShellyCloudRead,
 	cachedIps
 });
 const liveReader = createVacationReader({ scenes: configuredScenes, ...transport });

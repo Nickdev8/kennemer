@@ -106,7 +106,7 @@
 	async function command(
 		device: ShellyRoomDevice,
 		component: ShellyComponentView,
-		command: 'on' | 'off'
+		command: 'on' | 'off' | 'open' | 'stop' | 'close'
 	) {
 		const key = `${device.id}:${component.id}`;
 		if (pending.has(key) || !selectedRoom) return;
@@ -239,20 +239,56 @@
 									<p
 										class={`mt-1 text-sm ${component.output === true ? 'font-medium text-green-700' : 'text-slate-500'}`}
 									>
-										{#if device.components.length > 1}{component.label} ·
-										{/if}<span
-											>{component.output === true
-												? 'Aan'
-												: component.output === false
-													? 'Uit'
-													: (component.value ?? 'Status onbekend')}</span
-										>
+										{#if component.cover}
+											Scherm · {component.cover.state ?? 'Status onbekend'} ·
+											{component.cover.position === null
+												? 'Stand onbekend'
+												: `Stand ${component.cover.position}`}
+										{:else}
+											{#if device.components.length > 1}{component.label} ·
+											{/if}<span
+												>{component.output === true
+													? 'Aan'
+													: component.output === false
+														? 'Uit'
+														: (component.value ?? 'Status onbekend')}</span
+											>
+										{/if}
 									</p>
 								{/each}
 							</div>
 							<div class="flex shrink-0 flex-col items-end justify-center gap-2">
 								{#each device.components.filter((component) => component.controllable) as component (component.id)}
-									{#if component.output !== null}
+									{#if component.cover}
+										<div
+											class="shelly-cover-actions"
+											role="group"
+											aria-label={`${device.name} Schermbediening`}
+											aria-busy={pending.has(`${device.id}:${component.id}`)}
+										>
+											{#if pending.has(`${device.id}:${component.id}`)}<span
+													class="sr-only"
+													role="status">Schermopdracht wordt uitgevoerd</span
+												>{/if}
+											{#each [{ command: 'open', label: 'Omhoog' }, { command: 'stop', label: 'Stop' }, { command: 'close', label: 'Omlaag' }] as action (action.command)}
+												<button
+													type="button"
+													class="shelly-cover-action"
+													aria-label={`${device.name} Scherm: ${action.label}`}
+													aria-busy={pending.has(`${device.id}:${component.id}`)}
+													disabled={pending.has(`${device.id}:${component.id}`) ||
+														snapshot.stale ||
+														Boolean(error)}
+													on:click={() =>
+														void command(
+															device,
+															component,
+															action.command as 'open' | 'stop' | 'close'
+														)}>{action.label}</button
+												>
+											{/each}
+										</div>
+									{:else if component.output !== null}
 										<button
 											type="button"
 											class={`shelly-power ${component.output ? 'shelly-power-on' : ''}`}
@@ -376,12 +412,29 @@
 		font-weight: 600;
 		color: #334155;
 	}
+	.shelly-cover-actions {
+		display: flex;
+		gap: 6px;
+	}
+	.shelly-cover-action {
+		min-width: 52px;
+		min-height: 44px;
+		padding: 6px 8px;
+		border: 1px solid #cbd5e1;
+		border-radius: 6px;
+		background: white;
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: #334155;
+	}
 	.shelly-power:disabled,
-	.shelly-explicit:disabled {
+	.shelly-explicit:disabled,
+	.shelly-cover-action:disabled {
 		opacity: 0.5;
 	}
 	.shelly-power:focus-visible,
-	.shelly-explicit:focus-visible {
+	.shelly-explicit:focus-visible,
+	.shelly-cover-action:focus-visible {
 		outline: 2px solid #0284c7;
 		outline-offset: 3px;
 	}

@@ -12,7 +12,7 @@ import {
 type ReadKind = 'scenes' | 'inventory' | 'statuses';
 type Dependencies = {
 	scenes: () => Promise<ModeScenes>;
-	cloud: (kind: ReadKind) => Promise<unknown>;
+	cloud: (kind: ReadKind, force?: boolean) => Promise<unknown>;
 	lan: (
 		deviceId: string,
 		targets: VacationTarget[],
@@ -41,14 +41,14 @@ export function createVacationReader(deps: Dependencies) {
 			cache.set(kind, entry);
 		}
 		if (entry.flight) return entry.flight;
-		const ttl = kind === 'inventory' ? 300_000 : 30_000,
+		const ttl = kind === 'inventory' ? 24 * 60 * 60_000 : 30_000,
 			min = force && kind !== 'inventory' ? 5000 : ttl;
 		if (entry.attempt && now() - entry.attempt < min) return;
 		entry.attempt = now();
 		const current = entry;
 		current.flight = (async () => {
 			try {
-				const value = await deps.cloud(kind);
+				const value = await deps.cloud(kind, force);
 				if (object(value).isok === false) throw new Error();
 				const data = object(object(value).data ?? value),
 					field =

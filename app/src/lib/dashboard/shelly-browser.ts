@@ -4,6 +4,7 @@ export type ShellyComponentView = {
 	output: boolean | null;
 	value: string | null;
 	controllable: boolean;
+	cover?: { state: string | null; position: number | null };
 };
 export type ShellyRoomDevice = {
 	id: string;

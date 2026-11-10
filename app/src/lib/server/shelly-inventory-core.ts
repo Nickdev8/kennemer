@@ -5,7 +5,7 @@ import type {
 } from '$lib/dashboard/shelly-browser';
 import { SHELLY_ROOMS } from '../../../config/shelly';
 export function isConfiguredShellyRoom(room: unknown): room is string {
-	return typeof room === 'string' && SHELLY_ROOMS.some(entry => entry.id === room);
+	return typeof room === 'string' && SHELLY_ROOMS.some((entry) => entry.id === room);
 }
 
 type ObjectValue = Record<string, unknown>;
@@ -32,6 +32,7 @@ export type RoomTarget = {
 	channel: number;
 	room: string;
 	name: string;
+	mode?: string;
 };
 export function roomTargets(inventory: unknown): {
 	rooms: ShellyRoomView[];
@@ -64,7 +65,8 @@ export function roomTargets(inventory: unknown): {
 				baseId: parts?.[1] ?? id,
 				channel,
 				room: room.id,
-				name: String(device.name ?? id)
+				name: String(device.name ?? id),
+				...(typeof device.mode === 'string' ? { mode: device.mode } : {})
 			});
 		}
 		return {
@@ -117,7 +119,45 @@ export function deviceView(
 			controllable: /^[a-f0-9]{6,12}$/.test(target.baseId)
 		});
 	}
-	for (const kind of ['switch', 'light', 'rgb', 'rgbw', 'rgbcct'])
+	const coverRaw =
+		status[`cover:${target.channel}`] ??
+		(Array.isArray(status.rollers) ? status.rollers[target.channel] : undefined);
+	const coverMode = ['cover', 'roller'].includes(target.mode?.toLowerCase() ?? '');
+	if (coverRaw !== undefined && coverRaw !== null && typeof coverRaw === 'object') {
+		const value = record(coverRaw),
+			position = value.current_pos;
+		const allowedStates = [
+			'open',
+			'closed',
+			'opening',
+			'closing',
+			'stopped',
+			'calibrating',
+			'safety_stop'
+		];
+		components.push({
+			id: `cover:${target.channel}`,
+			label: 'Scherm',
+			output: null,
+			value: null,
+			controllable: /^[a-f0-9]{6,12}$/.test(target.baseId),
+			cover: {
+				state:
+					online === true && typeof value.state === 'string' && allowedStates.includes(value.state)
+						? value.state
+						: null,
+				position:
+					online === true &&
+					typeof position === 'number' &&
+					Number.isFinite(position) &&
+					position >= 0 &&
+					position <= 100
+						? position
+						: null
+			}
+		});
+	}
+	for (const kind of coverRaw !== undefined || coverMode ? [] : ['switch', 'light', 'rgb', 'rgbw', 'rgbcct'])
 		if (status[`${kind}:${target.channel}`] !== undefined)
 			output(kind === 'switch' ? 'switch' : 'light', status[`${kind}:${target.channel}`]);
 	for (const [key, kind] of [
@@ -126,6 +166,7 @@ export function deviceView(
 	] as const) {
 		const values = status[key];
 		if (
+			coverRaw === undefined && !coverMode &&
 			Array.isArray(values) &&
 			values[target.channel] !== undefined &&
 			!components.some((component) => component.id === `${kind}:${target.channel}`)
@@ -171,7 +212,10 @@ export function validateRoomCommand(
 	const body = record(input);
 	if (Object.keys(body).some((key) => !['room', 'deviceId', 'component', 'command'].includes(key)))
 		throw new Error('Ongeldige opdracht.');
-	if (typeof body.command !== 'string' || !['on', 'off'].includes(body.command))
+	if (
+		typeof body.command !== 'string' ||
+		!['on', 'off', 'open', 'close', 'stop'].includes(body.command)
+	)
 		throw new Error('Kies Aan of Uit.');
 	const target = targets.find((target) => target.id === body.deviceId && target.room === body.room);
 	if (!target) throw new Error('Apparaat hoort niet bij deze ruimte.');
@@ -179,9 +223,20 @@ export function validateRoomCommand(
 		(component) => component.id === body.component && component.controllable
 	);
 	if (!component) throw new Error('Deze uitgang kan niet worden bediend.');
+	if (component.cover) {
+		if (!['open', 'close', 'stop'].includes(body.command))
+			throw new Error('Kies Omhoog, Stop of Omlaag.');
+		return {
+			target,
+			kind: 'cover' as const,
+			position: body.command as 'open' | 'close' | 'stop',
+			on: false
+		};
+	}
+	if (!['on', 'off'].includes(body.command)) throw new Error('Kies Aan of Uit.');
 	return {
 		target,
-		kind: component.id.startsWith('switch:') ? 'switch' : 'light',
+		kind: component.id.startsWith('switch:') ? ('switch' as const) : ('light' as const),
 		on: body.command === 'on'
 	};
 }

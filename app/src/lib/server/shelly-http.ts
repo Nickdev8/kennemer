@@ -1,6 +1,7 @@
 import { env as publicEnv } from '$env/dynamic/public';
 import { sendDirectCommand } from './direct-device';
 import { env } from '$env/dynamic/private';
+import { shellyCloud } from './shelly-cloud';
 import type {
 	DeviceCommandKey,
 	ShellyDevice,
@@ -320,6 +321,8 @@ export async function sendDeviceCommand(device: ShellyDevice, commandKey: Device
 			: target;
 		const requiresAuth = sceneCommand ? true : (target.requiresAuthKey ?? true);
 		await withRateLimitRetry(() => executeRequest(resolvedTarget, requiresAuth));
+		shellyCloud.invalidate('statuses');
+		if (sceneCommand) shellyCloud.invalidate('scenes');
 	}
 }
 

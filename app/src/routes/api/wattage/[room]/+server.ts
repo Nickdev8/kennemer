@@ -4,7 +4,8 @@ import { resolve as resolvePath } from 'node:path';
 
 import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
-import { fetchShellyJson } from '$lib/server/shelly-http';
+import { shellyCloud } from '$lib/server/shelly-cloud';
+import { indexStatuses } from '$lib/server/shelly-inventory-core';
 import { fetchSwitchStatus } from '$lib/server/shelly-rpc';
 
 type ShellyDeviceListEntry = {
@@ -109,8 +110,6 @@ type ErrorResponse = {
 	message: string;
 };
 
-const DEVICE_LIST_ENDPOINT = 'https://shelly-115-eu.shelly.cloud/interface/device/get_all_lists';
-const CLOUD_STATUS_ENDPOINT = 'https://shelly-115-eu.shelly.cloud/device/status';
 const HTTP_TIMEOUT_MS = 4000;
 const IP_CACHE_PATH = resolvePath(process.cwd(), env.IP_CACHE_PATH ?? 'ips.json');
 const CACHE_TTL_MS = 2 * 60 * 1000;
@@ -220,18 +219,13 @@ async function resolveRoomDevices(
 async function loadDeviceListPayload(
 	forceRefresh: boolean
 ): Promise<ShellyDeviceListPayload | null> {
-	if (!forceRefresh) {
-		const cached = await readDeviceListCache();
-		if (cached) {
-			return cached;
-		}
-	}
-
-	const fresh = await fetchDeviceListFromCloud();
+	const snapshot = await shellyCloud.read('inventory', forceRefresh);
+	const fresh = normaliseDeviceListPayload(snapshot.value);
 	if (fresh) {
-		await writeDeviceListCache(fresh);
+		if (!snapshot.stale) await writeDeviceListCache(fresh);
+		return fresh;
 	}
-	return fresh;
+	return readDeviceListCache();
 }
 
 async function readDeviceListCache(): Promise<ShellyDeviceListPayload | null> {
@@ -258,16 +252,6 @@ async function writeDeviceListCache(payload: ShellyDeviceListPayload): Promise<v
 			mode: 0o644
 		});
 	} catch {}
-}
-
-async function fetchDeviceListFromCloud(): Promise<ShellyDeviceListPayload | null> {
-	const payload = (await fetchShellyJson({
-		endpoint: DEVICE_LIST_ENDPOINT,
-		method: 'GET',
-		requiresAuthKey: true
-	})) as ShellyDeviceListResponse | null;
-
-	return normaliseDeviceListPayload(payload);
 }
 
 function normaliseDeviceListPayload(payload: unknown): ShellyDeviceListPayload | null {
@@ -472,7 +456,6 @@ async function fetchDeviceWattage(target: ShellyDeviceTarget): Promise<WattageDe
 	if (cloudResult && cloudResult.reading) {
 		console.log('[Wattage cloud fallback]', {
 			deviceId: target.deviceId,
-			payload: cloudResult.payload,
 			extractedWatts: cloudResult.reading.watts
 		});
 	}
@@ -558,23 +541,20 @@ async function fetchCloudReading(target: ShellyDeviceTarget): Promise<{
 	payload: unknown;
 } | null> {
 	try {
-		const payload = await fetchShellyJson({
-			endpoint: CLOUD_STATUS_ENDPOINT,
-			method: 'POST',
-			encoding: 'form',
-			payload: { id: target.deviceId },
-			requiresAuthKey: true
-		});
-
-		const resolved = resolveCloudStatusPayload(payload);
+		const snapshot = await shellyCloud.read('statuses');
+		if (snapshot.stale || snapshot.value === null) return null;
+		const resolved = indexStatuses(snapshot.value).get(target.deviceId.split('_')[0].toLowerCase());
 		if (!resolved) return null;
+		const info = resolved._dev_info as { online?: boolean | number } | undefined;
+		if (info?.online !== true && info?.online !== 1) return null;
+		const payload = resolved;
 		const metrics = extractMetrics(resolved, target.channel);
 		return {
 			reading: {
 				watts: metrics.watts ?? null,
 				output: metrics.output ?? null,
 				source: 'cloud',
-				timestamp: Date.now()
+				timestamp: snapshot.updatedAt ?? Date.now()
 			},
 			payload
 		};

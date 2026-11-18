@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+if (( $# )); then
+	printf '%s\n' 'Usage: update' >&2
+	exit 2
+fi
+
+# The service owns deployment; this terminal only starts it and reads its logs.
+since=$(date --iso-8601=seconds)
+systemctl start --no-block kennemer-update.service
+printf '%s\n' \
+	'Kennemer update requested. It keeps running if SSH disconnects.' \
+	'Ctrl+C stops viewing logs only. Reconnect: journalctl -fu kennemer-update.service'
+exec journalctl --unit=kennemer-update.service --since="$since" --follow --no-pager

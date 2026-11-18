@@ -16,7 +16,9 @@ Git-managed source and survives update worktrees.
 
 Main operator commands:
 
-- `update`: deploy the latest `origin/main`.
+- `update`: request the systemd deployment and follow logs; Ctrl+C or SSH
+  disconnect stops log viewing only. Logs continue until Ctrl+C, even after completion.
+  `odroid/update-cli` is the public wrapper; `odroid/update` remains the worker.
 - `restart`: restart the kiosk display.
 - `screen start|stop|restart|status`: control or inspect the kiosk stack.
 
@@ -181,3 +183,8 @@ defaults, or exports the saved schedule as a commit to origin/main. Push uses
 a temporary worktree and the update lock; it preserves production HEAD, index,
 live mode and relay IDs. Git identity and remote write access must be configured.
 Test push only against the disposable local remote in test-bell-roster.py.
+
+Background update CLI: install-maintenance-links now links the public wrapper
+and the checked-in update unit, then daemon-reloads. This also replaces the old
+unit with an outer flock (the worker already owns the lock). Existing hosts need
+one successful deployment or a manual installer run to activate this change.

@@ -14,11 +14,12 @@ install -d -o root -g root /etc/systemd/system
 ln -sfn "$REPO/odroid/screen" /usr/local/sbin/kennemer-kiosk
 ln -sfn "$REPO/odroid/screen" /usr/local/bin/screen
 ln -sfn "$REPO/odroid/restart" /usr/local/bin/restart
-ln -sfn "$REPO/odroid/update" /usr/local/bin/update
+ln -sfn "$REPO/odroid/update-cli" /usr/local/bin/update
 ln -sfn "$REPO/odroid/bell-roster" /usr/local/bin/update-bell-roster
 ln -sfn "$REPO/odroid/update" /usr/local/sbin/kennemer-update
 ln -sfn "$REPO/odroid/kiosk-session" /usr/local/libexec/kennemer-kiosk-session
 ln -sfn "$REPO/odroid/kennemer-maintenance-api.service" /etc/systemd/system/kennemer-maintenance-api.service
+ln -sfn "$REPO/odroid/kennemer-update.service" /etc/systemd/system/kennemer-update.service
 ln -sfn "$REPO/odroid/kennemer-bell.service" /etc/systemd/system/kennemer-bell.service
 
 systemctl daemon-reload

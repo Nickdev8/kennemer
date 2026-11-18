@@ -209,3 +209,9 @@ doet dit; bij een handmatige installatie: `systemctl restart kennemer-maintenanc
 Bediening beheren heeft één bewerkbaar concept: brede schermen tonen een tabel,
 kleinere schermen gegroepeerde velden. De header en opslagknoppen blijven staan
 terwijl de inhoud scrolt. Ingeschakeld toont een checkbox met Ja/Nee.
+
+`update` starts deployment through systemd and follows its logs. SSH disconnects
+do not stop deployment. Press Ctrl+C to stop viewing logs; use
+`journalctl -fu kennemer-update.service` to reconnect. Log viewing stays open
+after completion until Ctrl+C. Existing installations activate this behavior
+after a successful update refreshes the maintenance links.

@@ -188,3 +188,23 @@ Background update CLI: install-maintenance-links now links the public wrapper
 and the checked-in update unit, then daemon-reloads. This also replaces the old
 unit with an outer flock (the worker already owns the lock). Existing hosts need
 one successful deployment or a manual installer run to activate this change.
+
+Update CLI uses `YYYY-MM-DD HH:MM:SS` local timestamps for Ubuntu 22.04
+journalctl compatibility; ISO timestamps with T/offset were rejected on the host.
+
+18 November recovery: a host reset left a Docker container record with no mount
+and a candidate image with empty server.js. The old image restored HTTP health.
+Update now flushes image writes and checks server.js against candidate SHA-256,
+nonempty handler.js and Node syntax before switching; invalid cached images get
+one uncached rebuild. Host-reset cause remains unconfirmed (no panic/pstore).
+
+SSH recovery deployment on 18 November: production completed d9a449b with the
+banner absent and connectivity auditing present. The host uses
+`/usr/local/libexec/kennemer-update-recovery` via
+`/etc/systemd/system/kennemer-update.service.d/recovery.conf` for the new image
+integrity/flush safeguards. `/usr/local/bin/kennemer-update-cli-fixed` supplies
+the compatible CLI; ExecStartPost restores its public link after updates.
+Local worker/CLI fixes still need publishing. After deploying those source fixes,
+remove only recovery.conf, daemon-reload, and run install-maintenance-links to
+return to repository-backed commands. Container metadata backup is under
+`/var/lib/kennemer/recovery`; no persistent dashboard volumes were removed.

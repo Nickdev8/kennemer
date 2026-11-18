@@ -7,7 +7,7 @@ if (( $# )); then
 fi
 
 # The service owns deployment; this terminal only starts it and reads its logs.
-since=$(date --iso-8601=seconds)
+since=$(date '+%Y-%m-%d %H:%M:%S')
 systemctl start --no-block kennemer-update.service
 printf '%s\n' \
 	'Kennemer update requested. It keeps running if SSH disconnects.' \

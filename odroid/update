@@ -164,12 +164,41 @@ if [[ -f "$REPO/app/.env" ]]; then
 	cp "$REPO/app/.env" "$CANDIDATE_DIR/app/.env"
 fi
 
+verify_candidate_image() {
+	local expected actual
+	expected="$(sha256sum "$CANDIDATE_DIR/app/server.js" | cut -d ' ' -f 1)"
+	actual="$(docker run --rm --network none --entrypoint /bin/sh "$IMAGE" -c \
+		'test -s /app/server.js && test -s /app/build/handler.js && node --check /app/server.js && sha256sum /app/server.js' | cut -d ' ' -f 1)" || return 1
+	[[ "$actual" == "$expected" ]]
+}
+
+build_candidate() {
+	KENNEMER_BUILD_COMMIT="$target_commit" docker compose -f "$CANDIDATE_DIR/docker-compose.yml" build --pull "$@"
+}
+
 log "Building candidate $target_commit"
-if ! KENNEMER_BUILD_COMMIT="$target_commit" docker compose -f "$CANDIDATE_DIR/docker-compose.yml" build --pull; then
+if ! build_candidate; then
 	log "Build failed; current container remains active"
 	docker image tag "$ROLLBACK_IMAGE" "$IMAGE"
 	exit 1
 fi
+
+# Flush image layers before replacing the running container on SD-backed hosts.
+sync
+if ! verify_candidate_image; then
+	log "Candidate image integrity check failed; rebuilding without cached layers"
+	if ! build_candidate --no-cache; then
+		docker image tag "$ROLLBACK_IMAGE" "$IMAGE"
+		exit 1
+	fi
+	sync
+	if ! verify_candidate_image; then
+		log "Candidate image is invalid; current container remains active"
+		docker image tag "$ROLLBACK_IMAGE" "$IMAGE"
+		exit 1
+	fi
+fi
+sync
 
 if ! docker compose -f "$CANDIDATE_DIR/docker-compose.yml" up -d --remove-orphans ||
 	! /usr/local/sbin/kennemer-wait-ready; then
@@ -180,6 +209,7 @@ fi
 
 git reset --hard "$target_commit"
 install_maintenance_links
+sync
 printf '%s\n' "$target_commit" > /var/lib/kennemer/last-successful-commit
 docker builder prune --force --filter 'until=168h'
 docker image prune --force --filter 'until=168h'

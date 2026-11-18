@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM node:24-bookworm AS builder
+FROM node:24.22.2-bookworm AS builder
 WORKDIR /work
 COPY app/package*.json ./
 RUN npm ci
@@ -9,7 +9,7 @@ ARG KENNEMER_BUILD_COMMIT
 RUN KENNEMER_BUILD_COMMIT="$KENNEMER_BUILD_COMMIT" npm run build
 RUN npm prune --omit=dev
 
-FROM node:24-bookworm AS runtime
+FROM node:24.22.2-bookworm AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends libcap2-bin openssl && rm -rf /var/lib/apt/lists/*
 RUN useradd -r -s /usr/sbin/nologin nodeuser
 WORKDIR /app

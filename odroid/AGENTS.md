@@ -118,7 +118,11 @@ The script may use destructive Git operations only against its validated
 production checkout or disposable candidate worktree. Never generalize those
 paths or use unresolved broad environment variables.
 
-The web image runs on the current Node.js 24 LTS line. Its default self-signed
+The builder and runtime are pinned to Node.js 24.22.2 Bookworm. On 18 November
+2026, the ODROID returned exit 139 for Node/npm in 24.22.3; the separate
+24.22.2 base-image test returned exit 0. Root cause and the earlier host reboot
+remain unverified. Test replacement base images on the ODROID before upgrading.
+Its default self-signed
 HTTPS certificate is generated at container start and renewed when it has less
 than 30 days remaining. Mounted certificates are left unchanged.
 

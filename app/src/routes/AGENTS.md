@@ -109,3 +109,9 @@ Vacation status GET resolves command scene IDs from effective registered config;
 clients cannot submit scene/device targets. It never mutates scenes/devices or
 schedules. Public DTOs contain interpreted values/sources/durations only, without
 credentials, network addresses or raw cloud action data.
+
+Hardware diagnostics are audit-only: `/api/hardware` logs initial status and
+changes as `hardware` events (`source: touchscreen`, status connected/missing/
+unavailable). Invalid or failed host responses mean unavailable, not missing.
+The dashboard keeps idle-sensitive requests but renders no hardware warning
+or debug status. Host fetches time out after three seconds.

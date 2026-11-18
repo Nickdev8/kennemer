@@ -39,7 +39,6 @@
 	import { triggerAction, triggerDeviceCommand } from '$lib/api';
 	import type { PageData } from './$types';
 	import RefreshCw from 'lucide-svelte/icons/refresh-cw';
-	import TouchpadOff from 'lucide-svelte/icons/touchpad-off';
 	import ChevronLeft from 'lucide-svelte/icons/chevron-left';
 	import ChevronRight from 'lucide-svelte/icons/chevron-right';
 
@@ -356,7 +355,6 @@
 	let cloudReachable = true;
 	let connectivityChecked = false;
 	let connectivityChecking = false;
-	let touchscreenConnected: boolean | null = null;
 	let hardwareChecking = false;
 	let transientActiveUntilByDevice = new Map<string, number>();
 	const transientActiveTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
@@ -1373,16 +1371,9 @@
 		if (displayDimmed || hardwareChecking) return;
 		hardwareChecking = true;
 		try {
-			const res = await fetch('/api/hardware', { cache: 'no-store' });
-			const payload = (await res.json().catch(() => null)) as {
-				ok?: boolean;
-				touchscreen?: { connected?: boolean };
-			} | null;
-			if (res.ok && payload?.ok && typeof payload.touchscreen?.connected === 'boolean') {
-				touchscreenConnected = payload.touchscreen.connected;
-			}
+			await fetch('/api/hardware', { cache: 'no-store' });
 		} catch {
-			// Keep the last known hardware state when host diagnostics are unavailable.
+			// Hardware diagnostics are logged server-side; no frontend warning.
 		} finally {
 			hardwareChecking = false;
 		}
@@ -1692,20 +1683,6 @@
 			</div>
 		</div>
 	</header>
-
-	{#if touchscreenConnected === false}
-		<div
-			class="flex items-center justify-center gap-3 bg-amber-600 px-6 py-3 text-white"
-			role="status"
-			aria-live="assertive"
-		>
-			<TouchpadOff class="h-6 w-6 shrink-0" aria-hidden="true" />
-			<div>
-				<p class="text-base font-bold">Touchscreen niet gevonden</p>
-				<p class="text-sm text-amber-50">Bediening via aanraking is niet beschikbaar.</p>
-			</div>
-		</div>
-	{/if}
 
 	<div class="dashboard-content flex min-h-0 flex-1 gap-4 overflow-hidden px-4 pt-4 pb-4">
 		<EnergyPanel
@@ -2052,7 +2029,6 @@
 			activity={markAdvancedActivity}
 			{browserOnline}
 			cloudAvailable={connectivityChecked ? cloudReachable : null}
-			{touchscreenConnected}
 			{wattageUpdatedAt}
 			{wattageStale}
 			statusDeviceCount={statusDeviceIds.length}

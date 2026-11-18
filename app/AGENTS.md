@@ -30,7 +30,7 @@ Import aliases are declared in `svelte.config.js`:
 - confirmation and dispatch of **ALLES UIT**;
 - initial state, SSE updates, and repeated device-status polling;
 - wattage summaries and optional diagnostics;
-- connection and touchscreen health banners;
+- read-only connectivity/hardware polling for server audit logs;
 - update status and the full-screen update view;
 - idle detection, black overlay, and first-touch wake suppression.
 
@@ -258,4 +258,12 @@ regression uses a stub adapter/local socket and never contacts equipment.
 Connection warning: the public internet/Cloud banner is removed. Keep connectivity
 polling and debug diagnostics. `/api/connectivity` logs `connectivity` audit events
 after two failed probes and once on recovery; repeated results do not spam logs.
-Probes still pause during display sleep. The touchscreen banner is separate.
+Probes still pause during display sleep. Touchscreen has no frontend warning or
+debug status; `/api/hardware` audits initial status and changes (`connected`, `missing`, `unavailable`), deduplicates
+repeated results, and bounds host requests to three seconds.
+
+Touchscreen removal verified: check (zero errors/warnings), production build,
+mocked hardware/connectivity audit tests and `node scripts/test-hardware-ui.mjs`
+pass. Focused UI covers missing-device response, no warning, sleep polling pause,
+and wake refresh without actions. Full test:ui currently stops at an outdated
+Geavanceerde bediening button selector; unrelated navigation tests need updating.

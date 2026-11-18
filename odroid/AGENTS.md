@@ -70,8 +70,8 @@ docker compose -f /opt/kennemer/docker-compose.yml ps
 ## Touchscreen detection
 
 The maintenance API checks USB devices for the configured vendor and product
-IDs. Defaults are vendor `2a94` and product `1804`. The webapp turns a missing
-match into a touchscreen warning.
+IDs. Defaults are vendor `2a94` and product `1804`. The webapp records detection changes in the server audit log. It shows no
+touchscreen warning or frontend status.
 
 HDMI carries video; USB carries touch data and may also carry power. A
 power-only USB cable can display an image while making touch impossible.

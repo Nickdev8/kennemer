@@ -203,10 +203,11 @@ provides a LAN target.
 - `/api/wattage/[room]` reads Shelly devices and aggregates room `-1` for the
   dashboard total. It prefers LAN when configured and falls back as supported.
 - `/api/wattage/cache` maintains the device-to-IP cache in `ips.json`.
-- `/api/connectivity` performs a short request to Shelly Cloud. The frontend
-  uses it for the obvious no-connection warning.
+- `/api/connectivity` probes Shelly Cloud and logs confirmed outage/recovery
+  transitions. No internet/Cloud warning banner is rendered.
 - `/api/hardware` proxies the host maintenance service and reports whether the
-  expected touchscreen USB ID is present.
+  expected touchscreen USB ID is present. Initial status and changes are audited
+  server-side only; no touchscreen banner or debug status is rendered.
 - The physical display is deliberately kept awake. After the configured idle
   timeout, the web UI draws a black overlay with a small muted sleep marker. The
   first touch only wakes the UI and must never activate the control underneath.
@@ -312,7 +313,7 @@ warnings or errors.
 - Never put actual auth keys, tokens, device credentials, or certificates in
   commits or output.
 - Preserve offline behavior: configured controls stay usable, status falls
-  back safely, and connectivity remains visible.
+  back safely, and connectivity transitions remain logged.
 - Preserve the first-touch wake guard on the idle overlay.
 - Preserve confirmation for destructive or building-wide actions such as
   **ALLES UIT**.

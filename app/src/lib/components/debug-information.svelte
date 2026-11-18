@@ -4,7 +4,6 @@
 	export let activity: () => void;
 	export let browserOnline: boolean;
 	export let cloudAvailable: boolean | null;
-	export let touchscreenConnected: boolean | null;
 	export let wattageUpdatedAt: number | null;
 	export let wattageStale: boolean;
 	export let statusDeviceCount: number;
@@ -188,16 +187,6 @@
 								: cloudAvailable
 									? 'Bereikbaar'
 									: 'Niet bereikbaar'}
-						</dd>
-					</div>
-					<div class="flex justify-between gap-4">
-						<dt>Touchscreen</dt>
-						<dd>
-							{touchscreenConnected === null
-								? 'Onbekend'
-								: touchscreenConnected
-									? 'Aangesloten'
-									: 'Niet gevonden'}
 						</dd>
 					</div>
 					<div class="flex justify-between gap-4">

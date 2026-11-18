@@ -40,7 +40,6 @@
 	import type { PageData } from './$types';
 	import RefreshCw from 'lucide-svelte/icons/refresh-cw';
 	import TouchpadOff from 'lucide-svelte/icons/touchpad-off';
-	import WifiOff from 'lucide-svelte/icons/wifi-off';
 	import ChevronLeft from 'lucide-svelte/icons/chevron-left';
 	import ChevronRight from 'lucide-svelte/icons/chevron-right';
 
@@ -357,7 +356,6 @@
 	let cloudReachable = true;
 	let connectivityChecked = false;
 	let connectivityChecking = false;
-	let connectivityFailureCount = 0;
 	let touchscreenConnected: boolean | null = null;
 	let hardwareChecking = false;
 	let transientActiveUntilByDevice = new Map<string, number>();
@@ -374,20 +372,10 @@
 	const statusFailureThreshold = 2;
 	const statusFollowupDelaysMs = [1200, 2500, 5000, 10000, 20000, 45000, 90000];
 	const connectivityRefreshMs = 15000;
-	const connectivityFailureThreshold = 2;
 	const hardwareRefreshMs = 15000;
 	const updatePollIntervalMs = 4000;
 	const updatePollMaxMs = 35 * 60 * 1000;
 
-	$: connectionOffline =
-		connectivityChecked &&
-		(!browserOnline || connectivityFailureCount >= connectivityFailureThreshold);
-	$: connectionWarningTitle = browserOnline
-		? 'Geen verbinding met Shelly Cloud'
-		: 'Geen internetverbinding';
-	$: connectionWarningDetail = browserOnline
-		? 'Shelly-bediening is tijdelijk niet beschikbaar.'
-		: 'Controleer de internetverbinding van de kiosk.';
 
 	$: topWattageDevices = [...wattageDevices]
 		.filter(
@@ -1351,7 +1339,6 @@
 		browserOnline = navigator.onLine;
 		if (!browserOnline) {
 			cloudReachable = false;
-			connectivityFailureCount = connectivityFailureThreshold;
 			connectivityChecked = true;
 			return;
 		}
@@ -1361,10 +1348,8 @@
 			const res = await fetch('/api/connectivity', { cache: 'no-store' });
 			const payload = (await res.json().catch(() => null)) as { online?: boolean } | null;
 			cloudReachable = res.ok && payload?.online === true;
-			connectivityFailureCount = cloudReachable ? 0 : connectivityFailureCount + 1;
 		} catch {
 			cloudReachable = false;
-			connectivityFailureCount += 1;
 		} finally {
 			connectivityChecked = true;
 			connectivityChecking = false;
@@ -1373,7 +1358,6 @@
 
 	function handleBrowserOnline() {
 		browserOnline = true;
-		connectivityFailureCount = 0;
 		if (!displayDimmed) {
 			void checkConnectivity();
 		}
@@ -1382,7 +1366,6 @@
 	function handleBrowserOffline() {
 		browserOnline = false;
 		cloudReachable = false;
-		connectivityFailureCount = connectivityFailureThreshold;
 		connectivityChecked = true;
 	}
 
@@ -1709,20 +1692,6 @@
 			</div>
 		</div>
 	</header>
-
-	{#if connectionOffline}
-		<div
-			class="flex items-center justify-center gap-3 bg-red-700 px-6 py-3 text-white"
-			role="status"
-			aria-live="assertive"
-		>
-			<WifiOff class="h-6 w-6 shrink-0" aria-hidden="true" />
-			<div>
-				<p class="text-base font-bold">{connectionWarningTitle}</p>
-				<p class="text-sm text-red-100">{connectionWarningDetail}</p>
-			</div>
-		</div>
-	{/if}
 
 	{#if touchscreenConnected === false}
 		<div

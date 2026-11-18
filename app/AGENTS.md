@@ -254,3 +254,8 @@ socket. This keeps strict same-origin checks correct on both listeners. Explicit
 ORIGIN/PROTOCOL_HEADER configuration retains adapter-node's configured proxy
 behavior; never infer protocol from arbitrary client forwarding headers. Wrapper
 regression uses a stub adapter/local socket and never contacts equipment.
+
+Connection warning: the public internet/Cloud banner is removed. Keep connectivity
+polling and debug diagnostics. `/api/connectivity` logs `connectivity` audit events
+after two failed probes and once on recovery; repeated results do not spam logs.
+Probes still pause during display sleep. The touchscreen banner is separate.
